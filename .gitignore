@@ -1,0 +1,8 @@
+.venv/
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+tests/test_escala.db
+_archive/scratch/__pycache__/
+*.db-journal
