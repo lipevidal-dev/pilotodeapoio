@@ -3,10 +3,12 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import type {
+  GenerateByStepsResponse,
   GenerateFlightsResponse,
   GenerateScheduleResponse,
   PublishScheduleResponse,
   ScheduleMonthResponse,
+  StepGenerationOptions,
 } from '../models/api.models';
 
 @Injectable({ providedIn: 'root' })
@@ -18,6 +20,18 @@ export class ScheduleService {
     return this.http.post<GenerateScheduleResponse>(`${this.base}/schedules/generate`, {
       year,
       month,
+    });
+  }
+
+  generateBySteps(
+    year: number,
+    month: number,
+    steps: StepGenerationOptions,
+  ): Observable<GenerateByStepsResponse> {
+    return this.http.post<GenerateByStepsResponse>(`${this.base}/schedules/generate-by-steps`, {
+      year,
+      month,
+      steps,
     });
   }
 

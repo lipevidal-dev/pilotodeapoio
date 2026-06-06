@@ -22,6 +22,35 @@ const WORK_ALLOC_LABELS = new Set([
   "OUTRO",
 ]);
 
+/** Dia central da maior sequência consecutiva (para quebra de streak). */
+export function longestStreakMiddleDay(dates: string[], minLength = 1): string | null {
+  if (dates.length === 0) return null;
+  const sorted = [...new Set(dates)].sort();
+  let bestStart = 0;
+  let bestLen = 1;
+  let start = 0;
+  let len = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === addDays(sorted[i - 1], 1)) {
+      len++;
+    } else {
+      if (len > bestLen) {
+        bestLen = len;
+        bestStart = start;
+      }
+      start = i;
+      len = 1;
+    }
+  }
+  if (len > bestLen) {
+    bestLen = len;
+    bestStart = start;
+  }
+  if (bestLen < minLength) return null;
+  const mid = bestStart + Math.floor(bestLen / 2);
+  return sorted[mid] ?? null;
+}
+
 /** Maior sequência de dias trabalhados consecutivos. */
 export function maxConsecutiveWorkDays(dates: string[]): number {
   if (dates.length === 0) return 0;

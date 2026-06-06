@@ -5,4 +5,9 @@ describe("limpar geração — VOO gerado", () => {
   it("CLEAR_GENERATED_LABELS inclui VOO de preAllocations geradas", () => {
     expect(CLEAR_GENERATED_LABELS).toContain("VOO");
   });
+
+  it("CLEAR_GENERATED_LABELS inclui folgas agrupadas e aniversário geradas", () => {
+    expect(CLEAR_GENERATED_LABELS).toContain("FOLGA AGRUPADA");
+    expect(CLEAR_GENERATED_LABELS).toContain("FOLGA ANIVERSÁRIO");
+  });
 });

@@ -7,6 +7,7 @@ import type {
 import { isoDateKey } from "../../domain/rules/date-keys.js";
 import { resolveMotorRoleCodes } from "../../domain/role/motor-codes.js";
 import { normalizeOperationalLabel } from "../../domain/schedule/operational-labels.js";
+import { compareEmployeesBySeniority } from "../../domain/employee/seniority.js";
 import { prismaEmployeeToDomain } from "./employee.mapper.js";
 import { prismaShiftToDomain } from "./shift.mapper.js";
 
@@ -25,12 +26,13 @@ export function buildGenerationInput(params: {
   flightDays: Array<{ employeeUuid: string; date: string; description?: string }>;
   crossMonthHistory?: import("../../domain/schedule/cross-month-history.js").CrossMonthHistory;
   shiftRestrictionRows?: ShiftRestrictionRow[];
+  noFlightDates?: Array<{ employeeUuid: string; date: string }>;
 }): GenerationInput {
-  const sorted = [...params.employees].sort((a, b) => a.name.localeCompare(b.name));
+  const sorted = [...params.employees].sort(compareEmployeesBySeniority);
   const genEmployees: GenerationInputEmployee[] = sorted.map((e, i) => ({
     uuid: e.id,
     domainId: i + 1,
-    employee: { ...prismaEmployeeToDomain(e, i + 1), id: i + 1 },
+    employee: { ...prismaEmployeeToDomain(e), id: i + 1 },
   }));
 
   const motorRoleCodes = resolveMotorRoleCodes(params.roles ?? []);
@@ -48,6 +50,7 @@ export function buildGenerationInput(params: {
     flightDays: params.flightDays,
     crossMonthHistory: params.crossMonthHistory,
     shiftRestrictions: buildShiftRestrictionMap(genEmployees, params.shiftRestrictionRows ?? []),
+    noFlightDates: params.noFlightDates ?? [],
   };
 }
 

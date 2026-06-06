@@ -56,6 +56,7 @@ export class GenerateFlightsUseCase {
     const flightDays = await this.calendarRepo.listFlightDaysForMonth(year, month);
     const crossMonthHistory = await this.scheduleRepo.loadCrossMonthHistory(year, month);
     const shiftRestrictionRows = await this.scheduleRepo.listShiftRestrictionsForMonth(year, month);
+    const noFlightDates = await this.scheduleRepo.listNoFlightDatesForMonth(year, month);
 
     const lockedFromDb = preAllocationsToLocked(record.preAllocations);
     const skipPersistKeys = new Set(
@@ -75,6 +76,7 @@ export class GenerateFlightsUseCase {
       vacationReturnDays,
       crossMonthHistory,
       shiftRestrictionRows,
+      noFlightDates,
       approvedDayOff,
       flightDays,
     });

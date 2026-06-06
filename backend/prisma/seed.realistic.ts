@@ -86,17 +86,27 @@ async function main() {
     });
   }
 
-  for (const e of REALISTIC_EMPLOYEES) {
-    const existing = await prisma.employee.findFirst({ where: { name: e.name } });
-    const roleId = roleByCode[e.type];
-    if (!existing) {
-      await prisma.employee.create({ data: { name: e.name, type: e.type, roleId, active: true } });
-    } else {
-      await prisma.employee.update({
-        where: { id: existing.id },
-        data: { type: e.type, roleId: roleId ?? existing.roleId, active: true },
+  const employeeCount = await prisma.employee.count();
+  if (employeeCount === 0) {
+    let seniorityByType: Record<string, number> = { PAO: 0, APAO: 0 };
+    for (const e of REALISTIC_EMPLOYEES) {
+      const roleId = roleByCode[e.type];
+      seniorityByType[e.type] = (seniorityByType[e.type] ?? 0) + 1;
+      await prisma.employee.create({
+        data: {
+          name: e.name,
+          type: e.type,
+          roleId,
+          active: true,
+          seniorityNumber: seniorityByType[e.type],
+        },
       });
     }
+    console.log("Seed realista: equipe criada (banco vazio).");
+  } else {
+    console.log(
+      `Seed realista: ${employeeCount} funcionário(s) existentes — use exclusão manual; seed não recria nomes.`,
+    );
   }
 
   await prisma.user.upsert({

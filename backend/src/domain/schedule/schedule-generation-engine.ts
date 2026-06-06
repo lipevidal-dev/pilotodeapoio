@@ -4,13 +4,16 @@ import { IDEAL_PAO_REST_COUNT } from "../rules/constants.js";
 import { buildGenerationInsights } from "./generation-insights.js";
 import { buildExtendedSummary } from "./generation-summary.js";
 import { GenerationWorkspace } from "./generation-workspace.js";
+import { operationalBalancer } from "./operational-balancer.js";
+import { RealScheduleEngine } from "./real-schedule-engine.js";
 import { ScheduleRepairEngine } from "./schedule-repair-engine.js";
 import type { GenerationInput, GenerationResult } from "./generation-types.js";
 
 /**
- * Motor estruturado — T8 somente como bloco T8/T8/ND; bloqueios absolutos.
+ * Motor legado — preservado congelado para referência e testes de regressão.
+ * Não é usado pelo botão principal "Gerar Escala" (Fase 8.0).
  */
-export class ScheduleGenerationEngine {
+export class LegacyScheduleGenerationEngine {
   constructor(private readonly repairEngine = new ScheduleRepairEngine()) {}
 
   generate(input: GenerationInput): GenerationResult {
@@ -58,6 +61,23 @@ export class ScheduleGenerationEngine {
     ws.coverT6T7Only();
     ws.coverT8BlocksOnly();
     ws.ensureNdForT8Pairs();
+    ws.ensureMinShiftsForFullMonthNoFlight();
+    ws.ensureExactTenFolgasPerPao();
+    ws.finalizePaoFolgaCounts();
+    ws.coverT6T7Only();
+    ws.coverT8BlocksOnly();
+    ws.ensureNdForT8Pairs();
+    this.repairEngine.repair(ws, engineSuggestions);
+    ws.correctMonoFolgasPedidas();
+
+    const balanceReport = operationalBalancer.balance(ws, [
+      ...ws.birthdayWarnings,
+      ...ws.noFlightWarnings,
+      ...ws.monoFolgaWarnings,
+    ]);
+    for (const w of balanceReport.warnings) {
+      engineSuggestions.push(w.detail);
+    }
 
     const assignments = ws.toAssignments();
     const ctx = ws.toScheduleContext();
@@ -65,7 +85,14 @@ export class ScheduleGenerationEngine {
     const gate = runFinalCoverageGate(ctx);
 
     const seen = new Set<string>();
-    const violations = [...ws.birthdayWarnings, ...engineViolations, ...gate.issues].filter((i) => {
+    const violations = [
+      ...ws.birthdayWarnings,
+      ...ws.noFlightWarnings,
+      ...ws.monoFolgaWarnings,
+      ...balanceReport.warnings,
+      ...engineViolations,
+      ...gate.issues,
+    ].filter((i) => {
       const k = `${i.type}|${i.date}|${i.employee}|${i.detail}`;
       if (seen.has(k)) return false;
       seen.add(k);
@@ -107,6 +134,8 @@ export class ScheduleGenerationEngine {
       generationMs,
       impossibleScenario: insights.impossibleScenario,
       mainBlockingReasons: insights.mainBlockingReasons,
+      balanceReport,
+      motorVersion: "Motor legado",
     });
 
     return {
@@ -120,4 +149,14 @@ export class ScheduleGenerationEngine {
   }
 }
 
+/** Motor principal — Fase 8.0: motor real v1 (demanda/metas/blocos/voos). */
+export class ScheduleGenerationEngine {
+  constructor(private readonly realEngine = new RealScheduleEngine()) {}
+
+  generate(input: GenerationInput): GenerationResult {
+    return this.realEngine.generate(input);
+  }
+}
+
 export const scheduleGenerationEngine = new ScheduleGenerationEngine();
+export const legacyScheduleGenerationEngine = new LegacyScheduleGenerationEngine();

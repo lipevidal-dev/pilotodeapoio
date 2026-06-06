@@ -75,7 +75,11 @@ export async function deleteEmployeeController(
     return reply.status(204).send();
   } catch (err) {
     if (err instanceof EmployeeHasOperationalHistoryError) {
-      return reply.status(409).send({ error: err.message, code: err.code });
+      return reply.status(409).send({
+        error: err.message,
+        code: err.code,
+        history: err.history,
+      });
     }
     if (err instanceof Error && err.message === "NOT_FOUND") {
       return reply.status(404).send({ error: "Funcionário não encontrado" });

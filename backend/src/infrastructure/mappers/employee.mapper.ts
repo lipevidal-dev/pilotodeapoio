@@ -4,13 +4,13 @@ import { isoDateKey } from "../../domain/rules/date-keys.js";
 
 type PrismaEmployeeWithRole = PrismaEmployee & { role?: Role | null };
 
-export function prismaEmployeeToDomain(row: PrismaEmployeeWithRole, seniority = 1): DomainEmployee {
+export function prismaEmployeeToDomain(row: PrismaEmployeeWithRole): DomainEmployee {
   const roleCode = row.role?.code ?? row.type;
   return {
     id: hashUuidToNumber(row.id),
     name: row.name,
     role: roleCode as DomainEmployee["role"],
-    seniority,
+    seniority: row.seniorityNumber,
     active: row.active,
     birthDate: row.birthDate ? isoDateKey(row.birthDate) : null,
   };

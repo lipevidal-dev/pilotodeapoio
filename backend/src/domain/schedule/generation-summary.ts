@@ -12,6 +12,7 @@ import {
   type OperationalTotals,
 } from "./operational-summary.js";
 import type { ValidationIssue } from "./types.js";
+import { analyzeT6T7BlockCoverage } from "./coverage-block-metrics.js";
 
 export interface ExtendedGenerationSummary extends GenerationSummary {
   criticalCount: number;
@@ -34,6 +35,21 @@ export interface ExtendedGenerationSummary extends GenerationSummary {
   mathClosureOk?: boolean;
   mathClosureErrors?: string[];
   paosCom11Folgas?: string[];
+  t6BlockCoverage?: {
+    blockCount: number;
+    averageDays: number;
+    unitOccurrences: number;
+  };
+  t7BlockCoverage?: {
+    blockCount: number;
+    averageDays: number;
+    unitOccurrences: number;
+  };
+  unitCoverageTotal?: number;
+  motorVersion?: string;
+  enginePath?: string;
+  realEngineExecuted?: boolean;
+  realMotorReport?: Record<string, unknown>;
 }
 
 export function buildExtendedSummary(
@@ -101,6 +117,7 @@ export function buildExtendedSummary(
     buildMainBlockingReasons(violations, coverageMissingCount, base.repairRemainingGaps ?? 0);
 
   const operational = buildOperationalSummary(ws, violations);
+  const blockCoverage = analyzeT6T7BlockCoverage(ws.toAssignments(), days);
 
   return {
     ...base,
@@ -129,6 +146,17 @@ export function buildExtendedSummary(
     paosCom11Folgas: operational.byEmployee
       .filter((e) => e.folgasAjusteOperacional)
       .map((e) => e.name),
+    t6BlockCoverage: {
+      blockCount: blockCoverage.T6.blockCount,
+      averageDays: blockCoverage.T6.averageBlockSize,
+      unitOccurrences: blockCoverage.T6.unitCoverageCount,
+    },
+    t7BlockCoverage: {
+      blockCount: blockCoverage.T7.blockCount,
+      averageDays: blockCoverage.T7.averageBlockSize,
+      unitOccurrences: blockCoverage.T7.unitCoverageCount,
+    },
+    unitCoverageTotal: blockCoverage.unitCoverageTotal,
     valid: critical.length === 0 && coverageMissingCount === 0,
   };
 }

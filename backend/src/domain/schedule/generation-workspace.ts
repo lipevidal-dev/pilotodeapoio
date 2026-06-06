@@ -5,7 +5,9 @@ import { consecutiveWorkCount } from "../rules/consecutive.js";
 import { has12hRest } from "../rules/time.js";
 import {
   IDEAL_PAO_REST_COUNT,
+  MAX_CONSECUTIVE_WORK_DAYS,
   MAX_PAO_REST_COUNT,
+  MIN_PAO_REST_COUNT,
   PAO_COVERAGE_SHIFTS,
   VACATION_TYPES,
 } from "../rules/constants.js";
@@ -26,6 +28,18 @@ import type {
   GenerationInputEmployee,
 } from "./generation-types.js";
 import type { ScheduleContext, ValidationIssue } from "./types.js";
+import { MIN_SHIFTS_FULL_NO_FLIGHT_MONTH } from "../employee/restrictions.js";
+import { coverT6T7ByBlocks, wouldExceedT6T7BlockMax } from "./t6-t7-block-coverage.js";
+import {
+  correctMonoFolgasPedidas,
+  type MonoFolgaAuditResult,
+} from "./mono-folga-pedida.js";
+import { countOperationalShifts } from "./pao-operational-shifts.js";
+import { sortPaoByOperationalPriority } from "./pao-operational-priority.js";
+import {
+  maxConsecutiveWorkDays,
+  workDatesFromWorkspace,
+} from "./operational-audit.js";
 
 export const GENERATOR_REST_LABELS = new Set([
   "FOLGA",
@@ -59,7 +73,11 @@ export class GenerationWorkspace {
 
   private coverageGapsCache: Array<{ date: string; shiftCode: string }> | null = null;
   private readonly t8BlockComplete = new Set<string>();
+  private readonly noFlightByUuid = new Map<string, Set<string>>();
   readonly birthdayWarnings: ValidationIssue[] = [];
+  readonly noFlightWarnings: ValidationIssue[] = [];
+  readonly monoFolgaWarnings: ValidationIssue[] = [];
+  monoFolgaAudit: MonoFolgaAuditResult | null = null;
 
   constructor(readonly input: GenerationInput) {
     this.shiftMap =
@@ -93,7 +111,92 @@ export class GenerationWorkspace {
       roleByEmployeeId: this.roleByDomain,
       shiftRestrictions: input.shiftRestrictions,
     };
+    for (const row of input.noFlightDates ?? []) {
+      const set = this.noFlightByUuid.get(row.employeeUuid) ?? new Set<string>();
+      set.add(row.date);
+      this.noFlightByUuid.set(row.employeeUuid, set);
+    }
     this.seedCrossMonthHistory();
+  }
+
+  isNoFlightDay(uuid: string, day: string): boolean {
+    return this.noFlightByUuid.get(uuid)?.has(day) ?? false;
+  }
+
+  isFullMonthNoFlight(uuid: string): boolean {
+    const set = this.noFlightByUuid.get(uuid);
+    if (!set || set.size === 0) return false;
+    return this.days.every((d) => set.has(d));
+  }
+
+  countWorkDays(uuid: string): number {
+    return countOperationalShifts(this, uuid);
+  }
+
+  /** PAO com mês inteiro sem voo: tenta atingir 20 turnos; senão emite WARNING. */
+  ensureMinShiftsForFullMonthNoFlight(
+    allowedShifts: readonly ("T6" | "T7" | "T8")[] = PAO_COVERAGE_SHIFTS,
+  ): void {
+    this.noFlightWarnings.length = 0;
+    const prioritized = sortPaoByOperationalPriority(this, 0).filter((c) =>
+      this.isFullMonthNoFlight(c.uuid),
+    );
+
+    for (const c of prioritized) {
+      let count = countOperationalShifts(this, c.uuid);
+      if (count >= MIN_SHIFTS_FULL_NO_FLIGHT_MONTH) continue;
+
+      for (const day of this.days) {
+        if (count >= MIN_SHIFTS_FULL_NO_FLIGHT_MONTH) break;
+        const did = this.uuidToDomain.get(c.uuid)!;
+        if (this.planned.has(assignmentKey(did, day))) continue;
+        if (this.allocations.some((a) => a.employeeUuid === c.uuid && a.date === day && a.label === "ND")) {
+          continue;
+        }
+        for (const code of this.shiftOrderRespectingBlocks(c.uuid, day, allowedShifts)) {
+          if (this.tryAssignShift(c.uuid, day, code)) {
+            count = countOperationalShifts(this, c.uuid);
+            break;
+          }
+        }
+      }
+
+      if (count < MIN_SHIFTS_FULL_NO_FLIGHT_MONTH) {
+        this.noFlightWarnings.push({
+          severity: "MÉDIA",
+          level: "WARNING",
+          type: "RESTRIÇÃO VOO MÊS INTEIRO",
+          date: "",
+          employee: c.employee.name,
+          detail:
+            "Funcionário com restrição de voo no mês inteiro não atingiu 20 turnos por inviabilidade operacional.",
+        });
+      }
+    }
+  }
+
+  /** Ordem de turnos para preenchimento sem estourar bloco T6/T7 (>5 dias). */
+  private shiftOrderRespectingBlocks(
+    uuid: string,
+    day: string,
+    allowed: readonly ("T6" | "T7" | "T8")[],
+  ): ("T6" | "T7" | "T8")[] {
+    const order: ("T6" | "T7" | "T8")[] = [];
+    for (const code of allowed) {
+      if (code === "T8" || !wouldExceedT6T7BlockMax(this, uuid, day, code)) {
+        order.push(code);
+      }
+    }
+    return order;
+  }
+
+  /** Corrige mono-folgas pedidas isoladas com folga adjacente quando viável. */
+  correctMonoFolgasPedidas(): MonoFolgaAuditResult {
+    const result = correctMonoFolgasPedidas(this);
+    this.monoFolgaAudit = result;
+    this.monoFolgaWarnings.length = 0;
+    this.monoFolgaWarnings.push(...result.warnings);
+    return result;
   }
 
   private seedCrossMonthHistory(): void {
@@ -208,6 +311,31 @@ export class GenerationWorkspace {
     );
   }
 
+  /** PAO alocado no turno/dia (primeiro encontrado). */
+  findPaoOnShift(day: string, code: string): string | undefined {
+    for (const c of this.paoEmps) {
+      const did = this.uuidToDomain.get(c.uuid);
+      if (!did) continue;
+      if (this.shiftOnDay(did, day) === code) return c.uuid;
+    }
+    return undefined;
+  }
+
+  /** Dias consecutivos do mesmo turno terminando em endDay (inclusive). */
+  countConsecutiveShiftEnding(uuid: string, code: string, endDay: string): number {
+    const did = this.uuidToDomain.get(uuid);
+    if (!did) return 0;
+    const daySet = new Set(this.days);
+    let count = 0;
+    let d = endDay;
+    while (daySet.has(d)) {
+      if (this.shiftOnDay(did, d) !== code) break;
+      count++;
+      d = addDays(d, -1);
+    }
+    return count;
+  }
+
   listCoverageGaps(): Array<{ date: string; shiftCode: string }> {
     if (this.coverageGapsCache) return this.coverageGapsCache;
     const gaps: Array<{ date: string; shiftCode: string }> = [];
@@ -227,21 +355,16 @@ export class GenerationWorkspace {
     return this.coverT6T7Only() + this.coverT8BlocksOnly();
   }
 
-  /** Cobertura T6 e T7 — nunca aloca T8 isolado. */
+  /** Cobertura seletiva T6 e/ou T7 por blocos consecutivos (modo por etapas). */
+  coverPaoShiftsOnly(codes: readonly ("T6" | "T7")[]): number {
+    const gaps = coverT6T7ByBlocks(this, codes);
+    this.coverageGapsCache = null;
+    return gaps;
+  }
+
+  /** Cobertura T6 e T7 por blocos consecutivos — nunca aloca T8 isolado. */
   coverT6T7Only(): number {
-    let gaps = 0;
-    for (let di = 0; di < this.days.length; di++) {
-      const day = this.days[di];
-      const rotated = [...this.paoEmps].sort(
-        (a, b) =>
-          this.workCount(a.uuid) - this.workCount(b.uuid) ||
-          ((a.domainId + di) % this.paoEmps.length) - ((b.domainId + di) % this.paoEmps.length),
-      );
-      for (const code of ["T6", "T7"] as const) {
-        if (this.hasPaoCoverage(day, code)) continue;
-        if (!this.tryAssignCoverageShift(day, code, rotated)) gaps++;
-      }
-    }
+    const gaps = coverT6T7ByBlocks(this);
     this.coverageGapsCache = null;
     return gaps;
   }
@@ -252,26 +375,11 @@ export class GenerationWorkspace {
     for (let di = 0; di < this.days.length; di++) {
       const day = this.days[di];
       if (this.hasPaoCoverage(day, "T8")) continue;
-      const rotated = [...this.paoEmps].sort(
-        (a, b) =>
-          this.workCount(a.uuid) - this.workCount(b.uuid) ||
-          ((a.domainId + di) % this.paoEmps.length) - ((b.domainId + di) % this.paoEmps.length),
-      );
+      const rotated = sortPaoByOperationalPriority(this, di);
       if (!this.tryAssignT8Coverage(day, rotated)) gaps++;
     }
     this.coverageGapsCache = null;
     return gaps;
-  }
-
-  private tryAssignCoverageShift(
-    day: string,
-    code: string,
-    candidates: GenerationInputEmployee[],
-  ): boolean {
-    for (const c of candidates) {
-      if (this.tryAssignShift(c.uuid, day, code)) return true;
-    }
-    return false;
   }
 
   /** Dia bloqueado para turno (pré-alocação, folga, ND, férias…). */
@@ -386,12 +494,8 @@ export class GenerationWorkspace {
 
   /** Cobertura T8 somente como bloco indivisível T8/T8/ND. */
   tryAssignT8Coverage(day: string, candidates?: GenerationInputEmployee[]): boolean {
-    const pool =
-      candidates ??
-      [...this.paoEmps].sort(
-        (a, b) =>
-          this.workCount(a.uuid) - this.workCount(b.uuid) || a.employee.seniority - b.employee.seniority,
-      );
+    const dayIndex = Math.max(0, this.days.indexOf(day));
+    const pool = candidates ?? sortPaoByOperationalPriority(this, dayIndex);
 
     for (const c of pool) {
       if (this.tryCompleteT8Pair(c.uuid, day)) return true;
@@ -1581,6 +1685,7 @@ export class GenerationWorkspace {
           if (this.hasPaoCoverage(day, code)) continue;
           const candidates = [...this.paoEmps]
             .filter((c) => this.isPaoDayEmpty(c.uuid, day))
+            .filter((c) => !wouldExceedT6T7BlockMax(this, c.uuid, day, code))
             .sort(
               (a, b) =>
                 this.workCount(a.uuid) - this.workCount(b.uuid) ||
@@ -1667,6 +1772,7 @@ export class GenerationWorkspace {
     const created: GeneratedAllocation[] = [];
     for (const c of this.paoEmps) {
       for (const day of this.days) {
+        if (this.isNoFlightDay(c.uuid, day)) continue;
         const did = this.uuidToDomain.get(c.uuid)!;
         const hasAssignment = this.planned.has(assignmentKey(did, day));
         const hasAllocation = this.allocations.some((a) => a.employeeUuid === c.uuid && a.date === day);
@@ -1685,6 +1791,149 @@ export class GenerationWorkspace {
       out.set(c.uuid, this.emptyDaysForPao(c.uuid));
     }
     return out;
+  }
+
+  /** VOO pré-cadastrado no input — não removível pelo balanceador. */
+  isInputFlightDay(uuid: string, day: string): boolean {
+    return this.input.flightDays.some((f) => f.employeeUuid === uuid && f.date === day);
+  }
+
+  /** Remove VOO gerado pelo motor (não input/admin). */
+  tryRemoveMotorVoo(uuid: string, day: string): boolean {
+    if (this.isInputFlightDay(uuid, day)) return false;
+    if (
+      this.input.lockedAllocations.some(
+        (l) =>
+          l.employeeUuid === uuid &&
+          l.date === day &&
+          normalizeOperationalLabel(l.label).toUpperCase() === "VOO",
+      )
+    ) {
+      return false;
+    }
+    const idx = this.allocations.findIndex(
+      (a) =>
+        a.employeeUuid === uuid &&
+        a.date === day &&
+        normalizeOperationalLabel(a.label).toUpperCase() === "VOO",
+    );
+    if (idx < 0) return false;
+    this.allocations.splice(idx, 1);
+    const did = this.uuidToDomain.get(uuid)!;
+    const key = assignmentKey(did, day);
+    if (normalizeOperationalLabel(this.blocked.get(key) ?? "").toUpperCase() === "VOO") {
+      this.blocked.delete(key);
+    }
+    this.coverageGapsCache = null;
+    return true;
+  }
+
+  /** Realoca VOO motor para PAO elegível no mesmo dia. */
+  tryRelocateMotorVoo(fromUuid: string, day: string): boolean {
+    if (this.isInputFlightDay(fromUuid, day)) return false;
+    if (
+      !this.allocations.some(
+        (a) =>
+          a.employeeUuid === fromUuid &&
+          a.date === day &&
+          normalizeOperationalLabel(a.label).toUpperCase() === "VOO",
+      )
+    ) {
+      return false;
+    }
+    const dayIndex = Math.max(0, this.days.indexOf(day));
+    for (const other of sortPaoByOperationalPriority(this, dayIndex)) {
+      if (other.uuid === fromUuid) continue;
+      if (this.isNoFlightDay(other.uuid, day)) continue;
+      if (!this.isPaoDayEmpty(other.uuid, day)) continue;
+      if (this.isInputFlightDay(other.uuid, day)) continue;
+      if (!this.tryRemoveMotorVoo(fromUuid, day)) return false;
+      this.lockDay(other.uuid, day, "VOO");
+      return true;
+    }
+    return false;
+  }
+
+  /** Remove turno T6/T7 preservando cobertura (não toca T8/ND). */
+  tryRemoveShiftPreservingCoverage(uuid: string, day: string): boolean {
+    const did = this.uuidToDomain.get(uuid);
+    if (!did) return false;
+    const code = this.planned.get(assignmentKey(did, day));
+    if (!code || code === "T8") return false;
+    if (this.isT8BlockProtected(uuid, day)) return false;
+
+    this.planned.delete(assignmentKey(did, day));
+    if (this.hasPaoCoverage(day, code)) {
+      this.coverageGapsCache = null;
+      return true;
+    }
+
+    const substitutes = [...this.paoEmps]
+      .filter((c) => c.uuid !== uuid)
+      .sort(
+        (a, b) =>
+          maxConsecutiveWorkDays(workDatesFromWorkspace(this, a.uuid)) -
+            maxConsecutiveWorkDays(workDatesFromWorkspace(this, b.uuid)) ||
+          this.workCount(a.uuid) - this.workCount(b.uuid) ||
+          a.employee.seniority - b.employee.seniority,
+      );
+
+    for (const other of substitutes) {
+      if (this.wouldExceedMaxConsecAfterDay(other.uuid, day)) continue;
+      if (this.tryAssignShift(other.uuid, day, code)) {
+        this.coverageGapsCache = null;
+        return true;
+      }
+    }
+
+    this.planned.set(assignmentKey(did, day), code);
+    return false;
+  }
+
+  /** Insere folga usando estratégias do motor (bloco ou liberar turno). */
+  tryBalanceInsertFolga(uuid: string): boolean {
+    if (this.countRest(uuid) >= MIN_PAO_REST_COUNT) return false;
+    const empty = this.emptyDaysForPao(uuid);
+    const picked = this.pickFolgaBlockDay(uuid, empty);
+    if (picked && this.tryAssignFolgaOnDay(uuid, picked)) return true;
+    if (this.tryAssignFolgaBlock(uuid, 2)) return true;
+    if (this.freeWorkDaysForFolgaBlock(uuid, 1)) return true;
+    return false;
+  }
+
+  /** Quebra sequência longa inserindo folga no dia indicado. */
+  tryBreakMaxConsecutiveStreak(uuid: string, middleDay: string): boolean {
+    if (this.isPaoDayEmpty(uuid, middleDay)) {
+      return this.tryAssignFolgaOnDay(uuid, middleDay);
+    }
+    const hasMotorVoo = this.allocations.some(
+      (a) =>
+        a.employeeUuid === uuid &&
+        a.date === middleDay &&
+        normalizeOperationalLabel(a.label).toUpperCase() === "VOO" &&
+        !this.isInputFlightDay(uuid, middleDay),
+    );
+    if (hasMotorVoo && this.tryRemoveMotorVoo(uuid, middleDay)) {
+      if (this.canAddFolga(uuid)) return this.tryAssignFolgaOnDay(uuid, middleDay);
+      return true;
+    }
+    if (this.tryRemoveShiftPreservingCoverage(uuid, middleDay)) {
+      if (this.canAddFolga(uuid)) this.lockDay(uuid, middleDay, "FOLGA");
+      return true;
+    }
+    return false;
+  }
+
+  private wouldExceedMaxConsecAfterDay(uuid: string, day: string): boolean {
+    const dates = workDatesFromWorkspace(this, uuid);
+    dates.push(day);
+    return maxConsecutiveWorkDays(dates) > MAX_CONSECUTIVE_WORK_DAYS;
+  }
+
+  /** Revalida integridade T8/T8/ND após ajustes do balanceador (sem realocar blocos inteiros). */
+  revalidateCoverageAfterBalance(): void {
+    this.ensureNdForT8Pairs();
+    this.coverageGapsCache = null;
   }
 
   toAssignments(): GeneratedAssignment[] {

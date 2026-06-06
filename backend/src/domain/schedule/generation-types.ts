@@ -9,6 +9,7 @@ import type {
   EmployeeOperationalSummary,
   OperationalTotals,
 } from "./operational-summary.js";
+import type { OperationalBalanceReport } from "./operational-balancer.js";
 export interface GenerationInputEmployee {
   uuid: string;
   domainId: number;
@@ -35,6 +36,8 @@ export interface GenerationInput {
   crossMonthHistory?: CrossMonthHistory;
   /** employeeId (domínio) → turnos bloqueados no mês */
   shiftRestrictions?: Map<number, Set<string>>;
+  /** Dias em que o funcionário não deve receber voo (não bloqueia turno). */
+  noFlightDates?: Array<{ employeeUuid: string; date: string }>;
 }
 
 export interface ShiftRestrictionRow {
@@ -84,6 +87,22 @@ export interface GenerationSummary {
   operationalTotals?: OperationalTotals;
   mathClosureOk?: boolean;
   paosCom11Folgas?: string[];
+  t6BlockCoverage?: {
+    blockCount: number;
+    averageDays: number;
+    unitOccurrences: number;
+  };
+  t7BlockCoverage?: {
+    blockCount: number;
+    averageDays: number;
+    unitOccurrences: number;
+  };
+  unitCoverageTotal?: number;
+  balanceReport?: OperationalBalanceReport;
+  motorVersion?: string;
+  enginePath?: string;
+  realEngineExecuted?: boolean;
+  realMotorReport?: Record<string, unknown>;
 }
 
 export interface GenerationResult {

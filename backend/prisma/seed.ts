@@ -70,21 +70,41 @@ async function main() {
     });
   }
 
-  const employees = [
+  const demoEmployees = [
     { name: "PAO Exemplo 1", type: EmployeeType.PAO },
     { name: "PAO Exemplo 2", type: EmployeeType.PAO },
     { name: "APAO Exemplo 1", type: EmployeeType.APAO },
     { name: "APAO Exemplo 2", type: EmployeeType.APAO },
   ];
 
-  for (const e of employees) {
-    const roleId = roleByCode[e.type];
-    const existing = await prisma.employee.findFirst({ where: { name: e.name } });
-    if (!existing) {
-      await prisma.employee.create({ data: { ...e, roleId } });
-    } else if (!existing.roleId && roleId) {
-      await prisma.employee.update({ where: { id: existing.id }, data: { roleId } });
+  const employeeCount = await prisma.employee.count();
+  if (employeeCount === 0) {
+    for (const e of demoEmployees) {
+      const roleId = roleByCode[e.type];
+      const max = await prisma.employee.aggregate({
+        where: { type: e.type },
+        _max: { seniorityNumber: true },
+      });
+      const seniorityNumber = (max._max.seniorityNumber ?? 0) + 1;
+      await prisma.employee.create({
+        data: { ...e, roleId, seniorityNumber },
+      });
     }
+    console.log("Seed: funcionários de demonstração criados (banco vazio).");
+  } else {
+    const missingRole = await prisma.employee.findMany({
+      where: { roleId: null },
+      select: { id: true, type: true },
+    });
+    for (const row of missingRole) {
+      const roleId = roleByCode[row.type];
+      if (roleId) {
+        await prisma.employee.update({ where: { id: row.id }, data: { roleId } });
+      }
+    }
+    console.log(
+      `Seed: ${employeeCount} funcionário(s) já cadastrados — exclusões não serão revertidas.`,
+    );
   }
 
   await prisma.user.upsert({

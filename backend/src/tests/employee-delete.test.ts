@@ -30,7 +30,17 @@ describe("canPhysicallyDeleteEmployee", () => {
     expect(canPhysicallyDeleteEmployee({ ...empty, flightAssignments: 1 })).toBe(false);
   });
 
-  it("bloqueia exclusão com pré-alocação", () => {
+  it("bloqueia exclusão com pré-alocação manual", () => {
     expect(canPhysicallyDeleteEmployee({ ...empty, preAllocations: 1 })).toBe(false);
+  });
+
+  it("permite exclusão quando só há folgas geradas pelo motor", () => {
+    expect(
+      canPhysicallyDeleteEmployee({
+        ...empty,
+        preAllocations: 0,
+        generatorPreAllocations: 4,
+      }),
+    ).toBe(true);
   });
 });

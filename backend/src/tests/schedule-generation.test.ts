@@ -105,7 +105,7 @@ describe("GenerateScheduleUseCase — escala publicada", () => {
       mockSchedule as never,
       mockCalendar as never,
       { findAll: async () => [] } as never,
-      new ScheduleGenerationEngine(),
+      { generate: () => ({ assignments: [], allocations: [], violations: [], summary: { valid: true }, success: true, suggestions: [] }) } as never,
     );
     await expect(uc.execute(2026, 6)).rejects.toBeInstanceOf(PublishedScheduleCannotRegenerateError);
   });

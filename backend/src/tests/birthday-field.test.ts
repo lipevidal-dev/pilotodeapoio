@@ -72,6 +72,7 @@ describe("Campo aniversário — funcionário", () => {
       name: "PAO Test",
       type: "PAO",
       roleId: role.id,
+      seniorityNumber: 1,
       birthDate: new Date("1990-06-15T12:00:00.000Z"),
       active: true,
       createdAt: new Date(),

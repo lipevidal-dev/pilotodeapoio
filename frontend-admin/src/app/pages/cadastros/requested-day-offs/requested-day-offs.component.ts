@@ -14,6 +14,7 @@ import { ScheduleRefreshService } from '../../../services/schedule-refresh.servi
 import { EmployeeOccupancyService } from '../../../services/employee-occupancy.service';
 import { EmployeeService } from '../../../services/employee.service';
 import type { DayOccupancyMap } from '../../../utils/employee-occupancy.util';
+import { sortEmployeesBySeniority } from '../../../utils/employee-sort.util';
 import { OperationalCalendarComponent } from '../../../components/operational-calendar/operational-calendar.component';
 import {
   batchDeleteDetail,
@@ -97,7 +98,7 @@ export class RequestedDayOffsComponent implements OnInit {
 
   loadEmployees(): void {
     this.employeeService.list().subscribe({
-      next: (data) => this.employees.set(data.filter((e) => e.active)),
+      next: (data) => this.employees.set(sortEmployeesBySeniority(data.filter((e) => e.active))),
     });
   }
 

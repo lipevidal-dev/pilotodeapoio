@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ScheduleGenerationEngine } from "../domain/schedule/schedule-generation-engine.js";
+import { RealScheduleEngine } from "../domain/schedule/real-schedule-engine.js";
 import { filterByLevel } from "../domain/schedule/violation-level.js";
 import { evaluatePublishReadiness } from "../domain/schedule/schedule-publish-guard.js";
 import { listPaoCoverageGaps } from "../domain/rules/coverage.js";
@@ -288,7 +289,7 @@ describe("GenerateScheduleUseCase — PUBLISHED", () => {
       mockSchedule as never,
       mockCalendar as never,
       { findAll: async () => [] } as never,
-      engine,
+      new RealScheduleEngine(),
     );
     await expect(uc.execute(2026, 6)).rejects.toBeInstanceOf(PublishedScheduleCannotRegenerateError);
   });

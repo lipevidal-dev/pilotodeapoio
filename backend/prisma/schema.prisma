@@ -75,14 +75,15 @@ model Role {
 }
 
 model Employee {
-  id        String       @id @default(uuid())
-  name      String
-  type      EmployeeType
-  roleId    String?      @map("role_id")
-  birthDate DateTime?    @map("birth_date") @db.Date
-  active    Boolean      @default(true)
-  createdAt DateTime     @default(now()) @map("created_at")
-  updatedAt DateTime     @updatedAt @map("updated_at")
+  id              String       @id @default(uuid())
+  name            String
+  type            EmployeeType
+  roleId          String?      @map("role_id")
+  seniorityNumber Int          @default(1) @map("seniority_number")
+  birthDate       DateTime?    @map("birth_date") @db.Date
+  active          Boolean      @default(true)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
 
   role                Role?                @relation(fields: [roleId], references: [id], onDelete: Restrict)
   scheduleAssignments ScheduleAssignment[]
@@ -91,6 +92,41 @@ model Employee {
   requestedDaysOff    RequestedDayOff[]
   flightAssignments   FlightAssignment[]
   ruleViolations      RuleViolation[]
+  flightRestrictions  EmployeeFlightRestriction[]
+  shiftRestrictions   EmployeeShiftRestriction[]
+
+  @@unique([type, seniorityNumber])
+}
+
+model EmployeeFlightRestriction {
+  id         String   @id @default(uuid())
+  employeeId String   @map("employee_id")
+  date       DateTime @db.Date
+  notes      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([employeeId])
+  @@index([date])
+  @@map("employee_flight_restrictions")
+}
+
+model EmployeeShiftRestriction {
+  id         String   @id @default(uuid())
+  employeeId String   @map("employee_id")
+  shiftId    String   @map("shift_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shift    Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, shiftId])
+  @@index([employeeId])
+  @@map("employee_shift_restrictions")
 }
 
 model Shift {
@@ -107,6 +143,8 @@ model Shift {
   requiresT8PairNd    Boolean             @default(false) @map("requires_t8_pair_nd")
   createdAt           DateTime            @default(now()) @map("created_at")
   updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  employeeShiftRestrictions EmployeeShiftRestriction[]
 }
 
 model ScheduleMonth {

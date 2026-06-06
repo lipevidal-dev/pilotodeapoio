@@ -8,6 +8,12 @@ export interface HealthResponse {
 /** Código do cargo — compatível com PAO/APAO e futuros cargos. */
 export type EmployeeType = 'PAO' | 'APAO' | string;
 
+export interface RestrictedShiftSummary {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export interface Employee {
   id: string;
   name: string;
@@ -16,8 +22,13 @@ export interface Employee {
   roleId: string | null;
   cargoCode: string;
   cargoName: string;
+  seniorityNumber?: number;
+  seniorityLabel?: string;
   active: boolean;
   birthDate?: string | null;
+  noFlightDates?: string[];
+  restrictedShiftIds?: string[];
+  restrictedShifts?: RestrictedShiftSummary[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -26,14 +37,20 @@ export interface CreateEmployeePayload {
   name: string;
   roleId: string;
   birthDate?: string | null;
+  seniorityNumber?: number;
   active?: boolean;
+  noFlightDates?: string[];
+  restrictedShiftIds?: string[];
 }
 
 export interface UpdateEmployeePayload {
   name?: string;
   roleId?: string;
   birthDate?: string | null;
+  seniorityNumber?: number | null;
   active?: boolean;
+  noFlightDates?: string[];
+  restrictedShiftIds?: string[];
 }
 
 export interface JobRole {
@@ -63,9 +80,19 @@ export interface UpdateJobRolePayload {
   displayOrder?: number;
 }
 
+export interface EmployeeOperationalHistorySummary {
+  scheduleAssignments: number;
+  vacations: number;
+  requestedDaysOff: number;
+  flightAssignments: number;
+  preAllocations: number;
+  generatorPreAllocations?: number;
+}
+
 export interface EmployeeDeleteError {
   error: string;
   code?: 'HAS_OPERATIONAL_HISTORY';
+  history?: EmployeeOperationalHistorySummary;
 }
 
 export type ShiftRoleType = 'PAO' | 'APAO' | 'BOTH';
@@ -150,6 +177,29 @@ export interface OperationalTotals {
   coverageT8?: number;
 }
 
+export interface BalanceAction {
+  kind: string;
+  employee: string;
+  employeeUuid: string;
+  date?: string;
+  detail: string;
+}
+
+export interface OperationalBalanceReport {
+  iterations: number;
+  acceptable: boolean;
+  before: Array<{ name: string; folgas: number; maxConsec: number; voos: number; turnos: number }>;
+  after: Array<{ name: string; folgas: number; maxConsec: number; voos: number; turnos: number }>;
+  actions: BalanceAction[];
+  warnings: Array<{ type: string; detail: string; employee?: string }>;
+  flightsRemoved: number;
+  flightsRelocated: number;
+  folgasInserted: number;
+  shiftsRemoved: number;
+  shiftsRelocated: number;
+  shiftsAdded: number;
+}
+
 export interface GenerationSummary {
   totalViolations?: number;
   criticalCount?: number;
@@ -162,6 +212,14 @@ export interface GenerationSummary {
   mainBlockingReasons?: string[];
   totalAssignments?: number;
   operationalTotals?: OperationalTotals;
+  t6BlockCoverage?: { blockCount: number; averageDays: number; unitOccurrences: number };
+  t7BlockCoverage?: { blockCount: number; averageDays: number; unitOccurrences: number };
+  unitCoverageTotal?: number;
+  balanceReport?: OperationalBalanceReport;
+  motorVersion?: string;
+  enginePath?: string;
+  realEngineExecuted?: boolean;
+  realMotorReport?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
@@ -174,6 +232,9 @@ export interface GenerateScheduleResponse {
   summary: GenerationSummary;
   success: boolean;
   suggestions: string[];
+  motorVersion?: string;
+  enginePath?: string;
+  realEngineExecuted?: boolean;
 }
 
 export interface GenerateFlightsResponse {
@@ -413,4 +474,140 @@ export interface ScheduleMonthResponse {
   operationalCadastros?: OperationalCadastroRow[];
   ruleViolations?: RuleViolationRow[];
   validation?: unknown;
+}
+
+export interface DemandPlanningReport {
+  demand: {
+    daysInMonth: number;
+    shiftsPerDay: number;
+    totalDemand: number;
+    perShift: { T6: number; T7: number; T8: number };
+  };
+  capacity: {
+    byEmployee: Array<{
+      employeeUuid: string;
+      name: string;
+      group: string;
+      capacity: number;
+      adjusted: boolean;
+      detail: string;
+    }>;
+    totalCapacity: number;
+  };
+  operationalBalance: number;
+  targets: Array<{
+    employeeUuid: string;
+    name: string;
+    group: string;
+    seniority: number;
+    target: number;
+    capacity: number;
+  }>;
+  blockPlans: Array<{
+    employeeUuid: string;
+    name: string;
+    group: string;
+    seniority: number;
+    target: number;
+    plannedBlocks: Array<{ size: number; shiftCode?: string }>;
+    executedBlocks: Array<{ startDate: string; size: number; shiftCode: string; endDate: string }>;
+  }>;
+  averageBlockSize: number;
+  unitCoverageBefore: number;
+  unitCoverageApplied: number;
+  unitCoverageAfter: number;
+  stepNotes: string[];
+  warnings?: Array<{ type: string; detail: string; employee?: string }>;
+}
+
+export interface StepGenerationOptions {
+  paoCheckPreAllocations: boolean;
+  paoCheckRestrictions: boolean;
+  paoDemandPlanning: boolean;
+  paoCoverageT6: boolean;
+  paoCoverageT7: boolean;
+  paoCoverageT8: boolean;
+  paoAllocateFolgas: boolean;
+  paoAllocateFlights: boolean;
+  apaoCheckPreAllocations: boolean;
+  apaoCheckShiftPreference: boolean;
+  apaoCheckShiftRestrictions: boolean;
+  apaoAllocate: boolean;
+}
+
+export interface StepGenerationAuditAssignment {
+  employeeUuid: string;
+  date: string;
+  shiftCode: string;
+}
+
+export interface StepGenerationAuditAllocation {
+  employeeUuid: string;
+  date: string;
+  label: string;
+}
+
+export interface StepGenerationReport {
+  mode: 'AUDIT_PARTIAL';
+  persisted: false;
+  executedSteps: string[];
+  skippedSteps: string[];
+  allocationsByStep: Record<string, { assignments: number; allocations: number }>;
+  blockedEmployees: Array<{
+    employee: string;
+    employeeUuid: string;
+    date: string;
+    reason: string;
+  }>;
+  coverageGaps: Array<{ date: string; shiftCode: string }>;
+  coverageDecisions: Array<{
+    date: string;
+    shiftCode: string;
+    selectedEmployee: string | null;
+    selectedEmployeeUuid: string | null;
+    selectionReasons: string[];
+    blockedEmployees: Array<{ employee: string; reason: string }>;
+  }>;
+  violations: ScheduleViolation[];
+  criticalCount: number;
+  warningCount: number;
+  infoCount: number;
+  selectionWarnings: string[];
+  stepNotes: string[];
+  demandPlanningReport?: DemandPlanningReport;
+  paoCoverageAudit?: {
+    fullMonthNoFlight: Array<{
+      employeeUuid: string;
+      employeeName: string;
+      shiftCount: number;
+      reached20: boolean;
+      breakdown: Record<string, number>;
+    }>;
+    vacationPao: Array<{
+      employeeUuid: string;
+      employeeName: string;
+      vacationDays: number;
+      shiftsBeforeVacation: number;
+      shiftsAfterVacation: number;
+      totalOperationalShifts: number;
+    }>;
+    t6Blocks: { blockCount: number; averageBlockSize: number; unitCoverageCount: number };
+    t7Blocks: { blockCount: number; averageBlockSize: number; unitCoverageCount: number };
+    unitCoverageTotal: number;
+    monoFolgas: {
+      detected: number;
+      corrected: number;
+      kept: Array<{ employee: string; date: string; reason: string }>;
+    };
+  };
+}
+
+export interface GenerateByStepsResponse {
+  year: number;
+  month: number;
+  mode: 'AUDIT_PARTIAL';
+  persisted: false;
+  assignments: StepGenerationAuditAssignment[];
+  allocations: StepGenerationAuditAllocation[];
+  report: StepGenerationReport;
 }

@@ -4,6 +4,7 @@ import type {
   PreAllocationRow,
   ScheduleAssignmentRow,
 } from '../models/api.models';
+import { compareEmployeesBySeniority } from './employee-sort.util';
 
 import type {
 
@@ -567,10 +568,7 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
     }
   }
 
-  const allEmployees = [...employeeById.values()].sort((a, b) => {
-    if (a.type !== b.type) return a.type === 'PAO' ? -1 : 1;
-    return a.name.localeCompare(b.name, 'pt-BR');
-  });
+  const allEmployees = [...employeeById.values()].sort(compareEmployeesBySeniority);
 
   const paoRows: EmployeeRowData[] = [];
   const apaoRows: EmployeeRowData[] = [];

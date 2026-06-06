@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { validateScheduleService } from "../../../application/services/validate-schedule.service.js";
 import { scheduleUseCase } from "../../../application/use-cases/schedule.use-case.js";
 import { generateScheduleUseCase } from "../../../application/use-cases/generate-schedule.use-case.js";
+import { generateScheduleByStepsUseCase } from "../../../application/use-cases/generate-schedule-by-steps.use-case.js";
 import { generateFlightsUseCase } from "../../../application/use-cases/generate-flights.use-case.js";
 import { publishScheduleUseCase } from "../../../application/use-cases/publish-schedule.use-case.js";
 import { clearGeneratedScheduleUseCase } from "../../../application/use-cases/clear-generated-schedule.use-case.js";
@@ -15,7 +16,11 @@ import {
   ScheduleNotPublishedError,
 } from "../../../application/errors/schedule.errors.js";
 import { dtoToScheduleContext } from "../../../infrastructure/mappers/schedule-context.mapper.js";
-import { generateScheduleBodySchema, validateScheduleBodySchema } from "../dto/schedule.dto.js";
+import {
+  generateScheduleBodySchema,
+  generateScheduleByStepsBodySchema,
+  validateScheduleBodySchema,
+} from "../dto/schedule.dto.js";
 
 export async function validateScheduleController(req: FastifyRequest, reply: FastifyReply) {
   const parsed = validateScheduleBodySchema.safeParse(req.body);
@@ -53,6 +58,25 @@ export async function getScheduleMonthController(
   } catch (err) {
     req.log.error(err);
     return reply.status(500).send({ error: "Erro ao carregar escala" });
+  }
+}
+
+export async function generateScheduleByStepsController(req: FastifyRequest, reply: FastifyReply) {
+  const parsed = generateScheduleByStepsBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return reply.status(400).send({ error: "Payload inválido", details: parsed.error.flatten() });
+  }
+
+  try {
+    const result = await generateScheduleByStepsUseCase.execute(
+      parsed.data.year,
+      parsed.data.month,
+      parsed.data.steps,
+    );
+    return reply.status(200).send(result);
+  } catch (err) {
+    req.log.error(err);
+    return reply.status(500).send({ error: "Erro ao gerar escala por etapas" });
   }
 }
 

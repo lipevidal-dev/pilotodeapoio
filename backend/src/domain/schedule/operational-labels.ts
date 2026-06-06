@@ -13,8 +13,15 @@ export const REGENERATION_CLEAR_LABELS = [
   "VOO",
 ] as const;
 
-/** Labels removidos pelo endpoint de limpar geração (VOO gerado fica em preAllocations). */
-export const CLEAR_GENERATED_LABELS = ["FOLGA", "FOLGA SOCIAL", "ND", "VOO"] as const;
+/** Labels removidos pelo endpoint de limpar geração (folgas/voos gerados pelo motor). */
+export const CLEAR_GENERATED_LABELS = [
+  "FOLGA",
+  "FOLGA SOCIAL",
+  "FOLGA AGRUPADA",
+  "FOLGA ANIVERSÁRIO",
+  "ND",
+  "VOO",
+] as const;
 
 /** Labels de pré-alocação manual válidos — não apagados na regeneração. */
 export const MANUAL_PREALLOC_LABELS = new Set([

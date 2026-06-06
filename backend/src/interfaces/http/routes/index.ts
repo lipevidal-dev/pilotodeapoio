@@ -47,6 +47,7 @@ import {
 import {
   clearGeneratedScheduleController,
   generateFlightsController,
+  generateScheduleByStepsController,
   generateScheduleController,
   getPublishedScheduleController,
   getScheduleMonthController,
@@ -138,6 +139,7 @@ export async function registerRoutes(app: FastifyInstance) {
 
   app.post("/schedules/validate", validateScheduleController);
   app.post("/schedules/generate", generateScheduleController);
+  app.post("/schedules/generate-by-steps", generateScheduleByStepsController);
   app.post("/schedules/:id/generate-flights", generateFlightsController);
   app.get("/schedules/published/:year/:month", getPublishedScheduleController);
   app.post("/schedules/:id/publish", publishScheduleController);

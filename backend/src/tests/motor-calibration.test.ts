@@ -204,6 +204,7 @@ describe("Calibração do motor", () => {
         name: e.employee.name,
         type: e.employee.role as Employee["type"],
         roleId: null,
+        seniorityNumber: e.employee.seniority,
         birthDate: null,
         active: true,
         createdAt: new Date(),

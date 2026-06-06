@@ -54,3 +54,26 @@ export const generateScheduleBodySchema = z.object({
 });
 
 export type GenerateScheduleBody = z.infer<typeof generateScheduleBodySchema>;
+
+const stepGenerationOptionsSchema = z.object({
+  paoCheckPreAllocations: z.boolean(),
+  paoCheckRestrictions: z.boolean(),
+  paoDemandPlanning: z.boolean(),
+  paoCoverageT6: z.boolean(),
+  paoCoverageT7: z.boolean(),
+  paoCoverageT8: z.boolean(),
+  paoAllocateFolgas: z.boolean(),
+  paoAllocateFlights: z.boolean(),
+  apaoCheckPreAllocations: z.boolean(),
+  apaoCheckShiftPreference: z.boolean(),
+  apaoCheckShiftRestrictions: z.boolean(),
+  apaoAllocate: z.boolean(),
+});
+
+export const generateScheduleByStepsBodySchema = z.object({
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+  steps: stepGenerationOptionsSchema,
+});
+
+export type GenerateScheduleByStepsBody = z.infer<typeof generateScheduleByStepsBodySchema>;

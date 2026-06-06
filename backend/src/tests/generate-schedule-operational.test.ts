@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ScheduleGenerationEngine } from "../domain/schedule/schedule-generation-engine.js";
+import { RealScheduleEngine } from "../domain/schedule/real-schedule-engine.js";
 import { generationToScheduleContext } from "../domain/schedule/generation-context.js";
 import { evaluatePublishReadiness } from "../domain/schedule/schedule-publish-guard.js";
 import { GenerateScheduleUseCase } from "../application/use-cases/generate-schedule.use-case.js";
@@ -150,6 +151,7 @@ describe("GenerateScheduleUseCase — persistência de cadastros operacionais", 
         name: "PAO Test",
         type: "PAO",
         roleId: null,
+        seniorityNumber: 1,
         birthDate: null,
         active: true,
         createdAt: new Date(),
@@ -166,6 +168,7 @@ describe("GenerateScheduleUseCase — persistência de cadastros operacionais", 
         listActiveEmployees: async () => employees,
         loadCrossMonthHistory: async () => ({ assignments: [], allocations: [] }),
         listShiftRestrictionsForMonth: async () => [],
+        listNoFlightDatesForMonth: async () => [],
         listRoles: async () => [
           {
             id: "role-pao",
@@ -280,7 +283,7 @@ describe("GenerateScheduleUseCase — persistência de cadastros operacionais", 
           },
         ],
       } as never,
-      engine,
+      new RealScheduleEngine(),
     );
 
     await useCase.execute(2026, 6);

@@ -12,6 +12,7 @@ import { MessageModule } from 'primeng/message';
 import { DividerModule } from 'primeng/divider';
 import { SelectModule } from 'primeng/select';
 import { CheckboxModule } from 'primeng/checkbox';
+import { DialogModule } from 'primeng/dialog';
 import { MessageService } from 'primeng/api';
 import { ScheduleService } from '../../services/schedule.service';
 import { ScheduleRefreshService } from '../../services/schedule-refresh.service';
@@ -19,7 +20,9 @@ import { ScheduleWorkspaceService } from '../../services/schedule-workspace.serv
 import { ScheduleExportService } from '../../services/schedule-export.service';
 import { ScheduleGridComponent } from '../../components/schedule-grid/schedule-grid.component';
 import { ScheduleLegendComponent } from '../../components/schedule-legend/schedule-legend.component';
+import { sortEmployeesBySeniority } from '../../utils/employee-sort.util';
 import { buildScheduleGrid } from '../../utils/schedule-cell.mapper';
+import { applyAuditPreviewToSchedule } from '../../utils/step-audit-grid.util';
 import { applyGridFilters } from '../../utils/schedule-grid.filter';
 import {
   computeGridAuditTotals,
@@ -29,12 +32,29 @@ import {
 } from '../../utils/operational-audit.util';
 import type {
   EmployeeType,
+  GenerateByStepsResponse,
   PublishBlockedResponse,
   ScheduleMonthResponse,
   ScheduleViolation,
+  StepGenerationOptions,
   ViolationSeverity,
 } from '../../models/api.models';
 import type { ScheduleGridData } from '../../models/schedule-grid.models';
+
+const DEFAULT_STEP_OPTIONS = (): StepGenerationOptions => ({
+  paoCheckPreAllocations: false,
+  paoCheckRestrictions: false,
+  paoDemandPlanning: false,
+  paoCoverageT6: false,
+  paoCoverageT7: false,
+  paoCoverageT8: false,
+  paoAllocateFolgas: false,
+  paoAllocateFlights: false,
+  apaoCheckPreAllocations: false,
+  apaoCheckShiftPreference: false,
+  apaoCheckShiftRestrictions: false,
+  apaoAllocate: false,
+});
 
 @Component({
   selector: 'app-schedule',
@@ -51,6 +71,7 @@ import type { ScheduleGridData } from '../../models/schedule-grid.models';
     DividerModule,
     SelectModule,
     CheckboxModule,
+    DialogModule,
     ScheduleGridComponent,
     ScheduleLegendComponent,
   ],
@@ -69,6 +90,10 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   readonly monthSig = signal(this.workspace.month());
 
   readonly generating = signal(false);
+  readonly generatingSteps = signal(false);
+  readonly stepModalVisible = signal(false);
+  readonly stepOptions = signal<StepGenerationOptions>(DEFAULT_STEP_OPTIONS());
+  readonly stepAuditResult = signal<GenerateByStepsResponse | null>(null);
   readonly generatingFlights = signal(false);
   readonly publishing = signal(false);
   readonly clearing = signal(false);
@@ -84,8 +109,29 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   readonly generation = computed(() => this.workspace.lastGeneration());
   readonly scheduleMonthId = computed(() => this.workspace.scheduleMonthId());
 
+  readonly stepAllocationEntries = computed(() => {
+    const audit = this.stepAuditResult();
+    if (!audit) return [];
+    return Object.entries(audit.report.allocationsByStep).map(([step, counts]) => ({
+      step,
+      assignments: counts.assignments,
+      allocations: counts.allocations,
+    }));
+  });
+
+  readonly apaoWithoutPaoWarning = computed(() => {
+    const steps = this.stepOptions();
+    const hasPaoCoverage =
+      steps.paoDemandPlanning || steps.paoCoverageT6 || steps.paoCoverageT7 || steps.paoCoverageT8;
+    return steps.apaoAllocate && !hasPaoCoverage;
+  });
+
   /** Violações da última geração ou persistidas no mês (após recarregar). */
   readonly violationList = computed((): ScheduleViolation[] => {
+    const audit = this.stepAuditResult();
+    if (audit?.report.violations?.length) {
+      return audit.report.violations;
+    }
     const gen = this.generation();
     if (gen?.violations?.length) {
       return gen.violations;
@@ -119,13 +165,15 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   readonly rawGrid = computed(() => {
     const data = this.scheduleData();
     if (!data) return null;
+    const audit = this.stepAuditResult();
+    const viewData = audit ? applyAuditPreviewToSchedule(data, audit) : data;
     return buildScheduleGrid({
       year: this.yearSig(),
       month: this.monthSig(),
-      employees: data.employees,
-      assignments: data.assignments,
-      preAllocations: data.preAllocations,
-      operationalCadastros: data.operationalCadastros,
+      employees: viewData.employees,
+      assignments: viewData.assignments,
+      preAllocations: viewData.preAllocations,
+      operationalCadastros: viewData.operationalCadastros,
     });
   });
 
@@ -159,7 +207,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   readonly employeeOptions = computed(() => {
     const data = this.scheduleData();
     if (!data) return [];
-    const list = [...data.employees].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    const list = sortEmployeesBySeniority(data.employees);
     return [{ label: 'Todos', value: null as string | null }, ...list.map((e) => ({ label: e.name, value: e.id }))];
   });
 
@@ -192,8 +240,57 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     this.refreshSub?.unsubscribe();
   }
 
+  openStepModal(): void {
+    this.stepModalVisible.set(true);
+  }
+
+  closeStepModal(): void {
+    this.stepModalVisible.set(false);
+  }
+
+  updateStepOption(key: keyof StepGenerationOptions, value: boolean): void {
+    this.stepOptions.update((current) => ({ ...current, [key]: value }));
+  }
+
+  clearStepAudit(): void {
+    this.stepAuditResult.set(null);
+  }
+
+  generateBySteps(): void {
+    if (this.apaoWithoutPaoWarning()) {
+      this.messages.add({
+        severity: 'warn',
+        summary: 'APAO sem cobertura PAO',
+        detail: 'APAO depende de cobertura PAO. Execute primeiro T6/T7/T8 ou marque cobertura.',
+      });
+    }
+
+    this.generatingSteps.set(true);
+    this.publishBlocked.set(null);
+    this.publishResult.set(null);
+    const steps = this.stepOptions();
+    this.scheduleService.generateBySteps(this.yearSig(), this.monthSig(), steps).subscribe({
+      next: (result) => {
+        this.generatingSteps.set(false);
+        this.stepAuditResult.set(result);
+        this.stepModalVisible.set(false);
+        this.messages.add({
+          severity: 'info',
+          summary: 'Auditoria por etapas',
+          detail: 'Grade parcial exibida — simulação não persistida.',
+        });
+      },
+      error: (err: HttpErrorResponse) => {
+        this.generatingSteps.set(false);
+        const msg = err.error?.error ?? err.message ?? 'Erro na geração por etapas';
+        this.messages.add({ severity: 'error', summary: 'Gerar por Etapas', detail: msg });
+      },
+    });
+  }
+
   generate(): void {
     this.generating.set(true);
+    this.stepAuditResult.set(null);
     this.publishBlocked.set(null);
     this.publishResult.set(null);
     this.scheduleService.generateSchedule(this.yearSig(), this.monthSig()).subscribe({

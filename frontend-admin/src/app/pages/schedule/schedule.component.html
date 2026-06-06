@@ -99,6 +99,16 @@
 
     <div class="detail-grid mt-3">
       <div><span class="detail-label">scheduleMonthId</span><code>{{ gen.scheduleMonthId }}</code></div>
+      <div>
+        <span class="detail-label">Motor</span>
+        <p-tag [value]="gen.motorVersion ?? gen.summary.motorVersion ?? '—'" severity="success" />
+      </div>
+      @if (gen.realEngineExecuted ?? gen.summary.realEngineExecuted) {
+        <div><span class="detail-label">Motor real executado</span>Sim</div>
+      }
+      @if (gen.enginePath ?? gen.summary.enginePath; as path) {
+        <div><span class="detail-label">Caminho</span><code>{{ path }}</code></div>
+      }
       <div><span class="detail-label">Total violações</span>{{ summaryValue('totalViolations') }}</div>
       <div><span class="detail-label">Furos cobertura</span>{{ summaryValue('coverageMissingCount') }}</div>
       <div><span class="detail-label">Cenário impossível</span>{{ summaryValue('impossibleScenario') }}</div>

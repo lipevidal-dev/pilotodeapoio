@@ -115,10 +115,10 @@ export function canWork(
     }
   }
 
-  if (shiftRestrictions && !coverageEmergency) {
+  if (shiftRestrictions) {
     const restricted = shiftRestrictions.get(empId);
     if (restricted?.has(shiftCode.toUpperCase())) {
-      return { ok: false, reason: `turno ${shiftCode} bloqueado no mês` };
+      return { ok: false, reason: `turno ${shiftCode} restrito para o funcionário` };
     }
   }
 

@@ -72,7 +72,7 @@ fi
 
 
 
-echo "==> Executando seed (idempotente)..."
+echo "==> Executando seed (turnos/cargos/admin — não recria funcionários excluídos)..."
 
 if npx prisma db seed; then
 

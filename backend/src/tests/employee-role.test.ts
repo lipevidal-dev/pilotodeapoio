@@ -15,6 +15,7 @@ function mockEmployee(overrides: Partial<Employee> = {}): Employee & { role: Rol
     name: "PAO Test",
     type: "PAO",
     roleId: "role-pao",
+    seniorityNumber: 1,
     active: true,
     birthDate: null,
     createdAt: new Date("2026-01-01"),

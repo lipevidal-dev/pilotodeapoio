@@ -1,3 +1,4 @@
+import { compareEmployeesBySeniority } from "../../domain/employee/seniority.js";
 import { isoDateKey } from "../../domain/rules/date-keys.js";
 import type {
   ScheduleAssignment,
@@ -108,11 +109,11 @@ export function buildContextFromDbParts(params: {
   for (const a of params.assignments) byUuid.set(a.employee.id, a.employee);
   for (const p of params.preAllocations) byUuid.set(p.employee.id, p.employee);
 
-  const sorted = [...byUuid.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const sorted = [...byUuid.values()].sort(compareEmployeesBySeniority);
   const idMap = new Map(sorted.map((e, i) => [e.id, i + 1]));
 
   const domainEmployees = sorted.map((e, i) => ({
-    ...prismaEmployeeToDomain(e, i + 1),
+    ...prismaEmployeeToDomain(e),
     id: i + 1,
   }));
 

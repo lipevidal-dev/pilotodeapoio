@@ -1,4 +1,5 @@
 import type { RuleSeverity } from "@prisma/client";
+import { compareEmployeesBySeniority } from "../../domain/employee/seniority.js";
 import type { ShiftRestrictionRow } from "../../domain/schedule/generation-types.js";
 import {
   allocationsFromDb,
@@ -10,7 +11,7 @@ import {
   CLEAR_GENERATED_LABELS,
   REGENERATION_CLEAR_LABELS,
 } from "../../domain/schedule/operational-labels.js";
-import { toDbDate } from "../../domain/rules/date-keys.js";
+import { isoDateKey, toDbDate } from "../../domain/rules/date-keys.js";
 import { prisma } from "../database/prisma-client.js";
 export class ScheduleRepository {
   async findMonth(year: number, month: number) {
@@ -149,11 +150,11 @@ export class ScheduleRepository {
   }
 
   async listActiveEmployees() {
-    return prisma.employee.findMany({
+    const rows = await prisma.employee.findMany({
       where: { active: true },
       include: { role: true },
-      orderBy: { name: "asc" },
     });
+    return [...rows].sort(compareEmployeesBySeniority);
   }
 
   async listRoles(activeOnly = true) {
@@ -163,24 +164,30 @@ export class ScheduleRepository {
     });
   }
 
-  /**
-   * Restrições mensais de turno por funcionário.
-   * Origem: tabela legada `shift_restrictions` (quando presente no banco).
-   */
-  async listShiftRestrictionsForMonth(year: number, month: number): Promise<ShiftRestrictionRow[]> {
-    try {
-      const rows = await prisma.$queryRaw<{ employee_id: string; shift_code: string }[]>`
-        SELECT employee_id, shift_code
-        FROM shift_restrictions
-        WHERE year = ${year} AND month = ${month}
-      `;
-      return rows.map((r) => ({
-        employeeUuid: r.employee_id,
-        shiftCode: String(r.shift_code).toUpperCase(),
-      }));
-    } catch {
-      return [];
-    }
+  /** Restrições permanentes de turno por funcionário (cadastro Funcionários). */
+  async listShiftRestrictionsForMonth(_year: number, _month: number): Promise<ShiftRestrictionRow[]> {
+    const rows = await prisma.employeeShiftRestriction.findMany({
+      include: { shift: { select: { code: true } } },
+    });
+    return rows.map((r) => ({
+      employeeUuid: r.employeeId,
+      shiftCode: r.shift.code.toUpperCase(),
+    }));
+  }
+
+  /** Dias do mês em que funcionários não devem receber voo. */
+  async listNoFlightDatesForMonth(year: number, month: number) {
+    const start = new Date(Date.UTC(year, month - 1, 1));
+    const end = new Date(Date.UTC(year, month, 0));
+    const rows = await prisma.employeeFlightRestriction.findMany({
+      where: { date: { gte: start, lte: end } },
+      select: { employeeId: true, date: true },
+      orderBy: [{ employeeId: "asc" }, { date: "asc" }],
+    });
+    return rows.map((r) => ({
+      employeeUuid: r.employeeId,
+      date: isoDateKey(r.date),
+    }));
   }
 
   /** Histórico operacional do mês anterior (últimos 15 dias) para continuidade. */

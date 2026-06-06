@@ -34,6 +34,52 @@
   min-width: 150px;
 }
 
+.step-gen-hint {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: var(--gol-gray-medium);
+}
+
+.step-section {
+  margin-bottom: 1rem;
+
+  h3 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--gol-gray-dark);
+    margin: 0 0 0.5rem;
+  }
+}
+
+.step-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+
+  label {
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+}
+
+.audit-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #fff8e6;
+  border: 1px solid #f5c542;
+  border-radius: 6px;
+}
+
+.audit-report-card {
+  border-left: 4px solid var(--gol-orange);
+}
+
 .ops-btn-publish {
   min-width: 170px;
   font-weight: 600;
