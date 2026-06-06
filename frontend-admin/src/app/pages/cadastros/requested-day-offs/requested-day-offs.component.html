@@ -3,7 +3,6 @@
 
 <p-card styleClass="gol-card-accent">
   <div class="toolbar-row">
-    <span class="toolbar-hint"><i class="pi pi-calendar-minus"></i> {{ rows().length }} registros</span>
     <div class="toolbar-actions">
       <p-button
         label="Excluir selecionados"
@@ -29,21 +28,21 @@
   >
     <ng-template pTemplate="header">
       <tr>
-        <th style="width: 3rem"><p-tableHeaderCheckbox /></th>
         <th>Funcionário</th>
         <th>Data</th>
         <th>Status</th>
         <th>Observação</th>
+        <th class="col-selection"><p-tableHeaderCheckbox /></th>
         <th></th>
       </tr>
     </ng-template>
     <ng-template pTemplate="body" let-row>
       <tr>
-        <td><p-tableCheckbox [value]="row" /></td>
         <td>{{ row.employee?.name ?? row.employeeId }}</td>
         <td>{{ formatDate(row.date) }}</td>
         <td><p-tag [value]="row.status" [severity]="statusSeverity(row.status)" /></td>
         <td>{{ row.notes ?? '—' }}</td>
+        <td class="col-selection"><p-tableCheckbox [value]="row" /></td>
         <td>
           <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="confirmDelete(row)" />
         </td>

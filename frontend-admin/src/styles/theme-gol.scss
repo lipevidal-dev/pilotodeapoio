@@ -91,6 +91,26 @@ body {
   .p-datatable-tbody > tr:hover {
     background: #fff4ed !important;
   }
+
+  .col-selection {
+    width: 3rem;
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  .col-selection .p-checkbox {
+    justify-content: center;
+  }
+
+  .col-selection .p-checkbox.p-checkbox-checked .p-checkbox-box,
+  .col-selection .p-checkbox.p-highlight .p-checkbox-box {
+    background: var(--gol-orange) !important;
+    border-color: var(--gol-orange) !important;
+  }
+
+  .col-selection .p-checkbox:not(.p-disabled) .p-checkbox-box:hover {
+    border-color: var(--gol-orange) !important;
+  }
 }
 
 // KPI cards
