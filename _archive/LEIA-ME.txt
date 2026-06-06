@@ -1,0 +1,3 @@
+Scripts de experimento e debug (Antigravity/Cursor).
+Não fazem parte do app em produção.
+O sistema oficial usa apenas: app.py, core/, database/, services/, ui/, tests/

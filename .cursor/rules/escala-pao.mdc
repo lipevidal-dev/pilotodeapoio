@@ -1,0 +1,32 @@
+---
+description: Convenções do Sistema Escala PAO/APAO — regras de negócio e organização
+alwaysApply: true
+---
+
+# Sistema Escala PAO/APAO
+
+## Onde editar
+
+- Regras e geração: `core/scheduler.py`, `core/rules.py`
+- Banco: `database/repositories.py`
+- Telas: `ui/views/`
+- Orquestração: `services/schedule_service.py`
+- Testes: `tests/test_rules.py`
+
+Não criar scripts soltos na raiz. Experimentos vão em `_archive/scratch/`.
+
+## Regras invioláveis
+
+- T8,T8,ND — ND no 3º dia após dois T8 consecutivos
+- 12h entre turnos; máx. 6 dias consecutivos
+- PAO: 10 folgas, 20 turnos, 1 folga social
+- Nunca bypass de `can_work` / `has_12h_rest` para “preencher lacuna”
+- ND só via regra T8 ou reparo oficial — nunca ND genérico em buraco
+
+## Fluxo UI
+
+1. Pré-alocações → 2. Gerar Escala → 3. Alocar Folgas e Voos → 4. Visual
+
+## Antes de concluir mudança
+
+Rodar `scripts/testar.bat` ou `pytest tests/test_rules.py`.

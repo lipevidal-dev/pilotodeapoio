@@ -1,0 +1,450 @@
+SISTEMA DE ESCALA PAO/APAO - V5
+
+NOVIDADE PRINCIPAL:
+Agora o banco de dados é persistente.
+
+Isso significa:
+- Você não perde mais o cadastro de funcionários ao baixar uma versão nova.
+- O banco fica salvo em:
+  C:\Users\SEU_USUARIO\Sistema_Escala_PAO_APAO_Dados\escala.db
+
+COMO USAR:
+1. Extraia o ZIP.
+2. Clique duas vezes em INICIAR_SISTEMA.bat.
+3. O sistema abrirá no navegador.
+
+IMPORTANTE:
+Nas versões antigas, o banco ficava dentro da pasta do sistema.
+A partir da V4, ele fica fora da pasta, em um local fixo do Windows.
+
+MENU NOVO:
+Banco de Dados
+- mostra o caminho do banco
+- cria backup manual
+- abre a pasta dos dados
+- lista backups disponíveis
+
+BACKUP:
+O sistema cria backup automático antes de ações críticas:
+- excluir funcionário
+- excluir turno
+- gerar escala automática apagando escala anterior
+- importar funcionários
+- apagar dados
+
+EXPORTAÇÃO:
+Em Funcionários e em Importar/Exportar existe botão para baixar CSV dos funcionários.
+Guarde esse arquivo como segurança extra.
+
+
+NOVIDADE DA V5:
+- Regra fixa de descanso mínimo de 12 horas entre turnos para PAO e APAO.
+- A regra é usada tanto na geração automática quanto na validação.
+- Turnos que atravessam a meia-noite são interpretados corretamente.
+  Exemplo: T8 22:00 às 06:00 termina no dia seguinte.
+- Se o funcionário sair 06:00, o próximo turno só pode começar a partir de 18:00.
+
+
+NOVIDADES DA V6:
+- Turno T9 removido.
+- T8 agora aceita apenas 1 funcionário.
+- Respeito físico às 2 estações de trabalho.
+- Nova tela Escala Visual.
+- Visual semelhante à planilha operacional.
+- Exportação da escala em PNG.
+- Exportação da escala em PDF.
+
+
+NOVIDADES DA V7:
+- Evita monofolga: aponta folga isolada de apenas 1 dia.
+- PAO: folga social automática.
+- APAO: folga agrupada automática.
+- Folga social e folga agrupada aparecem em verde na escala visual.
+- Folga comum/folga escolhida aparece em vermelho.
+- Férias aparece em azul.
+- Voo e simulador aparecem em laranja.
+- Curso online aparece em amarelo.
+- T8 segue limitado a 1 PAO.
+- Validação e motor automático respeitam o limite físico de 2 estações simultâneas.
+
+
+CORREÇÃO DA V8:
+- Corrigido erro TypeError: cannot unpack non-iterable NoneType object.
+- A validação de descanso mínimo de 12h agora sempre retorna uma resposta segura.
+- O motor automático ficou mais tolerante a inconsistências internas.
+
+
+NOVIDADES DA V9:
+- T9 é removido também do banco persistente.
+- T6, T7, T8, T1, T2, T3 e T4 agora ficam com mínimo/máximo 1 funcionário.
+- APAO só é alocado se houver cobertura integral de PAO.
+- Dois APAOs simultâneos são bloqueados.
+- Folga agrupada APAO agora é sempre sábado/domingo ou domingo/segunda.
+- Folga social PAO é sempre sábado/domingo.
+- Escala Visual refeita em layout mais próximo da planilha operacional, com NOME/CARGO/SEN e dias do mês.
+
+
+NOVIDADES DA V10:
+- T8 agora é gerado obrigatoriamente em bloco: T8, T8, ND.
+- O terceiro dia após dois T8 recebe ND automaticamente.
+- A validação acusa T8 isolado e T8 sem ND.
+- A tela Pré-alocações ganhou campo separado para férias.
+- Férias agora podem ser lançadas como primeira quinzena, segunda quinzena ou mês inteiro.
+- Férias foram removidas da pré-alocação diária para evitar lançamento manual repetitivo.
+
+
+CORREÇÃO DA V11:
+- A tela Pré-alocações foi reescrita para mostrar claramente o campo Férias.
+- Férias agora aparecem em campo isolado com:
+  1. PRIMEIRA QUINZENA
+  2. SEGUNDA QUINZENA
+  3. MÊS INTEIRO
+- O motor automático agora chama explicitamente o bloco T8 antes dos demais turnos PAO.
+- O T8 é removido da geração normal e só entra como bloco T8,T8,ND.
+- O terceiro dia recebe ND automático.
+
+
+CORREÇÃO DA V12:
+- Corrigido problema de instalação do pandas/streamlit em outro computador.
+- O instalador agora usa pacotes pré-compilados.
+- O sistema agora abre com python -m streamlit run app.py.
+- Se ainda falhar, use Python 3.13.x 64 bits e apague a pasta .venv antes de abrir novamente.
+
+
+NOVIDADES DA V13:
+- APAO agora recebe folga automática 6x1.
+- Validação acusa APAO com 7 dias consecutivos trabalhados.
+- Folga aparece como FP na escala visual.
+- Simulador aparece com fundo cinza.
+- Voo permanece com fundo laranja.
+- ND automático antigo é removido ao regerar, evitando ND sem critério.
+- Escala visual agora mostra o título: ESCALA DE REVEZAMENTO MÊS XX/YYYY.
+
+
+NOVIDADES DA V14:
+- APAO 6x1 ficou rígido: o sistema bloqueia o 7º dia consecutivo mesmo em fallback.
+- A escala visual agora separa PAO e APAO em tabelas distintas.
+- O gerador passa a favorecer blocos de trabalho de no mínimo 3 dias consecutivos.
+- A validação aponta blocos de trabalho menores que 3 dias.
+
+
+NOVIDADES DA V15:
+- Adicionado campo em Pré-alocações para restringir turno por funcionário no mês.
+  Exemplo: César Rocha não pode ser alocado no T1 em junho.
+- O motor automático respeita as restrições de turno.
+- A validação acusa TURNO BLOQUEADO caso alguém seja alocado manualmente em turno restrito.
+- FOLGA ESCOLHIDA foi renomeada para FOLGA PEDIDA.
+- Na escala visual:
+  FOLGA = F
+  FOLGA PEDIDA = FP
+
+
+CORREÇÃO DA V16:
+- Corrigido bug visual em que FOLGA ESCOLHIDA aparecia escrita na escala.
+- Dados antigos salvos como FOLGA ESCOLHIDA agora são convertidos automaticamente para FOLGA PEDIDA.
+- Mesmo se existir dado legado, a escala visual mostra FP.
+
+
+NOVIDADES DA V17:
+- Frontend atualizado para laranja e branco.
+- Menu agora usa ícones.
+- Novo menu Cobertura Horária:
+  valida PAO contínuo, APAO acompanhado, máximo 2 estações e falhas por faixa horária.
+- Novo menu Testes do Sistema:
+  mostra diagnóstico automático da escala gerada.
+- A geração automática agora exibe diagnóstico logo após gerar.
+- O T8 foi ajustado para tentar cobrir todos os dias com blocos individuais T8,T8,ND.
+- Exportação Excel agora inclui Cobertura_Horaria e Falhas_Cobertura.
+
+
+V18:
+- Escala Visual restaurada para o layout clássico anterior.
+- Mantidas as melhorias internas da V17:
+  cobertura horária, testes automáticos, frontend laranja e regras operacionais.
+
+
+V19:
+- Escala Automática ganhou campo de quantidade total de folgas por funcionário.
+- Escala Automática ganhou campo de quantidade máxima de turnos trabalhados por funcionário.
+- Adicionado resumo mensal por funcionário: turnos trabalhados, folgas, FP, FS/FA, férias, voo, simulador, curso e ND.
+- O gerador passa a respeitar limite mensal máximo de turnos.
+- O sistema tenta completar folgas normais até a meta informada.
+- A tabela de Restrição de Turno agora fica dentro do próprio menu/expander.
+
+
+V20:
+- Removidos menus Testes do Sistema e Importar/Exportar.
+- Exportação ficou concentrada na Escala Visual.
+- Escala Visual ganhou Ajuste Rápido por funcionário/dia:
+  permite aplicar turno, folga, FP, férias, simulador, voo, curso, ND ou limpar o dia.
+- Escala Automática ganhou painel de sugestões para ajudar a resolver pendências.
+- As sugestões analisam cobertura horária, regras quebradas, T8, APAO, monofolga e candidatos com menos turnos.
+
+
+V21:
+- Escala Visual restaurada para o layout clássico anterior.
+- Mantidas as funções novas da V20:
+  ajuste rápido pela escala visual, sugestões automáticas, menu simplificado e exportação na escala visual.
+
+
+V22:
+- Sistema enxugado.
+- Removidos menus Banco de Dados e Limpeza de Dados.
+- Dashboard repaginado com validação, cobertura horária, sugestões e resumo por funcionário.
+- Reforçada a lógica do APAO como estagiário: nunca sozinho, sempre com PAO, e máximo de 2 pessoas simultâneas.
+- Senioridade do APAO tem peso menor no algoritmo para priorizar equilíbrio de exposição.
+
+
+V23:
+- Cadastro de funcionário ganhou edição.
+- Cadastro ganhou restrição de voos por período ou indeterminado.
+- VOO é alocado automaticamente apenas para PAO que pode receber voo.
+- Preferência de voo entre folgas/bloqueios.
+- Cadastro ganhou atalho para não alocar funcionário em determinado turno no mês.
+- Escala visual mostra coluna ANT com o último dia do mês anterior.
+- Sugestões em cartões/expanders.
+- Sugestões incluem baixa ocupação de APAO e regra de estagiário.
+
+
+V25:
+- Corrigida a edição de cadastro: ao selecionar o funcionário, os dados abrem diretamente e vinculados corretamente.
+- Adicionado controle para ocultar/visualizar tabela de registros.
+- Corrigido contraste da competência na barra lateral.
+- Escala visual mostra o último dia do mês anterior como número, não como ANT.
+- Escala visual ganhou seleção por funcionário/dia com botões para facilitar edição.
+- Geração automática passa a considerar o último dia do mês anterior como base para descanso e sequência.
+
+
+V26:
+- Menu Funcionários agora usa abas: Cadastrar, Editar, Excluir e Registros.
+- Corrigido erro StreamlitDuplicateElementKey.
+- Turnos também ganhou tabela recolhível.
+- Menu Escala Manual removido.
+- Escala Visual ganhou grade de edição por quadradinhos: clique no dia/funcionário e aplique a alteração no ajuste rápido.
+- O ajuste rápido agora orienta a recalcular no Dashboard ou rodar a Escala Automática para reorganização.
+
+
+V27:
+- Escala Visual agora tem uma tabela interativa real via data_editor.
+- É possível alterar células diretamente usando T1/T2/T3/T4/T6/T7/T8, F, FP, FS, FA, FER, DM, C, S, V, ND ou vazio.
+- Botões separados para gerar PNG e PDF com o layout visual clássico.
+- Regra nova: no máximo 2 APAOs de folga no mesmo dia.
+- Validação acusa APAO FOLGA EXCESSIVA.
+- Gerador 6x1 do APAO tenta evitar mais de 2 APAOs folgando no mesmo dia.
+
+
+V28:
+- Corrigida regra de folga dos APAOs.
+- Agora no mesmo dia pode haver no máximo 1 APAO de folga.
+- Se um APAO folgar, o outro não folga naquele mesmo dia.
+- Validação acusa APAO FOLGA EXCESSIVA quando houver mais de 1 APAO de folga no mesmo dia.
+- Gerador 6x1 do APAO tenta distribuir as folgas sem sobrepor APAOs.
+
+
+V29:
+- Corrigido erro ValueError: day is out of range for month.
+- A primeira coluna da Escala Visual, que mostra o último dia do mês anterior, agora é reconhecida corretamente.
+- Essa coluna fica visível para contexto operacional, mas não é editável na competência atual.
+
+
+V30:
+- Escala Automática e Escala Visual foram unificadas em um único menu: Escala.
+- O menu Escala possui abas:
+  1. Gerar / Ajustar
+  2. Escala interativa
+- Removida a seção separada inferior de edição.
+- A tabela interativa agora é a principal tabela de edição da escala.
+- Ao salvar alterações, o sistema aplica no banco, recalcula validações e atualiza a tela automaticamente.
+- Botões de PNG/PDF ficam ao lado da escala interativa.
+
+
+V31:
+- Mantido o menu único Escala.
+- A aba Escala interativa agora mostra primeiro a Escala Visual clássica, no mesmo padrão anterior.
+- Abaixo da Escala Visual fica a tabela interativa para edição.
+- Ao salvar alterações na tabela interativa, o banco é atualizado e a tela recarrega, atualizando a Escala Visual.
+- Sugestões para resolver pendências agora ficam dentro de um bloco recolhível.
+
+
+V32:
+- Escala visual compactada para permitir visualizar melhor a escala visual e a interativa na mesma tela.
+- Escala interativa reduzida em altura.
+- Adicionada função de Viabilidade da escala.
+- Ao alterar um turno na escala interativa, o sistema tenta reparar conflito automaticamente:
+  se colocar André no T6 e já havia Gustavo no T6, Gustavo é removido do conflito e o sistema tenta realocá-lo para outro turno viável no mesmo dia.
+- Se não encontrar turno viável, registra pendência para revisão.
+- Sugestões passam a informar que o reparador automático tenta realocar conflitos.
+
+
+V33:
+- Escala interativa ganhou cores compatíveis com a Escala Visual.
+- Adicionado resumo produtivo acima da escala interativa:
+  total produtivo, turnos, simulador/voo e curso.
+- Adicionado resumo por funcionário, com total produtivo, turnos, curso, simulador e voo.
+- A tabela interativa ganhou coluna Resumo para facilitar a leitura do total por funcionário.
+- Nova regra APAO: sempre deve existir pelo menos 1 APAO disponível no dia.
+- Validação acusa SEM APAO DISPONÍVEL quando todos os APAOs estão folgando/bloqueados no mesmo dia.
+
+
+V34:
+- Corrigida regra dos APAOs:
+  não pode haver dois APAOs folgando ou indisponíveis no mesmo dia.
+- A folga agrupada automática do APAO agora evita pares sobrepostos como 6/7 e 7/8.
+- A folga 6x1 automática do APAO também evita deixar todos os APAOs indisponíveis no mesmo dia.
+- Validação agora acusa APAO INDISPONÍVEL EM DUPLICIDADE.
+- A coluna do último dia do mês anterior agora pode ser editada na escala interativa.
+- Ao editar a primeira coluna, o sistema grava corretamente no mês anterior quando aplicável.
+
+
+V35:
+- Corrigida edição do último dia do mês anterior na escala interativa.
+- Agora é possível alterar o dia anterior para FÉRIAS/FER/FERIAS e o sistema grava no mês anterior corretamente.
+- A coluna do mês anterior é reconhecida por posição, não apenas pelo número do dia.
+- Adicionado Cross-check operacional:
+  verifica T6/T7/T8 com PAO obrigatório por dia.
+- Cross-check aparece após gerar escala e dentro da aba Escala interativa.
+
+
+V37:
+- Corrigido erro NameError: border removendo CSS inseguro da escala visual.
+- Pré-alocações foi movido para aba dentro de Escala.
+- Tabela de Pré-alocações do mês agora pode ser visualizada/ocultada.
+- Sugestões para resolver pendências voltaram a ser recolhíveis.
+- Removido botão manual de atualizar sugestões.
+- Sugestões são recalculadas automaticamente após salvar alterações na escala interativa.
+- Dashboard ganhou Atualizar sistema por ZIP.
+- Validação reforçada para continuidade com mês anterior e limite de 6 dias consecutivos.
+
+
+V38:
+- Corrigida duplicidade de Sugestões para resolver pendências.
+- Removida coluna Resumo da tabela interativa.
+- Adicionado gráfico por funcionário abaixo da escala interativa:
+  total produtivo e folgas.
+- Total produtivo considera turnos + curso + simulador + voo.
+- Resumo agora também contabiliza folgas.
+- Adicionado botão Preencher vazios com VOO para células vazias de PAO.
+- Adicionado botão Completar APAO para frente para tentar preencher dias vazios dos APAOs com turnos viáveis.
+- Sugestões agora apontam APAOs com células vazias.
+
+
+V39:
+- A função do botão 'Completar APAO para frente' foi incorporada ao botão GERAR ESCALA AUTOMÁTICA.
+- Após gerar a escala, o sistema tenta complementar automaticamente os dias vazios dos APAOs com turnos viáveis.
+- Gráfico por funcionário agora usa cores de status:
+  Verde: folgas = 10 e turnos produtivos = 20.
+  Amarelo: folgas entre 7 e 9 e turnos produtivos entre 9 e 19.
+  Vermelho: folgas até 5 e turnos produtivos até 7.
+- Total produtivo considera turnos + curso + simulador + voo.
+
+
+V40:
+- Adicionado botão 'Deletar escala do mês' na aba Escala > Gerar/Ajustar.
+- A exclusão exige confirmação por checkbox.
+- Por padrão, apaga apenas os turnos/escala do mês e preserva pré-alocações.
+- Há opção para também apagar as pré-alocações do mês.
+- Removido o botão separado 'Completar APAO para frente'.
+- A função de completar APAO permanece incorporada ao botão GERAR ESCALA AUTOMÁTICA.
+
+
+V41:
+- Corrigido botão Deletar escala do mês.
+- Agora a exclusão tenta as tabelas/colunas reais conhecidas: assignments, schedule, escala.
+- Quando marcado, também apaga pré-alocações em allocations/pre_alocacoes.
+- O último dia do mês anterior é preservado porque a exclusão começa no dia 1 do mês selecionado.
+- A tela limpa o estado da escala interativa antes de recarregar.
+- O sistema mostra quantos registros foram apagados.
+
+
+V42:
+- Corrigido erro NameError no botão Deletar escala do mês.
+- A função delete_month_schedule agora usa execute/query_df, que já existem no app.
+- O último dia do mês anterior continua preservado, pois a exclusão começa no dia 1 do mês selecionado.
+- O botão agora informa se nenhum registro foi encontrado para apagar.
+- Dashboard ganhou painel 'Verificação interna do sistema' para checar funções essenciais.
+- Pacote validado com py_compile e checagem de funções/arquivos essenciais antes de gerar o ZIP.
+
+
+V43:
+- Corrigido botão Deletar escala do mês para apagar também VOO do mês.
+- Mesmo preservando pré-alocações, os lançamentos VOO são removidos junto com a escala.
+- O último dia do mês anterior segue preservado.
+- Funcionário em FÉRIAS/FER passa a ser tratado como fora da escala naquele dia.
+- Sugestões/correções de APAO vazio ignoram funcionário em férias.
+- Completar APAO para frente não tenta preencher funcionário que está em férias.
+- Resumo produtivo passou a contabilizar férias separadamente, sem contar como produtividade ou folga.
+
+
+V44:
+- Removido menu Validação.
+- Removidos cards do topo: Funcionários cadastrados, Turnos ativos e Bloqueios/pré-alocações.
+- Removido Resumo mensal por funcionário da aba Gerar/Ajustar.
+- Removidos botões Gerar PNG/PDF e Baixar PNG/PDF.
+- Adicionado botão único de impressão com ícone de impressora que chama window.print().
+- Removido aviso sobre limitação de cor do editor.
+- Removidos cards de Resumo produtivo e tabela do resumo.
+- Gráficos agora são pizzas individuais por funcionário.
+- Funcionário em férias aparece como FÉRIAS no gráfico, sem contar produtividade.
+
+
+V46:
+- Botão Deletar escala do mês agora apaga também ND, além de turnos e VOO, preservando o último dia do mês anterior.
+- Aba Pré-alocações reorganizada em sub-abas:
+  1. Férias
+  2. Restrições por funcionário
+  3. Pré-alocações diárias
+  4. Excluir / registros
+- Escala interativa reduzida para evitar rolagem excessiva.
+- Editor recebeu painel compacto e estilo mais limpo para preenchimento.
+- Menu Validação removido da interface.
+
+
+V47:
+- Corrigido erro UnboundLocalError: emp.
+- A limpeza visual da V46 havia removido a criação da variável emp, mas ela ainda era usada em tabelas.
+- Agora emp, shifts e alloc são carregados no início do menu Escala sem aparecerem como cards.
+- Mantidas as sub-abas de pré-alocações e editor compacto.
+
+
+V48:
+- Removido de vez o botão/menu Validação, preservando funções internas de validação.
+- Escala visual compactada para não estourar o layout.
+- Escala interativa com altura dinâmica para reduzir/eliminar barra interna.
+- Editor interativo com células menores e painel de instrução mais limpo.
+
+
+V49:
+- Corrigido bug 'Bloco de férias não localizado na base'.
+- Aba Pré-alocações reconstruída com sub-abas funcionais:
+  Férias, Restrições por funcionário, Pré-alocações diárias e Excluir/registros.
+- Reduzido espaçamento entre escala visual, cross-check e escala interativa.
+- Botões Salvar alterações e Preencher vazios com VOO movidos para o topo, ao lado do botão Imprimir escala.
+
+
+V50:
+- Revisão consolidada dos pontos já cobrados.
+- Corrigida altura da escala visual para não cortar APAO.
+- Escala visual usa altura dinâmica conforme quantidade de funcionários.
+- Escala interativa usa altura dinâmica maior para reduzir/eliminar barra interna.
+- Menu Validação removido do menu lateral e da seção visual.
+- Pré-alocações reconstruídas em sub-abas funcionais: Férias, Restrições, Diárias e Excluir/registros.
+- Botões Imprimir, Salvar e Preencher VOO ficam no topo, alinhados e mais próximos.
+- Botão Deletar escala mantém exclusão de ND junto com VOO e turnos.
+- Pacote validado com auditoria de sintaxe, menu, pré-alocações, delete ND, layout visual e editor.
+
+
+V51:
+- Polimento visual sobre a V50, sem mudar o motor de regras.
+- Padronização visual em laranja/branco.
+- Menus, abas, expanders, botões e tabelas com visual mais limpo.
+- Painel de edição da escala interativa com instrução mais clara.
+- Mantidas validações críticas da V50: menu Validação removido, pré-alocações em abas, férias funcional, delete ND/VOO, altura dinâmica da visual e da interativa.
+- Pacote validado por auditoria antes do ZIP.
+
+
+V52:
+- Corrigido layout dos botões do topo, especialmente Imprimir escala.
+- Escala interativa recebeu altura dinâmica maior para reduzir barra interna.
+- Gráficos por funcionário substituídos por gráfico único de barras comparativo.
+- Dashboard ganhou renderização segura de tabelas para evitar erro quando algum dataframe não carregar.
+- Mantida a base funcional da V51/V50 sem alterar motor de regras.
