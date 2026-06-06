@@ -26,6 +26,16 @@
     [paginator]="rows().length > 15"
     [rows]="15"
   >
+    <ng-template pTemplate="colgroup">
+      <colgroup>
+        <col />
+        <col />
+        <col />
+        <col />
+        <col style="width: 3rem" />
+        <col style="width: 3rem" />
+      </colgroup>
+    </ng-template>
     <ng-template pTemplate="header">
       <tr>
         <th>Funcionário</th>
@@ -33,7 +43,7 @@
         <th>Status</th>
         <th>Observação</th>
         <th class="col-selection"><p-tableHeaderCheckbox /></th>
-        <th></th>
+        <th class="col-actions"></th>
       </tr>
     </ng-template>
     <ng-template pTemplate="body" let-row>
@@ -43,7 +53,7 @@
         <td><p-tag [value]="row.status" [severity]="statusSeverity(row.status)" /></td>
         <td>{{ row.notes ?? '—' }}</td>
         <td class="col-selection"><p-tableCheckbox [value]="row" /></td>
-        <td>
+        <td class="col-actions">
           <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="confirmDelete(row)" />
         </td>
       </tr>

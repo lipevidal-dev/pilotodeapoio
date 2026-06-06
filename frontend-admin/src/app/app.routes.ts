@@ -40,13 +40,6 @@ export const routes: Routes = [
           import('./pages/cadastros/flights/flights.component').then((m) => m.FlightsComponent),
       },
       {
-        path: 'cadastros/pre-alocacoes',
-        loadComponent: () =>
-          import('./pages/cadastros/pre-allocations/pre-allocations.component').then(
-            (m) => m.PreAllocationsComponent,
-          ),
-      },
-      {
         path: 'cadastros/simulador',
         loadComponent: () =>
           import('./pages/cadastros/labeled-pre-allocation/labeled-pre-allocation.component').then(
