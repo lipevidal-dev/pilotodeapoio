@@ -1,0 +1,38 @@
+# Ambiente local
+.env
+.env.local
+*.env.local
+
+# Dependências e build
+node_modules/
+dist/
+build/
+.angular/
+coverage/
+
+# Estrutura gerada / temporários
+estrutura.txt
+**/estrutura.txt
+
+# Logs e cache
+logs/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Prisma / dados locais (backend)
+backend/prisma/*.db
+
+# Docker volumes (não versionar dados)
+docker-data/
+
+# Documentação gerada / temporários
+*.tmp
+~$*
+
+# SO / IDE na raiz
+.cursor/

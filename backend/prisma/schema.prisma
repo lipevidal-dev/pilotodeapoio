@@ -1,0 +1,219 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+  PILOT
+}
+
+enum EmployeeType {
+  PAO
+  APAO
+}
+
+enum ScheduleMonthStatus {
+  DRAFT
+  GENERATED
+  VALIDATING
+  PUBLISHED
+  ARCHIVED
+}
+
+enum RuleSeverity {
+  CRITICAL
+  WARNING
+  INFO
+}
+
+enum RequestedDayOffStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AssignmentSource {
+  MANUAL
+  GENERATOR
+  IMPORT
+  REPAIR
+}
+
+enum EmployeeTypeAllowed {
+  PAO
+  APAO
+  BOTH
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         UserRole @default(OPERATOR)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+}
+
+model Role {
+  id           String   @id @default(uuid())
+  name         String
+  code         String   @unique
+  description  String?
+  active       Boolean  @default(true)
+  displayOrder Int      @default(0) @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  employees Employee[]
+}
+
+model Employee {
+  id        String       @id @default(uuid())
+  name      String
+  type      EmployeeType
+  roleId    String?      @map("role_id")
+  birthDate DateTime?    @map("birth_date") @db.Date
+  active    Boolean      @default(true)
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  role                Role?                @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  scheduleAssignments ScheduleAssignment[]
+  preAllocations      PreAllocation[]
+  vacations           Vacation[]
+  requestedDaysOff    RequestedDayOff[]
+  flightAssignments   FlightAssignment[]
+  ruleViolations      RuleViolation[]
+}
+
+model Shift {
+  id                  String              @id @default(uuid())
+  code                String              @unique
+  name                String
+  startTime           String              @map("start_time")
+  endTime             String              @map("end_time")
+  durationHours       Float               @map("duration_hours")
+  employeeTypeAllowed EmployeeTypeAllowed @map("employee_type_allowed")
+  active              Boolean             @default(true)
+  displayOrder        Int                 @default(0) @map("display_order")
+  mandatoryCoverage   Boolean             @default(false) @map("mandatory_coverage")
+  requiresT8PairNd    Boolean             @default(false) @map("requires_t8_pair_nd")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+}
+
+model ScheduleMonth {
+  id        String              @id @default(uuid())
+  year      Int
+  month     Int
+  status    ScheduleMonthStatus @default(DRAFT)
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+
+  assignments    ScheduleAssignment[]
+  preAllocations PreAllocation[]
+  ruleViolations RuleViolation[]
+
+  @@unique([year, month])
+}
+
+model ScheduleAssignment {
+  id              String           @id @default(uuid())
+  scheduleMonthId String           @map("schedule_month_id")
+  employeeId      String           @map("employee_id")
+  date            DateTime         @db.Date
+  shiftCode       String           @map("shift_code")
+  label           String?
+  source          AssignmentSource @default(MANUAL)
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  scheduleMonth ScheduleMonth @relation(fields: [scheduleMonthId], references: [id], onDelete: Cascade)
+  employee      Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([scheduleMonthId, employeeId, date])
+  @@index([scheduleMonthId, date])
+  @@index([employeeId])
+}
+
+model RuleViolation {
+  id              String       @id @default(uuid())
+  scheduleMonthId String       @map("schedule_month_id")
+  severity        RuleSeverity
+  ruleCode        String       @map("rule_code")
+  message         String
+  date            String?
+  employeeId      String?      @map("employee_id")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  scheduleMonth ScheduleMonth @relation(fields: [scheduleMonthId], references: [id], onDelete: Cascade)
+  employee      Employee?     @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@index([scheduleMonthId])
+}
+
+model PreAllocation {
+  id              String   @id @default(uuid())
+  scheduleMonthId String   @map("schedule_month_id")
+  employeeId      String   @map("employee_id")
+  date            DateTime @db.Date
+  label           String
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  scheduleMonth ScheduleMonth @relation(fields: [scheduleMonthId], references: [id], onDelete: Cascade)
+  employee      Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([scheduleMonthId, employeeId, date])
+  @@index([scheduleMonthId])
+}
+
+model Vacation {
+  id         String   @id @default(uuid())
+  employeeId String   @map("employee_id")
+  startDate  DateTime @map("start_date") @db.Date
+  endDate    DateTime @map("end_date") @db.Date
+  notes      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+}
+
+model RequestedDayOff {
+  id         String              @id @default(uuid())
+  employeeId String              @map("employee_id")
+  date       DateTime            @db.Date
+  status     RequestedDayOffStatus @default(PENDING)
+  notes      String?
+  createdAt  DateTime            @default(now()) @map("created_at")
+  updatedAt  DateTime            @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, date])
+}
+
+model FlightAssignment {
+  id          String           @id @default(uuid())
+  employeeId  String           @map("employee_id")
+  date        DateTime         @db.Date
+  description String?
+  source      AssignmentSource @default(MANUAL)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+}

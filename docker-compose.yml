@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: piloto_apoio_db
+    environment:
+      POSTGRES_USER: piloto
+      POSTGRES_PASSWORD: piloto_dev
+      POSTGRES_DB: piloto_apoio_v2
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - piloto_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U piloto -d piloto_apoio_v2"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: piloto_apoio_backend
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${API_HOST_PORT:-3333}:3333"
+    environment:
+      DATABASE_URL: postgresql://piloto:piloto_dev@db:5432/piloto_apoio_v2?schema=public
+      PORT: "3333"
+      HOST: "0.0.0.0"
+      NODE_ENV: development
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: piloto
+      CORS_ORIGINS: http://localhost:4200,http://localhost:4201
+    restart: on-failure:5
+
+  admin:
+    build:
+      context: ./frontend-admin
+      dockerfile: Dockerfile
+    container_name: piloto_apoio_admin
+    depends_on:
+      - backend
+    ports:
+      - "${ADMIN_HOST_PORT:-4201}:80"
+    restart: unless-stopped
+
+volumes:
+  piloto_pg_data:

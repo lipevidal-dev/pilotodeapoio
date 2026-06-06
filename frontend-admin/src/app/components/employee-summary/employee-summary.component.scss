@@ -1,0 +1,81 @@
+.emp-summary {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.sum-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.65rem;
+  height: 1.5rem;
+  padding: 0 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  border-radius: 3px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: var(--gol-gray-dark);
+}
+
+.sum-t6 { border-color: #93c5fd; color: #1e40af; }
+.sum-t7 { border-color: #fdba74; color: #c2410c; }
+.sum-t8 { border-color: #4338ca; color: #312e81; }
+.sum-f { border-color: #fca5a5; color: #991b1b; }
+.sum-ferias { border-color: #7dd3fc; color: #0369a1; }
+.sum-voo { border-color: #f15a22; color: #d94e1a; }
+
+.sum-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.65rem;
+  height: 1.5rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border-radius: 3px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.sum-cell.sum-t6 { border-color: #93c5fd; color: #1e40af; }
+.sum-cell.sum-t7 { border-color: #fdba74; color: #c2410c; }
+.sum-cell.sum-t8 { border-color: #4338ca; color: #312e81; }
+.sum-cell.sum-folgas { border-color: #fca5a5; color: #991b1b; }
+.sum-cell.sum-ferias { border-color: #7dd3fc; color: #0369a1; }
+.sum-cell.sum-voos { border-color: #f15a22; color: #d94e1a; }
+.sum-cell.sum-fani { border-color: #f9a8d4; color: #9d174d; background: #fdf2f8; }
+.sum-cell.sum-vooDisp { border-color: #a5b4fc; color: #4338ca; }
+.sum-cell.sum-maxConsec { border-color: #d1d5db; color: #374151; }
+
+.sum-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.2rem;
+  height: 1.35rem;
+  padding: 0 0.35rem;
+  font-size: 0.58rem;
+  font-weight: 800;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+}
+
+.status-ok {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.status-warn {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
+.status-crit {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}

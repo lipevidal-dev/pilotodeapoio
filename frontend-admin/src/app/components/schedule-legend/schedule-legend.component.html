@@ -1,0 +1,8 @@
+<div class="schedule-legend">
+  <span class="legend-title">Legenda</span>
+  <div class="legend-items">
+    @for (item of items; track item.label) {
+      <span class="legend-chip" [class]="item.cssClass">{{ item.label }}</span>
+    }
+  </div>
+</div>

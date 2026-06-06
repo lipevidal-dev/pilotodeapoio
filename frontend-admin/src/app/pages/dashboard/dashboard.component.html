@@ -1,0 +1,85 @@
+<h1 class="page-title">Dashboard</h1>
+<p class="page-subtitle">Visão operacional do sistema e do mês corrente</p>
+
+<div class="dashboard-grid">
+  <p-card styleClass="gol-card-accent dashboard-card">
+    <ng-template pTemplate="header">
+      <div class="card-header-row">
+        <span><i class="pi pi-wifi"></i> Status da API</span>
+        @if (health(); as h) {
+          <span class="status-pill status-pill--online">Online</span>
+        } @else if (healthError()) {
+          <span class="status-pill status-pill--offline">Offline</span>
+        }
+      </div>
+    </ng-template>
+    @if (healthError()) {
+      <p-message severity="error" [text]="healthError()!" />
+    }
+    @if (health(); as h) {
+      <div class="info-list">
+        <div class="info-row">
+          <span class="info-label">Serviço</span>
+          <span class="info-value">{{ h.service }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Versão backend</span>
+          <span class="info-value info-value--highlight">{{ h.version }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Última verificação</span>
+          <span class="info-value">{{ h.timestamp | date: 'short' }}</span>
+        </div>
+      </div>
+    } @else if (!healthError() && loadingHealth()) {
+      <span class="loading-text">Verificando conexão...</span>
+    }
+    <div class="card-actions">
+      <p-button
+        label="Testar conexão"
+        icon="pi pi-refresh"
+        styleClass="btn-gol-primary"
+        [loading]="loadingHealth()"
+        (onClick)="testConnection()"
+      />
+    </div>
+  </p-card>
+
+  <p-card styleClass="dashboard-card">
+    <ng-template pTemplate="header">
+      <div class="card-header-row">
+        <span><i class="pi pi-calendar"></i> Mês atual</span>
+        <span class="month-chip">{{ currentMonth }}/{{ currentYear }}</span>
+      </div>
+    </ng-template>
+    @if (monthSummary(); as m) {
+      <div class="kpi-grid kpi-grid--compact">
+        <div class="kpi-card kpi-card--orange">
+          <span class="kpi-label">Status</span>
+          <span class="kpi-value kpi-value--sm">
+            <p-tag
+              [value]="m.scheduleMonth.status"
+              [severity]="statusSeverity(m.scheduleMonth.status)"
+            />
+          </span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Alocações</span>
+          <span class="kpi-value">{{ m.assignments.length }}</span>
+        </div>
+        <div class="kpi-card" [class.kpi-card--warning]="(m.ruleViolations?.length ?? 0) > 0">
+          <span class="kpi-label">Violações</span>
+          <span class="kpi-value">{{ m.ruleViolations?.length ?? 0 }}</span>
+        </div>
+      </div>
+      <div class="info-row mt-2">
+        <span class="info-label">ID do mês</span>
+        <code class="info-code">{{ m.scheduleMonth.id }}</code>
+      </div>
+    } @else if (monthError()) {
+      <p-message severity="info" [text]="monthError()!" />
+    } @else {
+      <span class="loading-text">Carregando resumo...</span>
+    }
+  </p-card>
+</div>

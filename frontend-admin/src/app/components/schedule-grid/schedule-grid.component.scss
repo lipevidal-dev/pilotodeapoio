@@ -1,0 +1,170 @@
+.summary-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.35rem;
+}
+
+.schedule-grid-wrap {
+  overflow-x: auto;
+  overflow-y: visible;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: var(--gol-white);
+  max-width: 100%;
+}
+
+.schedule-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+  font-size: 0.75rem;
+
+  th,
+  td {
+    padding: 0.2rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #eef0f2;
+    border-right: 1px solid #eef0f2;
+  }
+
+  thead th {
+    background: var(--gol-gray-dark);
+    color: var(--gol-white);
+    font-weight: 600;
+    text-align: center;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+  }
+
+  tr:nth-child(2) th {
+    top: 2.35rem;
+    background: #3d3d3d;
+    font-size: 0.6rem;
+    padding: 0.2rem;
+    font-weight: 600;
+  }
+
+  .col-summary-head {
+    text-align: center;
+    font-size: 0.7rem;
+  }
+
+  .sticky-col {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--gol-white);
+    min-width: 7.5rem;
+    max-width: 9rem;
+    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.04);
+  }
+
+  thead .sticky-col {
+    z-index: 4;
+    background: var(--gol-gray-dark);
+  }
+
+  .sticky-sum {
+    background: #f9fafb;
+    text-align: center;
+    padding: 0.2rem !important;
+    min-width: 1.85rem;
+  }
+
+  .col-employee {
+    text-align: left;
+    padding-left: 0.65rem !important;
+    font-weight: 600;
+  }
+
+  .col-day {
+    text-align: center;
+    padding: 0.15rem !important;
+    min-width: 2.35rem;
+  }
+
+  .col-weekend {
+    background: rgba(241, 90, 34, 0.04);
+  }
+
+  thead .col-weekend {
+    background: #4a3728;
+  }
+
+  .day-num {
+    display: block;
+    font-size: 0.72rem;
+    line-height: 1.2;
+  }
+
+  .day-wd {
+    display: block;
+    font-size: 0.58rem;
+    font-weight: 500;
+    opacity: 0.85;
+  }
+
+  .group-row .group-label {
+    background: linear-gradient(90deg, #fff4ed 0%, #fff 100%);
+    color: var(--gol-orange-dark);
+    font-weight: 700;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.45rem 0.75rem !important;
+    border-top: 2px solid var(--gol-orange);
+    z-index: 1;
+  }
+
+  .data-row:hover td {
+    background: #fffaf5;
+  }
+
+  .data-row:hover .sticky-col {
+    background: #fffaf5;
+  }
+
+  .emp-name {
+    font-size: 0.78rem;
+    color: var(--gol-gray-dark);
+  }
+
+  .sum-h {
+    min-width: 1.85rem;
+    font-size: 0.58rem !important;
+  }
+}
+
+.schedule-grid-wrap.compact-layout {
+  .schedule-grid {
+    font-size: 0.68rem;
+
+    .sticky-col {
+      min-width: 6.25rem;
+      max-width: 7.25rem;
+    }
+
+    .col-employee {
+      padding-left: 0.45rem !important;
+    }
+
+    .emp-name {
+      font-size: 0.72rem;
+    }
+
+    .col-day {
+      min-width: 1.85rem;
+      padding: 0.1rem !important;
+    }
+
+    .day-num {
+      font-size: 0.65rem;
+    }
+
+    .day-wd {
+      font-size: 0.52rem;
+    }
+  }
+}

@@ -1,0 +1,65 @@
+.toolbar-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.toolbar-hint {
+  font-size: 0.875rem;
+  color: var(--gol-gray-medium);
+
+  i {
+    color: var(--gol-orange);
+    margin-right: 0.35rem;
+  }
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--gol-gray-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.filter-bar {
+  margin-bottom: 1rem;
+}
+
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.actions-header,
+.actions-cell {
+  min-width: 7.5rem;
+  text-align: right;
+}
+
+.actions-cell {
+  display: flex;
+  gap: 0.15rem;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+:host ::ng-deep .shifts-table .p-datatable-table {
+  min-width: 52rem;
+}
+
+:host ::ng-deep .shifts-table code {
+  font-weight: 700;
+}

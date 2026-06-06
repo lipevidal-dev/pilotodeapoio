@@ -1,0 +1,433 @@
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Subscription } from 'rxjs';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
+import { CardModule } from 'primeng/card';
+import { ButtonModule } from 'primeng/button';
+import { InputNumberModule } from 'primeng/inputnumber';
+import { TableModule } from 'primeng/table';
+import { TagModule } from 'primeng/tag';
+import { MessageModule } from 'primeng/message';
+import { DividerModule } from 'primeng/divider';
+import { SelectModule } from 'primeng/select';
+import { CheckboxModule } from 'primeng/checkbox';
+import { MessageService } from 'primeng/api';
+import { ScheduleService } from '../../services/schedule.service';
+import { ScheduleRefreshService } from '../../services/schedule-refresh.service';
+import { ScheduleWorkspaceService } from '../../services/schedule-workspace.service';
+import { ScheduleExportService } from '../../services/schedule-export.service';
+import { ScheduleGridComponent } from '../../components/schedule-grid/schedule-grid.component';
+import { ScheduleLegendComponent } from '../../components/schedule-legend/schedule-legend.component';
+import { buildScheduleGrid } from '../../utils/schedule-cell.mapper';
+import { applyGridFilters } from '../../utils/schedule-grid.filter';
+import {
+  computeGridAuditTotals,
+  enrichGridAudit,
+  type AuditViolation,
+  type GridAuditTotals,
+} from '../../utils/operational-audit.util';
+import type {
+  EmployeeType,
+  PublishBlockedResponse,
+  ScheduleMonthResponse,
+  ScheduleViolation,
+  ViolationSeverity,
+} from '../../models/api.models';
+import type { ScheduleGridData } from '../../models/schedule-grid.models';
+
+@Component({
+  selector: 'app-schedule',
+  standalone: true,
+  imports: [
+    CommonModule,
+    FormsModule,
+    CardModule,
+    ButtonModule,
+    InputNumberModule,
+    TableModule,
+    TagModule,
+    MessageModule,
+    DividerModule,
+    SelectModule,
+    CheckboxModule,
+    ScheduleGridComponent,
+    ScheduleLegendComponent,
+  ],
+  templateUrl: './schedule.component.html',
+  styleUrl: './schedule.component.scss',
+})
+export class ScheduleComponent implements OnInit, OnDestroy {
+  private readonly scheduleService = inject(ScheduleService);
+  private readonly scheduleRefresh = inject(ScheduleRefreshService);
+  private readonly workspace = inject(ScheduleWorkspaceService);
+  private readonly exportService = inject(ScheduleExportService);
+  private readonly messages = inject(MessageService);
+  private refreshSub?: Subscription;
+
+  readonly yearSig = signal(this.workspace.year());
+  readonly monthSig = signal(this.workspace.month());
+
+  readonly generating = signal(false);
+  readonly generatingFlights = signal(false);
+  readonly publishing = signal(false);
+  readonly clearing = signal(false);
+  readonly loadingView = signal(false);
+  readonly publishBlocked = signal<PublishBlockedResponse | null>(null);
+  readonly publishResult = signal<{ status: string } | null>(null);
+  readonly scheduleData = signal<ScheduleMonthResponse | null>(null);
+
+  readonly filterType = signal<'ALL' | EmployeeType>('ALL');
+  readonly filterEmployeeId = signal<string | null>(null);
+  readonly singleEmployeeOnly = signal(false);
+
+  readonly generation = computed(() => this.workspace.lastGeneration());
+  readonly scheduleMonthId = computed(() => this.workspace.scheduleMonthId());
+
+  /** Violações da última geração ou persistidas no mês (após recarregar). */
+  readonly violationList = computed((): ScheduleViolation[] => {
+    const gen = this.generation();
+    if (gen?.violations?.length) {
+      return gen.violations;
+    }
+    const data = this.scheduleData();
+    if (!data?.ruleViolations?.length) {
+      return [];
+    }
+    const nameById = new Map(data.employees.map((e) => [e.id, e.name]));
+    return data.ruleViolations.map((v) => ({
+      severity: v.severity,
+      ruleCode: v.ruleCode,
+      message: v.message,
+      date: v.date ?? '',
+      employee: v.employeeId ? (nameById.get(v.employeeId) ?? v.employeeId) : '—',
+      detail: v.message,
+      employeeId: v.employeeId,
+    }));
+  });
+
+  readonly criticalViolations = computed(() =>
+    this.filterViolations(this.violationList(), 'CRITICAL'),
+  );
+  readonly warningViolations = computed(() =>
+    this.filterViolations(this.violationList(), 'WARNING'),
+  );
+  readonly infoViolations = computed(() =>
+    this.filterViolations(this.violationList(), 'INFO'),
+  );
+
+  readonly rawGrid = computed(() => {
+    const data = this.scheduleData();
+    if (!data) return null;
+    return buildScheduleGrid({
+      year: this.yearSig(),
+      month: this.monthSig(),
+      employees: data.employees,
+      assignments: data.assignments,
+      preAllocations: data.preAllocations,
+      operationalCadastros: data.operationalCadastros,
+    });
+  });
+
+  readonly auditViolations = computed((): AuditViolation[] =>
+    this.violationList().map((v) => ({
+      severity: v.severity,
+      ruleCode: v.ruleCode,
+      employee: v.employee,
+      employeeId: v.employeeId,
+    })),
+  );
+
+  readonly displayGrid = computed((): ScheduleGridData | null => {
+    const grid = this.rawGrid();
+    if (!grid) return null;
+    const filtered = applyGridFilters(grid, {
+      type: this.filterType(),
+      employeeId: this.filterEmployeeId(),
+      singleEmployeeOnly: this.singleEmployeeOnly(),
+    });
+    return enrichGridAudit(filtered, this.auditViolations());
+  });
+
+  readonly gridAuditTotals = computed((): GridAuditTotals | null => {
+    const grid = this.displayGrid();
+    const data = this.scheduleData();
+    if (!grid) return null;
+    return computeGridAuditTotals(grid, data?.assignments ?? []);
+  });
+
+  readonly employeeOptions = computed(() => {
+    const data = this.scheduleData();
+    if (!data) return [];
+    const list = [...data.employees].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    return [{ label: 'Todos', value: null as string | null }, ...list.map((e) => ({ label: e.name, value: e.id }))];
+  });
+
+  readonly typeOptions = [
+    { label: 'Todos', value: 'ALL' as const },
+    { label: 'PAO', value: 'PAO' as const },
+    { label: 'APAO', value: 'APAO' as const },
+  ];
+
+  hasVisibleRows(grid: ScheduleGridData): boolean {
+    return grid.groups.some((g) => g.rows.length > 0);
+  }
+
+  periodLabel(): string {
+    const months = [
+      'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+      'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
+    ];
+    return `${months[this.monthSig() - 1]}/${this.yearSig()}`;
+  }
+
+  ngOnInit(): void {
+    this.yearSig.set(this.workspace.year());
+    this.monthSig.set(this.workspace.month());
+    this.loadScheduleView();
+    this.refreshSub = this.scheduleRefresh.changes$.subscribe(() => this.loadScheduleView());
+  }
+
+  ngOnDestroy(): void {
+    this.refreshSub?.unsubscribe();
+  }
+
+  generate(): void {
+    this.generating.set(true);
+    this.publishBlocked.set(null);
+    this.publishResult.set(null);
+    this.scheduleService.generateSchedule(this.yearSig(), this.monthSig()).subscribe({
+      next: (result) => {
+        this.workspace.setGeneration(result, this.yearSig(), this.monthSig());
+        this.generating.set(false);
+        this.messages.add({
+          severity: result.summary.criticalCount ? 'warn' : 'success',
+          summary: 'Escala gerada',
+          detail: `Status ${result.status} — ${result.assignmentsCreated} alocações.`,
+        });
+        this.loadScheduleView();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.generating.set(false);
+        const msg = err.error?.error ?? err.message ?? 'Erro ao gerar escala';
+        this.messages.add({ severity: 'error', summary: 'Geração', detail: msg });
+      },
+    });
+  }
+
+  generateFlights(): void {
+    const id = this.scheduleMonthId() ?? this.scheduleData()?.scheduleMonth.id;
+    if (!id) return;
+    this.generatingFlights.set(true);
+    this.scheduleService.generateFlights(id).subscribe({
+      next: (result) => {
+        this.generatingFlights.set(false);
+        this.messages.add({
+          severity: 'success',
+          summary: 'Voos gerados',
+          detail: `${result.flightsCreated} dia(s) PAO marcados como VOO.`,
+        });
+        this.loadScheduleView();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.generatingFlights.set(false);
+        const msg = err.error?.error ?? err.message ?? 'Erro ao gerar voos';
+        this.messages.add({ severity: 'error', summary: 'Gerar Voos', detail: msg });
+      },
+    });
+  }
+
+  clearGeneration(): void {
+    const id = this.scheduleMonthId() ?? this.scheduleData()?.scheduleMonth.id;
+    if (!id) return;
+    if (
+      !window.confirm(
+        'Limpar todos os dados gerados automaticamente? Cadastros operacionais (férias, FP, voos, pré-alocações) serão mantidos.',
+      )
+    ) {
+      return;
+    }
+    this.clearing.set(true);
+    this.scheduleService.clearGeneratedData(id).subscribe({
+      next: () => {
+        this.clearing.set(false);
+        this.workspace.clear();
+        this.messages.add({
+          severity: 'success',
+          summary: 'Geração limpa',
+          detail: 'A escala voltou ao estado pré-geração.',
+        });
+        this.loadScheduleView();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.clearing.set(false);
+        const msg = err.error?.error ?? err.message ?? 'Erro ao limpar geração';
+        this.messages.add({ severity: 'error', summary: 'Limpar geração', detail: msg });
+      },
+    });
+  }
+
+  publish(): void {
+    const id = this.scheduleMonthId();
+    if (!id) return;
+    this.publishing.set(true);
+    this.publishBlocked.set(null);
+    this.publishResult.set(null);
+    this.scheduleService.publishSchedule(id).subscribe({
+      next: (res) => {
+        this.publishing.set(false);
+        this.publishResult.set({ status: res.status });
+        this.messages.add({
+          severity: 'success',
+          summary: 'Publicado',
+          detail: `Escala ${res.month}/${res.year} publicada.`,
+        });
+        this.loadScheduleView();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.publishing.set(false);
+        if (err.status === 409 && err.error?.code === 'PUBLISH_BLOCKED_CRITICAL_VIOLATIONS') {
+          this.publishBlocked.set(err.error as PublishBlockedResponse);
+          this.messages.add({
+            severity: 'error',
+            summary: 'Publicação bloqueada',
+            detail: err.error.message,
+          });
+          return;
+        }
+        const msg = err.error?.message ?? err.error?.error ?? 'Erro ao publicar';
+        this.messages.add({ severity: 'error', summary: 'Publicação', detail: msg });
+      },
+    });
+  }
+
+  loadScheduleView(): void {
+    this.loadingView.set(true);
+    this.scheduleService.getSchedule(this.yearSig(), this.monthSig()).subscribe({
+      next: (data) => {
+        this.loadingView.set(false);
+        this.scheduleData.set(data);
+        const grid = buildScheduleGrid({
+          year: this.yearSig(),
+          month: this.monthSig(),
+          employees: data.employees,
+          assignments: data.assignments,
+          preAllocations: data.preAllocations,
+          operationalCadastros: data.operationalCadastros,
+        });
+        this.exportService.prepareExportPayload(grid);
+      },
+      error: () => {
+        this.loadingView.set(false);
+        this.scheduleData.set(null);
+      },
+    });
+  }
+
+  prevMonth(): void {
+    const m = this.monthSig();
+    const y = this.yearSig();
+    if (m === 1) {
+      this.monthSig.set(12);
+      this.yearSig.set(y - 1);
+    } else {
+      this.monthSig.set(m - 1);
+    }
+    this.loadScheduleView();
+  }
+
+  nextMonth(): void {
+    const m = this.monthSig();
+    const y = this.yearSig();
+    if (m === 12) {
+      this.monthSig.set(1);
+      this.yearSig.set(y + 1);
+    } else {
+      this.monthSig.set(m + 1);
+    }
+    this.loadScheduleView();
+  }
+
+  goToday(): void {
+    const now = new Date();
+    this.yearSig.set(now.getFullYear());
+    this.monthSig.set(now.getMonth() + 1);
+    this.loadScheduleView();
+  }
+
+  onFiltersChange(): void {
+    if (this.singleEmployeeOnly() && !this.filterEmployeeId()) {
+      const first = this.scheduleData()?.employees[0];
+      if (first) this.filterEmployeeId.set(first.id);
+    }
+  }
+
+  summaryValue(key: string): string | number | boolean {
+    const gen = this.generation();
+    if (!gen) return '—';
+    const s = gen.summary;
+    const list = this.violationList();
+    if (key === 'totalAssignments') {
+      return gen.assignmentsCreated ?? s.totalAssignments ?? '—';
+    }
+    if (key === 'totalViolations') {
+      return list.length || s.totalViolations || gen.violations.length;
+    }
+    if (key === 'criticalCount') {
+      return this.criticalViolations().length || s.criticalCount || 0;
+    }
+    if (key === 'warningCount') {
+      return this.warningViolations().length || s.warningCount || 0;
+    }
+    if (key === 'infoCount') {
+      return this.infoViolations().length || s.infoCount || 0;
+    }
+    const v = s[key];
+    if (v === undefined || v === null) return '—';
+    if (Array.isArray(v)) return v.join('; ');
+    return v as string | number | boolean;
+  }
+
+  formatDate(value: string | null | undefined): string {
+    if (!value) return '—';
+    try {
+      return new Date(value).toLocaleDateString('pt-BR');
+    } catch {
+      return value;
+    }
+  }
+
+  violationEmployee(v: ScheduleViolation): string {
+    return v.employee || v.employeeId || '—';
+  }
+
+  statusTagSeverity(status: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+    switch (status?.toUpperCase()) {
+      case 'PUBLISHED':
+        return 'success';
+      case 'GENERATED':
+        return 'info';
+      default:
+        return 'secondary';
+    }
+  }
+
+  private normalizeViolationSeverity(severity: string | undefined): ViolationSeverity {
+    const u = (severity ?? '').toUpperCase();
+    if (u === 'CRITICAL' || u === 'CRÍTICA' || u === 'ALTA') {
+      return 'CRITICAL';
+    }
+    if (u === 'WARNING' || u === 'MÉDIA' || u === 'MEDIA') {
+      return 'WARNING';
+    }
+    return 'INFO';
+  }
+
+  private filterViolations(
+    list: ScheduleViolation[] | undefined,
+    severity: ViolationSeverity,
+  ): ScheduleViolation[] {
+    if (!list) return [];
+    return list.filter((v) => this.normalizeViolationSeverity(v.severity) === severity);
+  }
+}

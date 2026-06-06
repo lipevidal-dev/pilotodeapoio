@@ -1,0 +1,7 @@
+<div
+  class="schedule-cell"
+  [class]="cssClass()"
+  [attr.title]="cell().title || (cell().display || '—')"
+>
+  {{ cell().display || '·' }}
+</div>

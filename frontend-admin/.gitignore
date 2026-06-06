@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.angular/
+.env
+.env.local
+coverage/
+
+# Estrutura gerada / temporários
+estrutura.txt
+**/estrutura.txt
+
+# Logs
+logs/
+*.log

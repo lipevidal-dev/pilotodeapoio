@@ -1,0 +1,78 @@
+@if (auditTotals(); as totals) {
+  <app-operational-totals-panel [totals]="totals" />
+}
+
+<div class="summary-toolbar">
+  <p-button
+    [label]="summaryToggleLabel()"
+    [icon]="summaryVisible() ? 'pi pi-eye-slash' : 'pi pi-eye'"
+    severity="secondary"
+    size="small"
+    [text]="true"
+    (onClick)="toggleSummary()"
+  />
+</div>
+
+<div class="schedule-grid-wrap" [class.compact-layout]="!summaryVisible()">
+  <table class="schedule-grid">
+    <thead>
+      <tr>
+        <th class="col-employee sticky-col" [attr.rowspan]="summaryVisible() ? 2 : 1">Funcionário</th>
+        @for (day of grid().dayNumbers; track day; let i = $index) {
+          <th class="col-day" [class.col-weekend]="isWeekend(i)" [attr.rowspan]="summaryVisible() ? 2 : 1">
+            <span class="day-num">{{ day < 10 ? '0' + day : day }}</span>
+            <span class="day-wd">{{ grid().weekdayLabels[i] }}</span>
+          </th>
+        }
+        @if (summaryVisible()) {
+          <th class="col-summary-head" [attr.colspan]="summaryColCount">Resumo operacional</th>
+        }
+      </tr>
+      @if (summaryVisible()) {
+        <tr>
+          <th class="sum-h" title="T6+T7+T8 — passe o mouse para detalhar">Turnos</th>
+          <th class="sum-h">Dias Trab.</th>
+          <th class="sum-h">Folgas</th>
+          <th class="sum-h">FS/FA</th>
+          <th class="sum-h">FP</th>
+          <th class="sum-h">FANI</th>
+          <th class="sum-h">Férias</th>
+          <th class="sum-h" title="Dias disponíveis para voo">VOO DISP.</th>
+          <th class="sum-h" title="Máx. dias consecutivos trabalhados">MAX CONSEC.</th>
+          <th class="sum-h">STATUS</th>
+        </tr>
+      }
+    </thead>
+    <tbody>
+      @for (group of grid().groups; track group.type) {
+        <tr class="group-row">
+          <td
+            class="group-label sticky-col"
+            [attr.colspan]="grid().dayNumbers.length + 1 + (summaryVisible() ? summaryColCount : 0)"
+          >
+            {{ group.label }}
+          </td>
+        </tr>
+        @for (row of group.rows; track row.employeeId) {
+          <tr class="data-row">
+            <td class="col-employee sticky-col">
+              <span class="emp-name">{{ row.name }}</span>
+            </td>
+            @for (cell of row.cells; track $index; let i = $index) {
+              <td class="col-day" [class.col-weekend]="isWeekend(i)">
+                <app-schedule-cell [cell]="cell" />
+              </td>
+            }
+            @if (summaryVisible()) {
+              @for (field of summaryFields; track field) {
+                <td class="col-sum sticky-sum">
+                  <app-employee-summary [summary]="row.summary" [field]="field" />
+                </td>
+              }
+            }
+          </tr>
+        }
+      }
+    </tbody>
+  </table>
+</div>

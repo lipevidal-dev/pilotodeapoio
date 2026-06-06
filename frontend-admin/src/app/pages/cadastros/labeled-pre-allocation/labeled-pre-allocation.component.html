@@ -1,0 +1,146 @@
+<h1 class="page-title">{{ config.title }}</h1>
+<p class="page-subtitle">{{ config.subtitle }}</p>
+
+<p-card styleClass="gol-card-accent">
+  <div class="filter-bar">
+    <div class="field-group">
+      <label class="field-label">Ano filtro</label>
+      <p-inputNumber [(ngModel)]="filterYear" [useGrouping]="false" [min]="2020" [max]="2100" />
+    </div>
+    <div class="field-group">
+      <label class="field-label">Mês filtro</label>
+      <p-inputNumber [(ngModel)]="filterMonth" [useGrouping]="false" [min]="1" [max]="12" />
+    </div>
+    <p-button label="Filtrar" icon="pi pi-filter" severity="secondary" (onClick)="load()" />
+  </div>
+
+  <div class="toolbar-row">
+    <span class="toolbar-hint"><i [class]="config.icon"></i> {{ rows().length }} registros em {{ filterMonth }}/{{ filterYear }}</span>
+    <div class="toolbar-actions">
+      <p-button
+        label="Excluir selecionados"
+        icon="pi pi-trash"
+        severity="danger"
+        [outlined]="true"
+        [disabled]="selectedRows.length === 0"
+        [loading]="deletingBatch()"
+        (onClick)="confirmDeleteSelected()"
+      />
+      <p-button [label]="'Novo ' + config.title.toLowerCase()" icon="pi pi-plus" styleClass="btn-gol-primary" (onClick)="openNew()" />
+    </div>
+  </div>
+
+  <p-table
+    [value]="rows()"
+    [(selection)]="selectedRows"
+    dataKey="id"
+    [loading]="loading()"
+    styleClass="gol-table p-datatable-sm"
+    [paginator]="rows().length > 15"
+    [rows]="15"
+  >
+    <ng-template pTemplate="header">
+      <tr>
+        <th style="width: 3rem"><p-tableHeaderCheckbox /></th>
+        <th>Funcionário</th>
+        <th>Data</th>
+        <th>Tipo</th>
+        <th>Mês ref.</th>
+        <th>Observação</th>
+        <th></th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-row>
+      <tr>
+        <td><p-tableCheckbox [value]="row" /></td>
+        <td>{{ row.employee?.name ?? row.employeeId }}</td>
+        <td>{{ formatDate(row.date) }}</td>
+        <td><p-tag [value]="config.label" [severity]="config.tagSeverity" /></td>
+        <td>{{ row.scheduleMonth?.month }}/{{ row.scheduleMonth?.year }}</td>
+        <td>{{ row.notes ?? '—' }}</td>
+        <td>
+          <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="confirmDelete(row)" />
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr><td colspan="7">Nenhum registro neste período.</td></tr>
+    </ng-template>
+  </p-table>
+</p-card>
+
+<p-dialog
+  [header]="'Novo ' + config.title.toLowerCase()"
+  [visible]="dialogVisible()"
+  (visibleChange)="dialogVisible.set($event)"
+  [modal]="true"
+  styleClass="operational-dialog-wide"
+  [style]="{ width: 'min(920px, 96vw)' }"
+>
+  <div class="form-stack operational-dialog-body">
+    <div class="filter-bar dialog-period-bar">
+      <div class="field-group">
+        <label class="field-label">Ano</label>
+        <p-inputNumber
+          [(ngModel)]="formYear"
+          (ngModelChange)="onFormPeriodChange()"
+          [useGrouping]="false"
+          [min]="2020"
+          [max]="2100"
+        />
+      </div>
+      <div class="field-group">
+        <label class="field-label">Mês</label>
+        <p-inputNumber
+          [(ngModel)]="formMonth"
+          (ngModelChange)="onFormPeriodChange()"
+          [useGrouping]="false"
+          [min]="1"
+          [max]="12"
+        />
+      </div>
+    </div>
+    <div>
+      <label class="field-label">Funcionário</label>
+      <p-select
+        [options]="employees()"
+        [(ngModel)]="formEmployeeId"
+        (ngModelChange)="onEmployeeChange()"
+        (onChange)="onEmployeeChange()"
+        optionLabel="name"
+        optionValue="id"
+        placeholder="Selecione"
+        class="w-full"
+      />
+    </div>
+    @if (occupancyLoading()) {
+      <p class="occupancy-loading"><i class="pi pi-spin pi-spinner"></i> Carregando ocupação do funcionário…</p>
+    }
+    <app-operational-calendar
+      [(selectedDates)]="formDates"
+      mode="multiple"
+      [enableDragSelect]="true"
+      [minDate]="formMinDate()"
+      [maxDate]="formMaxDate()"
+      [dayOccupancy]="dayOccupancy()"
+      [syncYear]="formYear"
+      [syncMonth]="formMonth"
+      hint="Datas ocupadas mostram a sigla e ficam bloqueadas"
+    />
+    <div>
+      <label class="field-label">Observação</label>
+      <textarea pTextarea class="w-full" rows="2" [(ngModel)]="formNotes"></textarea>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button label="Cancelar" severity="secondary" (onClick)="dialogVisible.set(false)" />
+    <p-button
+      label="Salvar"
+      icon="pi pi-check"
+      styleClass="btn-gol-primary"
+      [loading]="saving()"
+      [disabled]="formDates.length === 0"
+      (onClick)="save()"
+    />
+  </ng-template>
+</p-dialog>

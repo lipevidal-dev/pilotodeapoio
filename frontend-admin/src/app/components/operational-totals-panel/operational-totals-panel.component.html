@@ -1,0 +1,21 @@
+<div class="audit-totals">
+  <div class="audit-totals__grid">
+    <div class="audit-kpi"><span class="audit-kpi__label">PAOs</span><span class="audit-kpi__value">{{ totals().totalPaos }}</span></div>
+    <div class="audit-kpi"><span class="audit-kpi__label">APAOs</span><span class="audit-kpi__value">{{ totals().totalApaos }}</span></div>
+    <div class="audit-kpi"><span class="audit-kpi__label">Turnos</span><span class="audit-kpi__value">{{ totals().totalTurnos }}</span></div>
+    <div class="audit-kpi"><span class="audit-kpi__label">Dias Trab.</span><span class="audit-kpi__value">{{ totals().totalDiasTrabalhados }}</span></div>
+    <div class="audit-kpi"><span class="audit-kpi__label">Folgas</span><span class="audit-kpi__value">{{ totals().totalFolgas }}</span></div>
+    <div class="audit-kpi"><span class="audit-kpi__label">FS</span><span class="audit-kpi__value">{{ totals().totalFolgaSocial }}</span></div>
+    <div class="audit-kpi"><span class="audit-kpi__label">FP</span><span class="audit-kpi__value">{{ totals().totalFp }}</span></div>
+    <div class="audit-kpi"><span class="audit-kpi__label">FANI</span><span class="audit-kpi__value">{{ totals().totalFani }}</span></div>
+    <div class="audit-kpi"><span class="audit-kpi__label">Férias</span><span class="audit-kpi__value">{{ totals().totalFerias }}</span></div>
+    <div class="audit-kpi"><span class="audit-kpi__label">VOO</span><span class="audit-kpi__value">{{ totals().totalVoos }}</span></div>
+    <div class="audit-kpi"><span class="audit-kpi__label">VOO DISP.</span><span class="audit-kpi__value">{{ totals().totalVooDisp }}</span></div>
+  </div>
+  <div class="audit-coverage">
+    <span class="audit-coverage__title">Cobertura PAO</span>
+    <span class="audit-coverage__chip" [class.audit-coverage__chip--ok]="totals().coverageT6 >= 100">T6 {{ totals().coverageT6 }}%</span>
+    <span class="audit-coverage__chip" [class.audit-coverage__chip--ok]="totals().coverageT7 >= 100">T7 {{ totals().coverageT7 }}%</span>
+    <span class="audit-coverage__chip" [class.audit-coverage__chip--ok]="totals().coverageT8 >= 100">T8 {{ totals().coverageT8 }}%</span>
+  </div>
+</div>

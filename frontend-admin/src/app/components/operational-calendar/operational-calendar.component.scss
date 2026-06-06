@@ -1,0 +1,103 @@
+@import '../../pages/cadastros/cadastros-calendar.scss';
+
+.op-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.op-cal-panel {
+  background: var(--gol-white);
+  border: 1px solid #e5e7eb;
+  user-select: none;
+}
+
+.op-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.op-cal-nav {
+  border: none;
+  background: transparent;
+  color: var(--gol-orange);
+  cursor: pointer;
+
+  &:hover {
+    background: #fff4ed;
+  }
+}
+
+.op-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.op-cal-wd {
+  text-align: center;
+}
+
+.op-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.op-cal-day {
+  border: 1px solid rgba(45, 45, 45, 0.08);
+  color: var(--gol-gray-dark);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+
+  &.out-month {
+    opacity: 0.35;
+  }
+}
+
+.op-cal-footer {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #e5e7eb;
+}
+
+.op-cal-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  background: #fff8f4;
+  border: 1px solid rgba(241, 90, 34, 0.15);
+  border-radius: 6px;
+}
+
+.op-cal-count {
+  font-weight: 600;
+  color: var(--gol-orange-dark);
+}
+
+.op-cal-list {
+  color: var(--gol-gray-medium, #6b7280);
+}
+
+.op-cal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.date-chip {
+  display: inline-block;
+  font-weight: 600;
+  border-radius: 4px;
+  background: var(--gol-orange);
+  color: var(--gol-white);
+}
+
+.op-cal-drag-hint {
+  margin: 0;
+  color: var(--gol-gray-medium, #6b7280);
+
+  i {
+    color: var(--gol-orange);
+    margin-right: 0.2rem;
+  }
+}

@@ -1,0 +1,79 @@
+<div class="op-cal">
+  <label class="field-label">{{ hint() }}</label>
+
+  <div class="op-cal-panel">
+    <div class="op-cal-header">
+      <button type="button" class="op-cal-nav" (click)="prevMonth()" aria-label="Mês anterior">
+        <i class="pi pi-chevron-left"></i>
+      </button>
+      <span class="op-cal-title">{{ title() }}</span>
+      <button type="button" class="op-cal-nav" (click)="nextMonth()" aria-label="Próximo mês">
+        <i class="pi pi-chevron-right"></i>
+      </button>
+    </div>
+
+    <div class="op-cal-weekdays">
+      @for (wd of weekdays; track wd) {
+        <span class="op-cal-wd">{{ wd }}</span>
+      }
+    </div>
+
+    <div class="op-cal-grid" (selectstart)="$event.preventDefault()">
+      @for (cell of gridCells(); track cell.date.getTime()) {
+        <button
+          type="button"
+          class="op-cal-day"
+          [class.out-month]="!cell.inMonth"
+          [class.weekend]="isWeekendDay(cell.date)"
+          [class.today]="isTodayDay(cell.date)"
+          [class.selected]="isSelected(cell.date)"
+          [class.preview]="isPreview(cell.date) && !isSelected(cell.date)"
+          [class.disabled]="isDisabled(cell.date)"
+          [class.occupied]="isOccupiedBlocked(cell.date)"
+          [disabled]="isDisabled(cell.date)"
+          [title]="cellTitle(cell.date)"
+          (mousedown)="onDayMouseDown(cell.date, $event)"
+          (mouseenter)="onDayMouseEnter(cell.date)"
+        >
+          @if (isOccupiedBlocked(cell.date)) {
+            <span class="op-cal-day-num">{{ cell.date.getDate() }}</span>
+            <span class="op-cal-badge" [class]="badgeKindClass(cell.date)">{{ occupancyBadge(cell.date) }}</span>
+          } @else {
+            {{ cell.date.getDate() }}
+          }
+        </button>
+      }
+    </div>
+
+    <div class="op-cal-footer">
+      <p-button label="Hoje" size="small" [text]="true" (onClick)="goToday()" />
+      <p-button label="Limpar" size="small" [text]="true" (onClick)="clearSelection()" />
+    </div>
+  </div>
+
+  @if (selectedDates().length > 0) {
+    <div class="op-cal-summary">
+      <span class="op-cal-count">{{ selectionCount() }} data(s) selecionada(s)</span>
+      <span class="op-cal-list">{{ datesSummary() }}</span>
+      <div class="op-cal-chips">
+        @for (d of selectedDates(); track d.getTime()) {
+          <span class="date-chip">{{ d | date: 'dd/MM' }}</span>
+        }
+      </div>
+      <p-button
+        label="Limpar seleção"
+        icon="pi pi-times"
+        severity="secondary"
+        [text]="true"
+        size="small"
+        (onClick)="clearSelection()"
+      />
+    </div>
+  }
+
+  @if (enableDragSelect()) {
+    <p class="op-cal-drag-hint">
+      <i class="pi pi-arrows-h"></i> Arraste de uma data até outra para selecionar o intervalo
+    </p>
+  }
+</div>

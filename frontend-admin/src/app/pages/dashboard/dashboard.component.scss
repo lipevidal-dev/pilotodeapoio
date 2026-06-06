@@ -1,0 +1,87 @@
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.25rem;
+}
+
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.25rem 0;
+  font-weight: 600;
+  color: var(--gol-gray-dark);
+
+  i {
+    color: var(--gol-orange);
+    margin-right: 0.4rem;
+  }
+}
+
+.month-chip {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  background: var(--gol-gray-light);
+  color: var(--gol-gray-medium);
+}
+
+.info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  font-size: 0.875rem;
+}
+
+.info-label {
+  color: var(--gol-gray-medium);
+}
+
+.info-value {
+  font-weight: 600;
+  color: var(--gol-gray-dark);
+}
+
+.info-value--highlight {
+  color: var(--gol-orange-dark);
+  font-size: 1rem;
+}
+
+.info-code {
+  font-size: 0.72rem;
+  word-break: break-all;
+  color: var(--gol-gray-medium);
+}
+
+.card-actions {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e8eaed;
+}
+
+.loading-text {
+  color: var(--gol-gray-medium);
+  font-size: 0.875rem;
+}
+
+.kpi-grid--compact {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.kpi-value--sm {
+  font-size: 1rem !important;
+}
+
+@media (max-width: 600px) {
+  .kpi-grid--compact {
+    grid-template-columns: 1fr;
+  }
+}

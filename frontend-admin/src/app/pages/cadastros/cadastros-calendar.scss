@@ -1,0 +1,189 @@
+/* Estilo compartilhado — calendários operacionais compactos */
+
+.op-cal {
+  max-width: 400px;
+}
+
+.op-cal-panel {
+  padding: 0.5rem 0.55rem;
+  border-radius: 8px;
+  border-color: #e8eaed;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.op-cal-header {
+  margin-bottom: 0.35rem;
+}
+
+.op-cal-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--gol-gray-dark);
+}
+
+.op-cal-nav {
+  padding: 0.15rem 0.35rem;
+  font-size: 0.7rem;
+  border-radius: 4px;
+}
+
+.op-cal-weekdays {
+  gap: 1px;
+  margin-bottom: 2px;
+}
+
+.op-cal-wd {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #9ca3af;
+  padding: 0.1rem 0;
+}
+
+.op-cal-grid {
+  gap: 2px;
+}
+
+.op-cal-day {
+  min-height: 42px;
+  height: 42px;
+  aspect-ratio: unset;
+  border-radius: 5px;
+  border-color: #eceff3;
+  background: #fafbfc;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 1px 2px;
+
+  &:hover:not(:disabled):not(.occupied) {
+    background: #fff7f2;
+    border-color: #fed7aa;
+  }
+
+  &.weekend:not(.selected):not(.preview):not(.occupied) {
+    background: #f4f5f7;
+  }
+
+  &.today:not(.selected):not(.occupied) {
+    box-shadow: inset 0 0 0 1px rgba(241, 90, 34, 0.45);
+  }
+
+  &.preview {
+    background: #ffedd8;
+    color: var(--gol-orange-dark);
+  }
+
+  &.selected {
+    background: var(--gol-orange);
+    color: #fff;
+    border-color: var(--gol-orange);
+  }
+
+  &.occupied:not(.selected):not(.preview) {
+    background: #f8fafc;
+    cursor: not-allowed;
+  }
+
+  &.disabled {
+    opacity: 0.4;
+  }
+}
+
+.op-cal-day-num {
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: #9ca3af;
+  line-height: 1;
+}
+
+.op-cal-badge {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.op-cal-day.occupied .op-cal-badge.kind-ferias {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.op-cal-day.occupied .op-cal-badge.kind-fp {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.op-cal-day.occupied .op-cal-badge.kind-fani {
+  background: #fce7f3;
+  color: #9d174d;
+}
+
+.op-cal-day.occupied .op-cal-badge.kind-voo {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.op-cal-day.occupied .op-cal-badge.kind-simulador {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.op-cal-day.occupied .op-cal-badge.kind-curso {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.op-cal-day.occupied .op-cal-badge.kind-cma {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.op-cal-day.occupied .op-cal-badge.kind-outro {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.op-cal-day.occupied .op-cal-badge.kind-shift,
+.op-cal-day.occupied .op-cal-badge.kind-nd,
+.op-cal-day.occupied .op-cal-badge.kind-folga,
+.op-cal-day.occupied .op-cal-badge.kind-fs,
+.op-cal-day.occupied .op-cal-badge.kind-fa,
+.op-cal-day.occupied .op-cal-badge.kind-other {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.op-cal-footer {
+  margin-top: 0.35rem;
+  padding-top: 0.25rem;
+}
+
+.op-cal-summary {
+  padding: 0.5rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.op-cal-count,
+.op-cal-list {
+  font-size: 0.72rem;
+}
+
+.op-cal-drag-hint {
+  font-size: 0.65rem;
+}
+
+.date-chip {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.35rem;
+}

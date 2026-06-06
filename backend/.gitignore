@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+*.db
+
+# Estrutura gerada / temporários
+estrutura.txt
+**/estrutura.txt
+
+# Logs e cobertura
+logs/
+*.log
+coverage/

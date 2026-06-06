@@ -1,0 +1,117 @@
+<h1 class="page-title">Cargos</h1>
+<p class="page-subtitle">Cadastro de cargos para funcionários e motor de escala</p>
+
+<p-card styleClass="gol-card-accent">
+  <div class="filter-bar">
+    <p-selectButton
+      [options]="filterOptions"
+      [(ngModel)]="filter"
+      optionLabel="label"
+      optionValue="value"
+    />
+  </div>
+
+  <div class="toolbar-row">
+    <span class="toolbar-hint">
+      <i class="pi pi-briefcase"></i>
+      {{ filteredRoles().length }} de {{ roles().length }} cargos
+    </span>
+    <p-button
+      label="Novo Cargo"
+      icon="pi pi-plus"
+      styleClass="btn-gol-primary"
+      (onClick)="openNew()"
+    />
+  </div>
+
+  <p-table
+    [value]="filteredRoles()"
+    [loading]="loading()"
+    [paginator]="filteredRoles().length > 10"
+    [rows]="10"
+    [scrollable]="filteredRoles().length > 0"
+    scrollDirection="horizontal"
+    styleClass="gol-table p-datatable-sm roles-table"
+  >
+    <ng-template pTemplate="header">
+      <tr>
+        <th>Código</th>
+        <th>Nome</th>
+        <th>Descrição</th>
+        <th>Status</th>
+        <th>Ordem</th>
+        <th class="actions-header">Ações</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-role>
+      <tr>
+        <td><code>{{ role.code }}</code></td>
+        <td>{{ role.name }}</td>
+        <td>{{ role.description || '—' }}</td>
+        <td>
+          <p-tag
+            [value]="role.active ? 'Ativo' : 'Inativo'"
+            [severity]="role.active ? 'success' : 'secondary'"
+          />
+        </td>
+        <td>{{ role.displayOrder }}</td>
+        <td class="actions-cell">
+          <p-button icon="pi pi-pencil" severity="secondary" [text]="true" (onClick)="openEdit(role)" />
+          <p-button
+            [icon]="role.active ? 'pi pi-ban' : 'pi pi-check-circle'"
+            [severity]="role.active ? 'warn' : 'success'"
+            [text]="true"
+            (onClick)="toggleActive(role)"
+          />
+          <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="confirmDelete(role)" />
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="6">Nenhum cargo encontrado para o filtro selecionado.</td>
+      </tr>
+    </ng-template>
+  </p-table>
+</p-card>
+
+<p-dialog
+  [header]="dialogTitle()"
+  [visible]="dialogVisible()"
+  (visibleChange)="dialogVisible.set($event)"
+  [modal]="true"
+  [style]="{ width: '480px' }"
+>
+  <div class="form-stack">
+    <div>
+      <label class="field-label">Código</label>
+      <input pInputText class="w-full" [(ngModel)]="formCode" [disabled]="dialogMode === 'edit'" />
+    </div>
+    <div>
+      <label class="field-label">Nome</label>
+      <input pInputText class="w-full" [(ngModel)]="formName" />
+    </div>
+    <div>
+      <label class="field-label">Descrição</label>
+      <textarea pTextarea class="w-full" rows="3" [(ngModel)]="formDescription"></textarea>
+    </div>
+    <div>
+      <label class="field-label">Ordem de exibição</label>
+      <p-inputNumber [(ngModel)]="formDisplayOrder" [min]="0" class="w-full" />
+    </div>
+    <div class="flex align-items-center gap-2">
+      <p-checkbox [(ngModel)]="formActive" [binary]="true" inputId="formRoleActive" />
+      <label for="formRoleActive">Ativo</label>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button label="Cancelar" severity="secondary" (onClick)="dialogVisible.set(false)" />
+    <p-button
+      label="Salvar"
+      icon="pi pi-check"
+      styleClass="btn-gol-primary"
+      [loading]="saving()"
+      (onClick)="save()"
+    />
+  </ng-template>
+</p-dialog>

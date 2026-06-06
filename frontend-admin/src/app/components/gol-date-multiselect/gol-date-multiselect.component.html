@@ -1,0 +1,35 @@
+<div class="gol-date-ms">
+  <label class="field-label">{{ hint() }}</label>
+  <p-datepicker
+    [ngModel]="selectedDates()"
+    (ngModelChange)="selectedDates.set($event ?? [])"
+    selectionMode="multiple"
+    [inline]="inline()"
+    [showIcon]="!inline()"
+    dateFormat="dd/mm/yy"
+    appendTo="body"
+    styleClass="gol-datepicker"
+    inputStyleClass="gol-datepicker-input"
+    [showButtonBar]="true"
+    placeholder="Clique para selecionar"
+  />
+  @if (selectedDates().length > 0) {
+    <div class="date-ms-summary">
+      <span class="date-ms-count">{{ selectedDates().length }} data(s) selecionada(s)</span>
+      <span class="date-ms-list">{{ datesSummary() }}</span>
+      <div class="date-ms-chips">
+        @for (d of selectedDates(); track d.getTime()) {
+          <span class="date-chip">{{ d | date: 'dd/MM' }}</span>
+        }
+      </div>
+      <p-button
+        label="Limpar seleção"
+        icon="pi pi-times"
+        severity="secondary"
+        [text]="true"
+        size="small"
+        (onClick)="clearSelection()"
+      />
+    </div>
+  }
+</div>

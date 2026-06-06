@@ -1,0 +1,170 @@
+<h1 class="page-title">Férias</h1>
+
+<p class="page-subtitle">Períodos de férias bloqueiam alocação no motor de geração</p>
+
+
+
+<p-card styleClass="gol-card-accent">
+
+  <div class="toolbar-row">
+    <span class="toolbar-hint"><i class="pi pi-sun"></i> {{ rows().length }} registros</span>
+    <div class="toolbar-actions">
+      <p-button
+        label="Excluir selecionados"
+        icon="pi pi-trash"
+        severity="danger"
+        [outlined]="true"
+        [disabled]="selectedRows.length === 0"
+        [loading]="deletingBatch()"
+        (onClick)="confirmDeleteSelected()"
+      />
+      <p-button label="Nova férias" icon="pi pi-plus" styleClass="btn-gol-primary" (onClick)="openNew()" />
+    </div>
+  </div>
+
+  <p-table
+    [value]="rows()"
+    [(selection)]="selectedRows"
+    dataKey="id"
+    [loading]="loading()"
+    styleClass="gol-table p-datatable-sm"
+    [paginator]="rows().length > 15"
+    [rows]="15"
+  >
+    <ng-template pTemplate="header">
+      <tr>
+        <th style="width: 3rem"><p-tableHeaderCheckbox /></th>
+        <th>Funcionário</th>
+
+        <th>Início</th>
+
+        <th>Fim</th>
+
+        <th>Observação</th>
+
+        <th></th>
+
+      </tr>
+
+    </ng-template>
+
+    <ng-template pTemplate="body" let-row>
+      <tr>
+        <td><p-tableCheckbox [value]="row" /></td>
+        <td>{{ row.employee?.name ?? row.employeeId }}</td>
+
+        <td>{{ formatDate(row.startDate) }}</td>
+
+        <td>{{ formatDate(row.endDate) }}</td>
+
+        <td>{{ row.notes ?? '—' }}</td>
+
+        <td>
+
+          <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="confirmDelete(row)" />
+
+        </td>
+
+      </tr>
+
+    </ng-template>
+
+    <ng-template pTemplate="emptymessage">
+
+      <tr><td colspan="6">Nenhuma férias cadastrada.</td></tr>
+
+    </ng-template>
+
+  </p-table>
+
+</p-card>
+
+
+
+<p-dialog
+  header="Nova férias"
+  [visible]="dialogVisible()"
+  (visibleChange)="dialogVisible.set($event)"
+  [modal]="true"
+  styleClass="operational-dialog-wide"
+  [style]="{ width: 'min(920px, 96vw)' }"
+>
+  <div class="form-stack operational-dialog-body">
+
+    <div>
+
+      <label class="field-label">Funcionário</label>
+
+      <p-select
+        [options]="employees()"
+        [(ngModel)]="formEmployeeId"
+        (ngModelChange)="onEmployeeChange()"
+        (onChange)="onEmployeeChange()"
+        optionLabel="name"
+        optionValue="id"
+        placeholder="Selecione"
+        class="w-full"
+      />
+
+    </div>
+
+    @if (occupancyLoading()) {
+      <p class="occupancy-loading"><i class="pi pi-spin pi-spinner"></i> Carregando ocupação do funcionário…</p>
+    }
+
+    <app-operational-calendar
+      [(selectedDates)]="formDates"
+      mode="multiple"
+      [enableDragSelect]="true"
+      [dayOccupancy]="dayOccupancy()"
+      [syncYear]="calendarYear()"
+      [syncMonth]="calendarMonth()"
+      (viewPeriodChange)="onCalendarPeriodChange($event)"
+      hint="Datas ocupadas mostram a sigla e ficam bloqueadas"
+    />
+
+    @if (formDates.length > 0) {
+
+      <p class="period-preview">
+
+        <i class="pi pi-calendar"></i> Períodos: {{ periodsPreview() }}
+
+      </p>
+
+    }
+
+    <div>
+
+      <label class="field-label">Observação</label>
+
+      <textarea pTextarea class="w-full" rows="2" [(ngModel)]="formNotes"></textarea>
+
+    </div>
+
+  </div>
+
+  <ng-template pTemplate="footer">
+
+    <p-button label="Cancelar" severity="secondary" (onClick)="dialogVisible.set(false)" />
+
+    <p-button
+
+      label="Salvar"
+
+      icon="pi pi-check"
+
+      styleClass="btn-gol-primary"
+
+      [loading]="saving()"
+
+      [disabled]="!canSave()"
+
+      (onClick)="save()"
+
+    />
+
+  </ng-template>
+
+</p-dialog>
+
+
