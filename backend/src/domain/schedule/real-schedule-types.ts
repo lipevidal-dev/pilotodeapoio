@@ -2,6 +2,8 @@ import type { OperationalBalanceReport } from "./operational-balancer.js";
 import type { IndividualTarget } from "./demand-planning-types.js";
 import type { OperationalDemand } from "./demand-planning-types.js";
 import type { ValidationIssue } from "./types.js";
+import type { RealStructuralMetrics } from "./real-schedule-audit.js";
+import type { VacationFortnightBelowPattern } from "./real-schedule-vacation-materialize.js";
 
 export const MOTOR_VERSION_ID = "REAL_V1";
 export const ENGINE_PATH = "GenerateScheduleUseCase -> RealScheduleEngine";
@@ -33,15 +35,41 @@ export interface RequiredShiftsResult {
   note?: string;
 }
 
+export interface EmployeeDiagnostic {
+  employeeUuid: string;
+  name: string;
+  targetWorkdays: number;
+  actualWorkdays: number;
+  neededTurns: number;
+  noFlightFullMonth: boolean;
+  restrictedShiftIds: string[];
+  restrictedShiftCodes: string[];
+  t6Count: number;
+  t7Count: number;
+  t8Count: number;
+  flightCount: number;
+  usefulOperationalDays: number;
+  requiredT6T7: number;
+  failedAllocationReasons: string[];
+}
+
 export interface RealMotorReport {
   motorVersion: typeof MOTOR_VERSION_ID;
   demand: OperationalDemand;
   requiredShifts: RequiredShiftsResult[];
   targets: IndividualTarget[];
+  employeeDiagnostics?: EmployeeDiagnostic[];
   t8BlocksPlaced: number;
+  t8CoverageGaps: number;
+  t8IsolatedCount: number;
+  t8PairsWithoutNdCount: number;
+  vacationFortnightProcessed: number;
+  vacationBelowPattern: VacationFortnightBelowPattern[];
   t6T7BlocksPlaced: number;
   t6T7ShiftsPlaced: number;
+  residualBlockCoverage: number;
   residualUnitCoverage: number;
+  structuralMetrics?: RealStructuralMetrics;
   flightsForDeficit: number;
   balanceReport?: OperationalBalanceReport;
   stepNotes: string[];

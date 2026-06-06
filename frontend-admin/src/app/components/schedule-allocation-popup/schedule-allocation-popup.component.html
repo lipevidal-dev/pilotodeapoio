@@ -1,0 +1,19 @@
+<p-dialog
+  [visible]="visible()"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: '22rem' }"
+  [header]="title()"
+  (onHide)="onHide()"
+>
+  <p class="popup-lead">O que deseja alocar?</p>
+  <div class="option-grid">
+    @for (opt of options; track opt.key) {
+      <button type="button" class="alloc-btn" [class.alloc-btn--danger]="opt.key === 'CLEAR'" (click)="pick(opt.key)">
+        <i [class]="opt.icon"></i>
+        <span>{{ opt.label }}</span>
+      </button>
+    }
+  </div>
+</p-dialog>

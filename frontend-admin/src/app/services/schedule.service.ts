@@ -6,6 +6,8 @@ import type {
   GenerateByStepsResponse,
   GenerateFlightsResponse,
   GenerateScheduleResponse,
+  ManualAllocationType,
+  ManualEditResponse,
   PublishScheduleResponse,
   ScheduleMonthResponse,
   StepGenerationOptions,
@@ -56,6 +58,38 @@ export class ScheduleService {
   getPublishedSchedule(year: number, month: number): Observable<ScheduleMonthResponse> {
     return this.http.get<ScheduleMonthResponse>(
       `${this.base}/schedules/published/${year}/${month}`,
+    );
+  }
+
+  manualEditRange(
+    scheduleMonthId: string,
+    payload: {
+      employeeId: string;
+      startDate: string;
+      endDate: string;
+      type: ManualAllocationType;
+      mode: 'set' | 'clear';
+      force?: boolean;
+    },
+  ): Observable<ManualEditResponse> {
+    return this.http.patch<ManualEditResponse>(
+      `${this.base}/schedules/${scheduleMonthId}/manual-range`,
+      payload,
+    );
+  }
+
+  manualMove(
+    scheduleMonthId: string,
+    payload: {
+      source: { employeeId: string; date: string };
+      target: { employeeId: string; date: string };
+      mode: 'move';
+      force?: boolean;
+    },
+  ): Observable<ManualEditResponse> {
+    return this.http.patch<ManualEditResponse>(
+      `${this.base}/schedules/${scheduleMonthId}/manual-move`,
+      payload,
     );
   }
 

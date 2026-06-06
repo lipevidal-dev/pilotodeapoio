@@ -2,23 +2,30 @@ import { validateSchedule } from "../rules/engine.js";
 import { runFinalCoverageGate } from "../rules/coverage-gate.js";
 import { IDEAL_PAO_REST_COUNT } from "../rules/constants.js";
 import { calculateOperationalDemand } from "./demand-planning-demand.js";
-import { buildBlockPlans } from "./demand-planning-blocks.js";
-import { materializeBlockPlans } from "./demand-planning-materialize.js";
 import { buildGenerationInsights } from "./generation-insights.js";
 import { buildExtendedSummary } from "./generation-summary.js";
 import { GenerationWorkspace } from "./generation-workspace.js";
 import { operationalBalancer } from "./operational-balancer.js";
-import { ScheduleRepairEngine } from "./schedule-repair-engine.js";
-import { trimShiftsForMinimumFolgas } from "./real-schedule-folgas.js";
+import {
+  preferIdealFolgaCount,
+  repairIsolatedRestDays,
+  trimShiftsForMinimumFolgas,
+} from "./real-schedule-folgas.js";
 import { allocateFlightsForWorkdayDeficit } from "./real-schedule-flights.js";
 import { coverResidualT6T7Only } from "./real-schedule-residual.js";
 import { computeRealMotorTargets } from "./real-schedule-targets.js";
+import { materializeT6T7BlocksStrict } from "./real-schedule-blocks.js";
+import { buildStructuralMetrics } from "./real-schedule-audit.js";
+import { buildEmployeeDiagnostics } from "./real-schedule-employee-diagnostics.js";
+import { allocateT8BlocksStrict, closeT8CoverageGaps } from "./real-schedule-t8.js";
+import { materializeVacationFortnightPatterns } from "./real-schedule-vacation-materialize.js";
 import {
   ENGINE_PATH,
   MOTOR_REAL_V1_LABEL,
   MOTOR_VERSION_ID,
   type RealMotorReport,
 } from "./real-schedule-types.js";
+import { ScheduleRepairEngine } from "./schedule-repair-engine.js";
 import type { GenerationInput, GenerationResult } from "./generation-types.js";
 
 export class RealScheduleEngine {
@@ -26,38 +33,58 @@ export class RealScheduleEngine {
 
   execute(ws: GenerationWorkspace): RealMotorReport {
     const stepNotes: string[] = [];
+    const warnings: RealMotorReport["warnings"] = [];
     const demand = calculateOperationalDemand(ws.days.length);
     stepNotes.push(`[1] Dados carregados: ${ws.paoEmps.length} PAO(s), demanda ${demand.totalDemand}.`);
 
     ws.planFolgaSocial();
 
-    ws.planT8CoverageRotating();
-    const t8BlocksPlaced = ws.coverT8BlocksOnly();
-    ws.ensureNdForT8Pairs();
-    stepNotes.push(`[2] T8 primeiro: ${t8BlocksPlaced} bloco(s) T8/T8/ND.`);
-
-    const { required, targets, warnings: targetWarnings } = computeRealMotorTargets(ws);
-    stepNotes.push(`[3-4] ${required.length} PAO(s) classificados; turnos T6/T7 necessários calculados.`);
-
-    const blockPlans = buildBlockPlans(targets);
-    const materialized = materializeBlockPlans(ws, blockPlans);
+    const t8 = allocateT8BlocksStrict(ws);
     stepNotes.push(
-      `[5] Blocos T6/T7: ${materialized.placedBlocks} bloco(s), ${materialized.placedShifts} turno(s).`,
+      `[2] T8 estrito: ${t8.blocksPlaced} bloco(s) T8/T8/ND; gaps=${t8.coverageGaps}; isolados=${t8.audit.isolatedT8Count}; pares sem ND=${t8.audit.pairsWithoutNdCount}.`,
     );
-    if (materialized.failedBlocks > 0) {
-      stepNotes.push(`[5] ${materialized.failedBlocks} bloco(s) não materializados (meta flexível −2/−3).`);
+
+    const vacation = materializeVacationFortnightPatterns(ws);
+    warnings.push(...vacation.warnings);
+    stepNotes.push(
+      `[3] Férias quinzenais: ${vacation.processedCount} PAO(s); ${vacation.workDaysPlaced} trabalho(s); ${vacation.folgasPlaced} folga(s) no padrão 3/2.`,
+    );
+    if (vacation.belowPattern.length > 0) {
+      stepNotes.push(
+        `[3] ${vacation.belowPattern.length} PAO(s) abaixo do padrão 3/2 esperado.`,
+      );
     }
 
-    const residual = coverResidualT6T7Only(ws);
+    const { required, targets, warnings: targetWarnings } = computeRealMotorTargets(ws);
+    warnings.push(...targetWarnings);
+    stepNotes.push(`[4] ${required.length} PAO(s) classificados; turnos T6/T7 necessários calculados.`);
+
+    const blocks = materializeT6T7BlocksStrict(ws, targets);
     stepNotes.push(
-      `[5b] Cobertura residual T6/T7: ${residual.unitCoverageApplied} unitária(s); gaps ${residual.gapsBefore}→${residual.gapsAfter}.`,
+      `[5] Blocos T6/T7: ${blocks.placedBlocks} bloco(s), ${blocks.placedShifts} turno(s); unitários parciais=${blocks.unitPlacements}.`,
+    );
+    if (blocks.failedBlocks > 0) {
+      stepNotes.push(`[5] ${blocks.failedBlocks} bloco(s) não materializados (meta flexível −2/−3).`);
+    }
+
+    let residual = coverResidualT6T7Only(ws);
+    let totalResidualBlocks = residual.blockCoverageApplied;
+    let totalResidualUnits = residual.unitCoverageApplied;
+    stepNotes.push(
+      `[5b] Cobertura residual: blocos=${residual.blockCoverageApplied}; unitária=${residual.unitCoverageApplied}; gaps ${residual.gapsBefore}→${residual.gapsAfter}.`,
     );
 
     const trimmed = trimShiftsForMinimumFolgas(ws);
     if (trimmed > 0) {
-      coverResidualT6T7Only(ws);
-      stepNotes.push(`[5c] ${trimmed} turno(s) removido(s) para abrir espaço às folgas mínimas.`);
+      const residual2 = coverResidualT6T7Only(ws);
+      totalResidualBlocks += residual2.blockCoverageApplied;
+      totalResidualUnits += residual2.unitCoverageApplied;
+      stepNotes.push(
+        `[5c] ${trimmed} turno(s) removido(s) para folgas; residual blocos=${residual2.blockCoverageApplied}, unitária=${residual2.unitCoverageApplied}.`,
+      );
     }
+
+    closeStructurePreservingGaps(ws, this.repairEngine, stepNotes, "[5d]", false);
 
     ws.allocatePaoRestDaysAfterCoverage();
     const mono = ws.correctMonoFolgasPedidas();
@@ -72,42 +99,50 @@ export class RealScheduleEngine {
     const flightsCreated = allocateFlightsForWorkdayDeficit(ws);
     stepNotes.push(`[7] Voos déficit: ${flightsCreated.length} alocado(s) para completar dias trabalhados.`);
 
-    this.repairEngine.repair(ws, []);
-    ws.coverT6T7Only();
-    ws.coverT8BlocksOnly();
+    ws.ensureMinShiftsForFullMonthNoFlight(["T6", "T7", "T8"]);
+    stepNotes.push("[7b] PAO mês sem voo: turnos T6/T7 priorizados para meta de 20 dias.");
+
     ws.assignApaoWithPao();
-    ws.coverT6T7Only();
     ws.allocateApaoRestDays();
     ws.completeApaoAgenda();
     ws.enforceApaoSixByOne();
-    this.repairEngine.repair(ws, []);
-    ws.coverT6T7Only();
 
-    ws.repairIsolatedT8();
-    ws.cleanupOrphanNd();
-    ws.ensureNdForT8Pairs();
-    ws.coverT8BlocksOnly();
-    ws.ensureMinShiftsForFullMonthNoFlight();
-    ws.completePaoAgenda();
-    trimShiftsForMinimumFolgas(ws);
-    this.repairEngine.repair(ws, []);
-    ws.coverT6T7Only();
+    closeStructurePreservingGaps(ws, this.repairEngine, stepNotes, "[8]", true);
+    ws.correctMonoFolgasPedidas();
+
     ws.fillUnclassifiedPaoDays();
     ws.ensureExactTenFolgasPerPao();
     ws.finalizePaoFolgaCounts();
+    preferIdealFolgaCount(ws);
+    repairIsolatedRestDays(ws);
+    ws.correctMonoFolgasPedidas();
+
+    const assignments = ws.toAssignments();
+    const structuralMetrics = buildStructuralMetrics(
+      ws,
+      assignments,
+      vacation.belowPattern,
+    );
 
     return {
       motorVersion: MOTOR_VERSION_ID,
       demand,
       requiredShifts: required,
       targets,
-      t8BlocksPlaced,
-      t6T7BlocksPlaced: materialized.placedBlocks,
-      t6T7ShiftsPlaced: materialized.placedShifts,
-      residualUnitCoverage: residual.unitCoverageApplied,
+      t8BlocksPlaced: t8.blocksPlaced,
+      t8CoverageGaps: t8.coverageGaps,
+      t8IsolatedCount: structuralMetrics.isolatedT8Count,
+      t8PairsWithoutNdCount: structuralMetrics.pairsWithoutNdCount,
+      vacationFortnightProcessed: vacation.processedCount,
+      vacationBelowPattern: vacation.belowPattern,
+      t6T7BlocksPlaced: blocks.placedBlocks,
+      t6T7ShiftsPlaced: blocks.placedShifts,
+      residualBlockCoverage: totalResidualBlocks,
+      residualUnitCoverage: totalResidualUnits,
+      structuralMetrics,
       flightsForDeficit: flightsCreated.length,
       stepNotes,
-      warnings: targetWarnings,
+      warnings,
     };
   }
 
@@ -124,6 +159,13 @@ export class RealScheduleEngine {
     }
     engineSuggestions.push(MOTOR_REAL_V1_LABEL);
 
+    if (motorReport.structuralMetrics) {
+      const m = motorReport.structuralMetrics;
+      engineSuggestions.push(
+        `Estrutural: T6 blocos=${m.t6Blocks} (unit=${m.t6UnitCoverage}); T7 blocos=${m.t7Blocks} (unit=${m.t7UnitCoverage}); T8 isolados=${m.isolatedT8Count}; T8 sem ND=${m.pairsWithoutNdCount}.`,
+      );
+    }
+
     const balanceReport = operationalBalancer.balance(ws, [
       ...ws.birthdayWarnings,
       ...ws.noFlightWarnings,
@@ -132,6 +174,32 @@ export class RealScheduleEngine {
     ]);
     motorReport.balanceReport = balanceReport;
     stepNotesBalance(motorReport, balanceReport);
+
+    if (ws.listCoverageGaps().length > 0) {
+      closeStructurePreservingGaps(ws, this.repairEngine, motorReport.stepNotes, "[10]", true);
+    }
+    ws.correctMonoFolgasPedidas();
+    ws.repairIsolatedT8();
+    ws.cleanupOrphanNd();
+    ws.ensureNdForT8Pairs();
+    motorReport.structuralMetrics = buildStructuralMetrics(
+      ws,
+      ws.toAssignments(),
+      motorReport.vacationBelowPattern,
+    );
+    motorReport.t8IsolatedCount = motorReport.structuralMetrics.isolatedT8Count;
+    motorReport.t8PairsWithoutNdCount = motorReport.structuralMetrics.pairsWithoutNdCount;
+    motorReport.employeeDiagnostics = buildEmployeeDiagnostics(ws);
+
+    ws.correctMonoFolgasPedidas();
+    const folgasTrimmed = preferIdealFolgaCount(ws);
+    const monoRestFixed = repairIsolatedRestDays(ws);
+    if (folgasTrimmed > 0 || monoRestFixed > 0) {
+      motorReport.stepNotes.push(
+        `[11] Ajuste folgas: ${folgasTrimmed} acima do ideal; ${monoRestFixed} monofolga(s) reparada(s).`,
+      );
+    }
+    ws.correctMonoFolgasPedidas();
 
     for (const w of balanceReport.warnings) {
       engineSuggestions.push(w.detail);
@@ -213,6 +281,44 @@ export class RealScheduleEngine {
       success: summary.valid,
       suggestions: insights.suggestions,
     };
+  }
+}
+
+function closeStructurePreservingGaps(
+  ws: GenerationWorkspace,
+  repairEngine: ScheduleRepairEngine,
+  stepNotes: string[],
+  label: string,
+  useCompleteAgenda: boolean,
+): void {
+  let rounds = 0;
+  let totalRepaired = 0;
+
+  while (ws.listCoverageGaps().length > 0 && rounds++ < 6) {
+    const gapsBefore = ws.listCoverageGaps().length;
+    closeT8CoverageGaps(ws);
+    ws.coverT6T7Only();
+    coverResidualT6T7Only(ws);
+    const repair = repairEngine.repair(ws, []);
+    totalRepaired += repair.repaired;
+    ws.repairIsolatedT8();
+    ws.cleanupOrphanNd();
+    ws.ensureNdForT8Pairs();
+    const gapsAfter = ws.listCoverageGaps().length;
+    if (gapsAfter >= gapsBefore && repair.repaired === 0) break;
+  }
+
+  if (useCompleteAgenda && ws.listCoverageGaps().length > 0) {
+    ws.completePaoAgenda();
+    ws.repairIsolatedT8();
+    ws.cleanupOrphanNd();
+    ws.ensureNdForT8Pairs();
+  }
+
+  if (totalRepaired > 0 || rounds > 1 || ws.listCoverageGaps().length > 0) {
+    stepNotes.push(
+      `${label} Fechamento cobertura: ${totalRepaired} reparo(s); gaps=${ws.listCoverageGaps().length}.`,
+    );
   }
 }
 

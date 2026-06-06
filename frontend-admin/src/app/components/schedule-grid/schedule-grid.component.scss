@@ -137,6 +137,27 @@
   }
 }
 
+.editable-grid .col-day {
+  cursor: crosshair;
+  user-select: none;
+}
+
+.cell-selected {
+  outline: 2px solid var(--gol-orange, #f15a22);
+  outline-offset: -2px;
+  background: rgba(241, 90, 34, 0.12) !important;
+}
+
+.cell-dragging {
+  opacity: 0.45;
+}
+
+.cell-drag-over {
+  outline: 2px dashed #2563eb;
+  outline-offset: -2px;
+  background: rgba(37, 99, 235, 0.1) !important;
+}
+
 .schedule-grid-wrap.compact-layout {
   .schedule-grid {
     font-size: 0.68rem;

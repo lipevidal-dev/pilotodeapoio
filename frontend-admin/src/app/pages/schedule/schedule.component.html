@@ -345,7 +345,20 @@
       @if (!hasVisibleRows(grid)) {
         <p-message severity="info" text="Nenhum dado para os filtros selecionados. Gere a escala ou ajuste os filtros." />
       } @else {
-        <app-schedule-grid [grid]="grid" [auditTotals]="gridAuditTotals()" />
+        <app-schedule-grid
+          #scheduleGrid
+          [grid]="grid"
+          [auditTotals]="gridAuditTotals()"
+          [editable]="gridEditable()"
+          (selectionCompleted)="onSelectionCompleted($event)"
+          (moveRequested)="onMoveRequested($event)"
+        />
+        <app-schedule-allocation-popup
+          [visible]="allocationPopupVisible()"
+          [context]="allocationContext()"
+          (optionSelected)="onAllocationOption($event)"
+          (closed)="closeAllocationPopup()"
+        />
       }
     } @else {
       <p-message severity="info" text="Nenhuma escala carregada. Gere a escala ou selecione outro período." />

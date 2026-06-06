@@ -225,7 +225,7 @@ describe("Fase 7.1 — Prioridade operacional PAO e mono-folgas", () => {
     ws.applyHardBlocks();
     ws.ensureMinShiftsForFullMonthNoFlight();
     expect(ws.noFlightWarnings.some((w) => w.type === "RESTRIÇÃO VOO MÊS INTEIRO")).toBe(true);
-    expect(ws.noFlightWarnings[0].detail).toContain("não atingiu 20 turnos");
+    expect(ws.noFlightWarnings[0].detail).toContain("todos os turnos restritos");
   });
 
   it("ensureMinShifts não gera mais de 5 T6/T7 consecutivos", () => {

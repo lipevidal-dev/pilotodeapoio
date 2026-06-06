@@ -26,6 +26,72 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
     expect(mapShiftToCell('ND').kind).toBe('nd');
   });
 
+  it('ND gerado em preAllocations aparece na escala visual', () => {
+    const emp: Employee = {
+      id: 'pao-1',
+      name: 'PAO Test',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 6,
+      employees: [emp],
+      assignments: [
+        {
+          id: '1',
+          scheduleMonthId: 'm1',
+          employeeId: 'pao-1',
+          date: '2026-06-10T12:00:00.000Z',
+          shiftCode: 'T8',
+          label: null,
+          source: 'GENERATOR',
+        },
+        {
+          id: '2',
+          scheduleMonthId: 'm1',
+          employeeId: 'pao-1',
+          date: '2026-06-11T12:00:00.000Z',
+          shiftCode: 'T8',
+          label: null,
+          source: 'GENERATOR',
+        },
+      ],
+      preAllocations: [
+        {
+          id: 'nd-1',
+          employeeId: 'pao-1',
+          date: '2026-06-12T12:00:00.000Z',
+          label: 'ND',
+        },
+      ],
+      operationalCadastros: [],
+    });
+    expect(grid.groups[0].rows[0].cells[11].display).toBe('ND');
+    expect(grid.groups[0].rows[0].cells[11].kind).toBe('nd');
+    expect(grid.groups[0].rows[0].summary.nd).toBe(1);
+  });
+
+  it('ND em preAllocation tem prioridade sobre turno na mesma célula', () => {
+    const cell = resolveScheduleCell(
+      {
+        id: '1',
+        scheduleMonthId: 'm1',
+        employeeId: 'pao-1',
+        date: '2026-06-12T00:00:00.000Z',
+        shiftCode: 'T6',
+        label: null,
+        source: 'GENERATOR',
+      },
+      ['ND'],
+    );
+    expect(cell.kind).toBe('nd');
+    expect(cell.display).toBe('ND');
+  });
+
   it('8. T1–T4 contam em turnos e dias trabalhados (APAO)', () => {
     const emp: Employee = {
       id: 'apao-1',

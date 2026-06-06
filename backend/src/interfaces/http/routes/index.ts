@@ -55,6 +55,11 @@ import {
   validateScheduleController,
 } from "../controllers/schedule.controller.js";
 import {
+  manualEditCellController,
+  manualEditRangeController,
+  manualEditMoveController,
+} from "../controllers/manual-schedule-edit.controller.js";
+import {
   createShiftController,
   deleteShiftController,
   getShiftController,
@@ -136,6 +141,10 @@ export async function registerRoutes(app: FastifyInstance) {
   app.put("/other-operational-allocations/:id", otherOperationalHandlers.update);
   app.delete("/other-operational-allocations/batch", otherOperationalHandlers.removeBatch);
   app.delete("/other-operational-allocations/:id", otherOperationalHandlers.remove);
+
+  app.patch("/schedules/:id/manual-cell", manualEditCellController);
+  app.patch("/schedules/:id/manual-range", manualEditRangeController);
+  app.patch("/schedules/:id/manual-move", manualEditMoveController);
 
   app.post("/schedules/validate", validateScheduleController);
   app.post("/schedules/generate", generateScheduleController);

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -18,8 +18,18 @@ import { ScheduleService } from '../../services/schedule.service';
 import { ScheduleRefreshService } from '../../services/schedule-refresh.service';
 import { ScheduleWorkspaceService } from '../../services/schedule-workspace.service';
 import { ScheduleExportService } from '../../services/schedule-export.service';
-import { ScheduleGridComponent } from '../../components/schedule-grid/schedule-grid.component';
+import {
+  ScheduleGridComponent,
+  type GridMoveRequest,
+  type GridSelectionComplete,
+} from '../../components/schedule-grid/schedule-grid.component';
+import {
+  ScheduleAllocationPopupComponent,
+  type AllocationPopupContext,
+  type ManualAllocationOption,
+} from '../../components/schedule-allocation-popup/schedule-allocation-popup.component';
 import { ScheduleLegendComponent } from '../../components/schedule-legend/schedule-legend.component';
+import { isoDateFromGrid } from '../../utils/schedule-grid-selection.util';
 import { sortEmployeesBySeniority } from '../../utils/employee-sort.util';
 import { buildScheduleGrid } from '../../utils/schedule-cell.mapper';
 import { applyAuditPreviewToSchedule } from '../../utils/step-audit-grid.util';
@@ -33,6 +43,7 @@ import {
 import type {
   EmployeeType,
   GenerateByStepsResponse,
+  ManualEditResponse,
   PublishBlockedResponse,
   ScheduleMonthResponse,
   ScheduleViolation,
@@ -73,12 +84,15 @@ const DEFAULT_STEP_OPTIONS = (): StepGenerationOptions => ({
     CheckboxModule,
     DialogModule,
     ScheduleGridComponent,
+    ScheduleAllocationPopupComponent,
     ScheduleLegendComponent,
   ],
   templateUrl: './schedule.component.html',
   styleUrl: './schedule.component.scss',
 })
 export class ScheduleComponent implements OnInit, OnDestroy {
+  @ViewChild('scheduleGrid') scheduleGrid?: ScheduleGridComponent;
+
   private readonly scheduleService = inject(ScheduleService);
   private readonly scheduleRefresh = inject(ScheduleRefreshService);
   private readonly workspace = inject(ScheduleWorkspaceService);
@@ -101,6 +115,10 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   readonly publishBlocked = signal<PublishBlockedResponse | null>(null);
   readonly publishResult = signal<{ status: string } | null>(null);
   readonly scheduleData = signal<ScheduleMonthResponse | null>(null);
+  readonly manualEditing = signal(false);
+  readonly allocationPopupVisible = signal(false);
+  readonly allocationContext = signal<AllocationPopupContext | null>(null);
+  private pendingSelection: GridSelectionComplete | null = null;
 
   readonly filterType = signal<'ALL' | EmployeeType>('ALL');
   readonly filterEmployeeId = signal<string | null>(null);
@@ -108,6 +126,11 @@ export class ScheduleComponent implements OnInit, OnDestroy {
 
   readonly generation = computed(() => this.workspace.lastGeneration());
   readonly scheduleMonthId = computed(() => this.workspace.scheduleMonthId());
+
+  readonly gridEditable = computed(() => {
+    const status = this.scheduleData()?.scheduleMonth.status;
+    return status === 'GENERATED' || status === 'DRAFT';
+  });
 
   readonly stepAllocationEntries = computed(() => {
     const audit = this.stepAuditResult();
@@ -396,6 +419,98 @@ export class ScheduleComponent implements OnInit, OnDestroy {
         this.messages.add({ severity: 'error', summary: 'Publicação', detail: msg });
       },
     });
+  }
+
+  onSelectionCompleted(selection: GridSelectionComplete): void {
+    this.pendingSelection = selection;
+    this.allocationContext.set({
+      employeeName: selection.employeeName,
+      startDay: selection.startDay,
+      endDay: selection.endDay,
+    });
+    this.allocationPopupVisible.set(true);
+  }
+
+  closeAllocationPopup(): void {
+    this.allocationPopupVisible.set(false);
+    this.allocationContext.set(null);
+    this.pendingSelection = null;
+    this.scheduleGrid?.clearSelection();
+  }
+
+  onAllocationOption(option: ManualAllocationOption): void {
+    const selection = this.pendingSelection;
+    const monthId = this.scheduleMonthId() ?? this.scheduleData()?.scheduleMonth.id;
+    if (!selection || !monthId) return;
+
+    const startDate = isoDateFromGrid(this.yearSig(), this.monthSig(), selection.startDay);
+    const endDate = isoDateFromGrid(this.yearSig(), this.monthSig(), selection.endDay);
+    this.manualEditing.set(true);
+    this.allocationPopupVisible.set(false);
+
+    this.scheduleService
+      .manualEditRange(monthId, {
+        employeeId: selection.employeeId,
+        startDate,
+        endDate,
+        type: option,
+        mode: option === 'CLEAR' ? 'clear' : 'set',
+      })
+      .subscribe({
+        next: (res) => this.handleManualEditSuccess(res, 'Período atualizado com sucesso.'),
+        error: (err: HttpErrorResponse) => this.handleManualEditError(err),
+      });
+  }
+
+  onMoveRequested(move: GridMoveRequest): void {
+    const monthId = this.scheduleMonthId() ?? this.scheduleData()?.scheduleMonth.id;
+    if (!monthId) return;
+    this.manualEditing.set(true);
+    this.scheduleService
+      .manualMove(monthId, {
+        source: {
+          employeeId: move.source.employeeId,
+          date: isoDateFromGrid(this.yearSig(), this.monthSig(), move.source.day),
+        },
+        target: {
+          employeeId: move.target.employeeId,
+          date: isoDateFromGrid(this.yearSig(), this.monthSig(), move.target.day),
+        },
+        mode: 'move',
+      })
+      .subscribe({
+        next: (res) => this.handleManualEditSuccess(res, 'Alteração aplicada com sucesso.'),
+        error: (err: HttpErrorResponse) => this.handleManualEditError(err),
+      });
+  }
+
+  private handleManualEditSuccess(res: ManualEditResponse, detail: string): void {
+    this.manualEditing.set(false);
+    this.scheduleGrid?.clearSelection();
+    this.pendingSelection = null;
+    this.allocationContext.set(null);
+    this.scheduleData.set({
+      scheduleMonth: res.scheduleMonth,
+      employees: res.employees,
+      shifts: res.shifts,
+      assignments: res.assignments,
+      preAllocations: res.preAllocations,
+      operationalCadastros: res.operationalCadastros,
+      ruleViolations: this.scheduleData()?.ruleViolations ?? [],
+      validation: res.validation,
+    });
+    this.messages.add({ severity: 'success', summary: 'Escala', detail, life: 4000 });
+  }
+
+  private handleManualEditError(err: HttpErrorResponse): void {
+    this.manualEditing.set(false);
+    const conflicts = err.error?.conflicts as Array<{ message: string }> | undefined;
+    const detail =
+      conflicts?.[0]?.message ??
+      err.error?.message ??
+      err.error?.error ??
+      'Não foi possível aplicar a alteração.';
+    this.messages.add({ severity: 'error', summary: 'Conflito', detail, life: 6000 });
   }
 
   loadScheduleView(): void {

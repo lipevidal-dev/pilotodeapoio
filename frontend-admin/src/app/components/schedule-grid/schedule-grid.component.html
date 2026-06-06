@@ -13,7 +13,12 @@
   />
 </div>
 
-<div class="schedule-grid-wrap" [class.compact-layout]="!summaryVisible()">
+<div
+  class="schedule-grid-wrap"
+  [class.compact-layout]="!summaryVisible()"
+  [class.editable-grid]="editable()"
+  (selectstart)="$event.preventDefault()"
+>
   <table class="schedule-grid">
     <thead>
       <tr>
@@ -59,7 +64,21 @@
               <span class="emp-name">{{ row.name }}</span>
             </td>
             @for (cell of row.cells; track $index; let i = $index) {
-              <td class="col-day" [class.col-weekend]="isWeekend(i)">
+              <td
+                class="col-day"
+                [class.col-weekend]="isWeekend(i)"
+                [class.cell-selected]="isCellHighlighted(row.employeeId, grid().dayNumbers[i])"
+                [class.cell-drag-over]="isDragOver(row.employeeId, grid().dayNumbers[i])"
+                [class.cell-dragging]="isDragging(row.employeeId, grid().dayNumbers[i])"
+                [attr.draggable]="editable() && cell.kind !== 'empty' && cell.kind !== 'ferias'"
+                (mousedown)="onCellMouseDown($event, row.employeeId, grid().dayNumbers[i])"
+                (mouseenter)="onCellMouseEnter(row.employeeId, grid().dayNumbers[i])"
+                (dragstart)="onDragStart($event, row.employeeId, grid().dayNumbers[i])"
+                (dragend)="onDragEnd()"
+                (dragover)="onDragOver($event, row.employeeId, grid().dayNumbers[i])"
+                (dragleave)="onDragLeave(row.employeeId, grid().dayNumbers[i])"
+                (drop)="onDrop($event, row.employeeId, grid().dayNumbers[i])"
+              >
                 <app-schedule-cell [cell]="cell" />
               </td>
             }

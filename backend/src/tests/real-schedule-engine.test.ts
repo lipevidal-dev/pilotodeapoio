@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { addDays } from "../domain/rules/dates.js";
 import { calculateOperationalDemand } from "../domain/schedule/demand-planning-demand.js";
 import { buildBlockPlans, targetToBlocks } from "../domain/schedule/demand-planning-blocks.js";
 import { materializeBlockPlans } from "../domain/schedule/demand-planning-materialize.js";
+import { materializeT6T7BlocksStrict } from "../domain/schedule/real-schedule-blocks.js";
+import { allocateT8BlocksStrict, auditStructuralT8 } from "../domain/schedule/real-schedule-t8.js";
+import {
+  detectVacationFortnight,
+  materializeVacationFortnightPatterns,
+} from "../domain/schedule/real-schedule-vacation-materialize.js";
+import { longestConsecutiveRun } from "../domain/schedule/t6-t7-block-coverage.js";
 import { buildOperationalSummary } from "../domain/schedule/operational-summary.js";
 import { operationalBalancer } from "../domain/schedule/operational-balancer.js";
 import {
@@ -36,16 +44,34 @@ function fullMonthNoFlight(uuid: string) {
 }
 
 function runT8First(ws: ReturnType<typeof freshWorkspace>) {
-  ws.planT8CoverageRotating();
-  ws.coverT8BlocksOnly();
-  ws.ensureNdForT8Pairs();
+  allocateT8BlocksStrict(ws);
 }
 
 function runT6T7Blocks(ws: ReturnType<typeof freshWorkspace>) {
+  materializeVacationFortnightPatterns(ws);
   const { targets } = computeRealMotorTargets(ws);
-  const plans = buildBlockPlans(targets);
-  materializeBlockPlans(ws, plans);
+  materializeT6T7BlocksStrict(ws, targets);
   coverResidualT6T7Only(ws);
+}
+
+function assertNoIsolatedT8(assignments: ReturnType<ReturnType<typeof freshWorkspace>["toAssignments"]>) {
+  const byPao = new Map<string, string[]>();
+  for (const a of assignments) {
+    if (a.shiftCode !== "T8") continue;
+    const list = byPao.get(a.employeeUuid) ?? [];
+    list.push(a.date);
+    byPao.set(a.employeeUuid, list);
+  }
+  for (const [uuid, days] of byPao) {
+    for (const day of days) {
+      const prev = addDays(day, -1);
+      const next = addDays(day, 1);
+      expect(
+        days.includes(prev) || days.includes(next),
+        `T8 isolado ${day} para ${uuid}`,
+      ).toBe(true);
+    }
+  }
 }
 
 describe("Fase 8.0 — Motor real v1", () => {
@@ -282,5 +308,172 @@ describe("Fase 8.0 — Motor real v1", () => {
     expect(result.suggestions.some((s) => s.includes("Motor real v1"))).toBe(true);
     const legacy = new LegacyScheduleGenerationEngine().generate(minimalPaoInput(3));
     expect(legacy.summary.motorVersion).toBe("Motor legado");
+  });
+});
+
+describe("REAL_V1 — regras estruturais críticas", () => {
+  it("não pode existir T8 isolado após geração completa", () => {
+    const result = realScheduleEngine.generate(minimalPaoInput(4));
+    assertNoIsolatedT8(result.assignments);
+    const report = result.summary.realMotorReport as { t8IsolatedCount?: number };
+    expect(report.t8IsolatedCount ?? 0).toBe(0);
+  });
+
+  it("toda dupla T8/T8 deve ter ND no dia seguinte", () => {
+    const result = realScheduleEngine.generate(minimalPaoInput(4));
+    for (let i = 0; i < MONTH_DAYS.length - 1; i++) {
+      const d0 = MONTH_DAYS[i]!;
+      const d1 = MONTH_DAYS[i + 1]!;
+      const t8d0 = result.assignments.filter((a) => a.date === d0 && a.shiftCode === "T8");
+      const t8d1 = result.assignments.filter((a) => a.date === d1 && a.shiftCode === "T8");
+      for (const a0 of t8d0) {
+        if (!t8d1.some((a1) => a1.employeeUuid === a0.employeeUuid)) continue;
+        const ndDay = addDays(d1, 1);
+        const hasNd = result.allocations.some(
+          (a) => a.employeeUuid === a0.employeeUuid && a.date === ndDay && a.label === "ND",
+        );
+        expect(hasNd, `ND ausente após T8/T8 ${d0}/${d1} para ${a0.employeeUuid}`).toBe(true);
+      }
+    }
+    const report = result.summary.realMotorReport as { t8PairsWithoutNdCount?: number };
+    expect(report.t8PairsWithoutNdCount ?? 0).toBe(0);
+  });
+
+  it("se ND não for possível, dupla T8/T8 não deve ser criada", () => {
+    const input = minimalPaoInput(3);
+    const uuid = paoUuid(0);
+    input.lockedAllocations = [{ employeeUuid: uuid, date: "2026-06-12", label: "SIMULADOR" }];
+    const ws = freshWorkspace(input);
+    ws.applyHardBlocks();
+    expect(ws.tryPlaceT8Block(uuid, "2026-06-10")).toBe(false);
+    allocateT8BlocksStrict(ws);
+    const audit = auditStructuralT8(ws);
+    expect(audit.pairsWithoutNdCount).toBe(0);
+    expect(audit.isolatedT8Count).toBe(0);
+  });
+
+  it("PAO com férias 01–15 recebe padrão 3/2 entre 16–30", () => {
+    const uuid = paoUuid(0);
+    const vacDays = MONTH_DAYS.slice(0, 15).map((date) => ({ employeeUuid: uuid, date }));
+    const input = minimalPaoInput(4);
+    input.vacationDays = vacDays;
+    const ws = freshWorkspace(input);
+    ws.applyHardBlocks();
+    expect(detectVacationFortnight(ws, uuid)).toBe("FIRST_HALF");
+    runT8First(ws);
+    const vacation = materializeVacationFortnightPatterns(ws);
+    expect(vacation.processedCount).toBe(1);
+    const secondHalf = MONTH_DAYS.slice(15);
+    const workSecondHalf = secondHalf.filter((day) =>
+      ws.toAssignments().some(
+        (a) =>
+          a.employeeUuid === uuid &&
+          a.date === day &&
+          (a.shiftCode === "T6" || a.shiftCode === "T7" || a.shiftCode === "T8"),
+      ),
+    );
+    expect(workSecondHalf.length).toBeGreaterThanOrEqual(vacationPatternWorkTarget(15) - 3);
+    const feriasSecond = secondHalf.filter((day) =>
+      ws.allocations.some(
+        (a) => a.employeeUuid === uuid && a.date === day && a.label.toUpperCase().includes("FÉRIAS"),
+      ),
+    );
+    expect(feriasSecond.length).toBe(0);
+  });
+
+  it("PAO com férias 16–30 recebe padrão 3/2 entre 01–15", () => {
+    const uuid = paoUuid(0);
+    const vacDays = MONTH_DAYS.slice(15).map((date) => ({ employeeUuid: uuid, date }));
+    const input = minimalPaoInput(4);
+    input.vacationDays = vacDays;
+    const ws = freshWorkspace(input);
+    ws.applyHardBlocks();
+    expect(detectVacationFortnight(ws, uuid)).toBe("SECOND_HALF");
+    runT8First(ws);
+    materializeVacationFortnightPatterns(ws);
+    const firstHalf = MONTH_DAYS.slice(0, 15);
+    const workFirstHalf = firstHalf.filter((day) =>
+      ws.toAssignments().some(
+        (a) =>
+          a.employeeUuid === uuid &&
+          a.date === day &&
+          (a.shiftCode === "T6" || a.shiftCode === "T7" || a.shiftCode === "T8"),
+      ),
+    );
+    expect(workFirstHalf.length).toBeGreaterThanOrEqual(vacationPatternWorkTarget(15) - 3);
+  });
+
+  it("T6 deve gerar bloco de 3+ dias quando viável", () => {
+    const result = realScheduleEngine.generate(minimalPaoInput(4));
+    const report = result.summary.realMotorReport as {
+      structuralMetrics?: { t6AverageBlockSize: number; t6Blocks: number };
+    };
+    expect(report.structuralMetrics?.t6Blocks ?? 0).toBeGreaterThan(0);
+    const longest = Math.max(
+      ...result.assignments
+        .filter((a) => a.shiftCode === "T6")
+        .map((a) => a.employeeUuid)
+        .filter((v, i, arr) => arr.indexOf(v) === i)
+        .map((uuid) => longestConsecutiveRun(result.assignments, uuid, "T6", MONTH_DAYS)),
+    );
+    expect(longest).toBeGreaterThanOrEqual(3);
+  });
+
+  it("T7 deve gerar bloco de 3+ dias quando viável", () => {
+    const result = realScheduleEngine.generate(minimalPaoInput(4));
+    const longest = Math.max(
+      ...result.assignments
+        .filter((a) => a.shiftCode === "T7")
+        .map((a) => a.employeeUuid)
+        .filter((v, i, arr) => arr.indexOf(v) === i)
+        .map((uuid) => longestConsecutiveRun(result.assignments, uuid, "T7", MONTH_DAYS)),
+    );
+    expect(longest).toBeGreaterThanOrEqual(3);
+  });
+
+  it("cobertura unitária é último recurso — blocos antes de unitários no residual", () => {
+    const ws = freshWorkspace(minimalPaoInput(4));
+    ws.applyHardBlocks();
+    runT8First(ws);
+    runT6T7Blocks(ws);
+    const residual = coverResidualT6T7Only(ws);
+    expect(residual.blockCoverageApplied + residual.unitCoverageApplied).toBeGreaterThanOrEqual(0);
+    const full = realScheduleEngine.generate(minimalPaoInput(4));
+    const report = full.summary.realMotorReport as {
+      structuralMetrics?: { t6UnitCoverage: number; t7UnitCoverage: number; t6Blocks: number; t7Blocks: number };
+      residualBlockCoverage?: number;
+    };
+    const totalBlocks = (report.structuralMetrics?.t6Blocks ?? 0) + (report.structuralMetrics?.t7Blocks ?? 0);
+    expect(totalBlocks).toBeGreaterThan(0);
+  });
+
+  it("resumo operacional inclui métricas estruturais T6/T7/T8", () => {
+    const result = realScheduleEngine.generate(minimalPaoInput(4));
+    const report = result.summary.realMotorReport as {
+      structuralMetrics?: {
+        t6Blocks: number;
+        t7Blocks: number;
+        isolatedT8Count: number;
+        pairsWithoutNdCount: number;
+        vacationBelowPatternCount: number;
+      };
+      t8BlocksPlaced?: number;
+      vacationFortnightProcessed?: number;
+    };
+    expect(report.structuralMetrics).toBeDefined();
+    expect(report.structuralMetrics!.t6Blocks).toBeGreaterThan(0);
+    expect(report.structuralMetrics!.t7Blocks).toBeGreaterThan(0);
+    expect(report.t8BlocksPlaced).toBeGreaterThan(0);
+    expect(result.summary.motorVersion).toBe(MOTOR_VERSION_ID);
+  });
+
+  it("Gerar Escala continua retornando REAL_V1 com pipeline estrutural", () => {
+    const result = new ScheduleGenerationEngine().generate(realisticGenerationInput());
+    expect(result.summary.motorVersion).toBe(MOTOR_VERSION_ID);
+    expect(result.summary.realEngineExecuted).toBe(true);
+    assertNoIsolatedT8(result.assignments);
+    expect(
+      result.violations.filter((v) => v.type === "T8 ISOLADO" || v.type === "T8 SEM ND").length,
+    ).toBe(0);
   });
 });

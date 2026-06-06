@@ -1,0 +1,34 @@
+.popup-lead {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  color: #4b5563;
+}
+
+.option-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.alloc-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.82rem;
+  transition: background 0.15s, border-color 0.15s;
+
+  &:hover {
+    background: #fff7ed;
+    border-color: var(--gol-orange, #f15a22);
+  }
+
+  &--danger:hover {
+    background: #fef2f2;
+    border-color: #ef4444;
+  }
+}

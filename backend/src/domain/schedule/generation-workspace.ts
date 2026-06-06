@@ -133,6 +133,18 @@ export class GenerationWorkspace {
     return countOperationalShifts(this, uuid);
   }
 
+  /** Turnos elegíveis para o PAO (exclui restrições permanentes como T8). */
+  allowedShiftsForEmployee(
+    uuid: string,
+    fallback: readonly ("T6" | "T7" | "T8")[] = PAO_COVERAGE_SHIFTS,
+  ): ("T6" | "T7" | "T8")[] {
+    const did = this.uuidToDomain.get(uuid);
+    if (!did) return [...fallback];
+    const restricted = this.input.shiftRestrictions?.get(did);
+    if (!restricted || restricted.size === 0) return [...fallback];
+    return fallback.filter((code) => !restricted.has(code));
+  }
+
   /** PAO com mês inteiro sem voo: tenta atingir 20 turnos; senão emite WARNING. */
   ensureMinShiftsForFullMonthNoFlight(
     allowedShifts: readonly ("T6" | "T7" | "T8")[] = PAO_COVERAGE_SHIFTS,
@@ -146,6 +158,20 @@ export class GenerationWorkspace {
       let count = countOperationalShifts(this, c.uuid);
       if (count >= MIN_SHIFTS_FULL_NO_FLIGHT_MONTH) continue;
 
+      const shiftsForEmployee = this.allowedShiftsForEmployee(c.uuid, allowedShifts);
+      if (shiftsForEmployee.length === 0) {
+        this.noFlightWarnings.push({
+          severity: "MÉDIA",
+          level: "WARNING",
+          type: "RESTRIÇÃO VOO MÊS INTEIRO",
+          date: "",
+          employee: c.employee.name,
+          detail:
+            "Funcionário com restrição de voo no mês inteiro e todos os turnos restritos — impossível alocar turnos.",
+        });
+        continue;
+      }
+
       for (const day of this.days) {
         if (count >= MIN_SHIFTS_FULL_NO_FLIGHT_MONTH) break;
         const did = this.uuidToDomain.get(c.uuid)!;
@@ -153,7 +179,7 @@ export class GenerationWorkspace {
         if (this.allocations.some((a) => a.employeeUuid === c.uuid && a.date === day && a.label === "ND")) {
           continue;
         }
-        for (const code of this.shiftOrderRespectingBlocks(c.uuid, day, allowedShifts)) {
+        for (const code of this.shiftOrderRespectingBlocks(c.uuid, day, shiftsForEmployee)) {
           if (this.tryAssignShift(c.uuid, day, code)) {
             count = countOperationalShifts(this, c.uuid);
             break;

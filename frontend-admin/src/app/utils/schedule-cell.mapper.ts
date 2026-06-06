@@ -148,9 +148,28 @@ export function sanitizeAssignmentForGrid(
   return { ...assignment, label: null };
 }
 
+/** Labels gerados pelo motor em preAllocations que devem aparecer na grade visual. */
+const GENERATOR_PREALLOC_DISPLAY_LABELS = new Set([
+  'ND',
+  'FOLGA',
+  'FOLGA SOCIAL',
+  'FOLGA AGRUPADA',
+  'FOLGA ANIVERSÁRIO',
+  'FANI',
+]);
+
+function isGeneratorPreallocDisplayLabel(label: string): boolean {
+  const n = normalizeLabelKey(label);
+  if (GENERATOR_PREALLOC_DISPLAY_LABELS.has(n)) return true;
+  if (n.includes('FOLGA ANIVERS')) return true;
+  if (n.includes('FOLGA') && !n.includes('PEDIDA')) return true;
+  return false;
+}
+
 export function labelDisplayPriority(label: string): number {
   const n = normalizeText(label);
   if (n.includes('FERIAS')) return 100;
+  if (n === 'ND') return 95;
   if (n === 'FP' || n.includes('FOLGA PEDIDA')) return 90;
   if (n === 'FANI' || n.includes('FOLGA ANIVERS')) return 80;
   if (n.includes('SIMULADOR')) return 70;
@@ -532,6 +551,34 @@ function buildOperationalLabelMap(
   return map;
 }
 
+/** ND e folgas geradas pelo motor vêm em preAllocations — não em operationalCadastros. */
+function buildGeneratorPreallocLabelMap(
+  preAllocations: PreAllocationRow[],
+): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+
+  for (const row of preAllocations) {
+    if (!isGeneratorPreallocDisplayLabel(row.label)) continue;
+    const key = `${row.employeeId}|${dateKey(row.date)}`;
+    const labels = map.get(key) ?? [];
+    labels.push(row.label);
+    map.set(key, labels);
+  }
+  return map;
+}
+
+function mergeLabelMaps(
+  primary: Map<string, string[]>,
+  secondary: Map<string, string[]>,
+): Map<string, string[]> {
+  const merged = new Map(primary);
+  for (const [key, labels] of secondary) {
+    const existing = merged.get(key) ?? [];
+    merged.set(key, [...existing, ...labels]);
+  }
+  return merged;
+}
+
 export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
   const { year, month, employees, assignments, preAllocations, operationalCadastros } = input;
   const days = daysInMonth(year, month);
@@ -547,7 +594,10 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
     assignmentMap.set(`${a.employeeId}|${dateKey(a.date)}`, a);
   }
 
-  const operationalLabelMap = buildOperationalLabelMap(operationalCadastros);
+  const operationalLabelMap = mergeLabelMaps(
+    buildOperationalLabelMap(operationalCadastros),
+    buildGeneratorPreallocLabelMap(preAllocations),
+  );
 
   const employeeById = new Map(employees.map((e) => [e.id, e]));
 

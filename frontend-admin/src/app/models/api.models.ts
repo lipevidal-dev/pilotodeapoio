@@ -272,6 +272,50 @@ export interface ScheduleMonthRecord {
   status: string;
 }
 
+export type ManualAllocationType =
+  | 'T6'
+  | 'T7'
+  | 'T8'
+  | 'ND'
+  | 'FOLGA'
+  | 'FP'
+  | 'VOO'
+  | 'CURSO'
+  | 'SIMULADOR'
+  | 'CMA'
+  | 'OUTRO'
+  | 'CLEAR';
+
+export interface ManualEditConflict {
+  code: string;
+  message: string;
+  requiresConfirmation?: boolean;
+}
+
+export interface ManualEditResponse {
+  success: boolean;
+  applied: number;
+  conflicts: ManualEditConflict[];
+  warnings: string[];
+  scheduleMonth: ScheduleMonthRecord;
+  employees: Employee[];
+  shifts: Shift[];
+  assignments: ScheduleAssignmentRow[];
+  preAllocations: PreAllocationRow[];
+  operationalCadastros: OperationalCadastroRow[];
+  validation: {
+    valid: boolean;
+    violations: Array<{
+      severity: string;
+      ruleCode: string;
+      message: string;
+      date?: string;
+      employee?: string;
+      detail?: string;
+    }>;
+  };
+}
+
 export interface ScheduleAssignmentRow {
   id: string;
   scheduleMonthId: string;
