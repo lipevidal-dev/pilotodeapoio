@@ -1,4 +1,4 @@
-@import '../../pages/cadastros/cadastros-calendar.scss';
+@use '../../pages/cadastros/cadastros-calendar' as *;
 
 .op-cal {
   display: flex;

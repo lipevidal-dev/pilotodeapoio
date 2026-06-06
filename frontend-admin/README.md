@@ -94,24 +94,31 @@ npm test
 
 
 
+## Navegação (menu lateral)
+
+| Seção | Itens |
+|-------|-------|
+| **Principal** | Dashboard, Geração de Escala |
+| **Cadastros Operacionais** | Férias, Folgas Pedidas, Voos, Simulador, Curso, CMA, Outros |
+| **Configurações** | Funcionários, Cargos (Funções), Turnos |
+
 ## Telas
 
-
-
 | Rota | Conteúdo |
-
 |------|----------|
-
 | `/dashboard` | Status da API, versão, teste de conexão, resumo do mês atual |
-
-| `/funcionarios` | CRUD completo — listar, criar, editar, ativar/inativar, excluir (`GET/POST/PUT/DELETE /employees`) |
-
 | `/escala` | Geração, violações, publicação e **grade operacional mensal** |
-| `/cadastros/ferias` | Férias — `GET/POST/DELETE /vacations` |
-| `/cadastros/folgas-pedidas` | FP — `GET/POST/DELETE /requested-day-offs` |
-| `/cadastros/voos` | Voos — `GET/POST/DELETE /flight-assignments` |
-| `/cadastros/pre-alocacoes` | Simulador, Curso, CMA — `GET/POST/DELETE /preallocations` |
-| `/configuracoes/turnos` | CRUD de turnos — `GET/POST/PUT/DELETE /shifts` (padrão Funcionários) |
+| `/cadastros/ferias` | Férias — `GET/POST/DELETE /vacations`, batch delete |
+| `/cadastros/folgas-pedidas` | Folgas pedidas (FP) — `GET/POST/DELETE /requested-day-offs`, batch delete |
+| `/cadastros/voos` | Voos — `GET/POST/DELETE /flight-assignments`, batch delete |
+| `/cadastros/simulador` | Simulador — `GET/POST/DELETE /simulators`, batch delete |
+| `/cadastros/curso` | Curso — `GET/POST/DELETE /courses`, batch delete |
+| `/cadastros/cma` | CMA — `GET/POST/DELETE /cmas`, batch delete |
+| `/cadastros/outros` | Outras alocações — `GET/POST/DELETE /other-operational-allocations`, batch delete |
+| `/cadastros/pre-alocacoes` | **Legado** — pré-alocações genéricas com label variável (`/preallocations`); rota ativa, fora do menu |
+| `/funcionarios` | CRUD de funcionários — `GET/POST/PUT/DELETE /employees` |
+| `/configuracoes/cargos` | Cargos (Funções) — `GET/POST/PUT/DELETE /roles` |
+| `/configuracoes/turnos` | Turnos — `GET/POST/PUT/DELETE /shifts` |
 
 ## Gestão de turnos (Fase 6.5)
 
@@ -203,7 +210,7 @@ Identidade corporativa inspirada na GOL Linhas Aéreas — painel operacional, n
 
 | `src/app/theme/gol-preset.ts` | Preset PrimeNG (laranja como cor primária) |
 
-| `src/styles.scss` | Importa o tema global |
+| `src/styles.scss` | Carrega o tema global (`@use`) |
 
 
 
@@ -271,15 +278,14 @@ Texto alternativo exibido: **GOL | Escala PAO**.
 
 ## Serviços
 
-
-
 - `ApiHealthService` — `/health`
 - `EmployeeService` — `/employees`
 - `ScheduleService` — generate, publish, get month, get published
 - `VacationService` — `/vacations`
 - `RequestedDayOffService` — `/requested-day-offs`
 - `FlightAssignmentService` — `/flight-assignments`
-- `PreAllocationService` — `/preallocations`
+- `SimulatorService`, `CourseService`, `CmaService`, `OtherOperationalAllocationService` — cadastros rotulados (`/simulators`, `/courses`, `/cmas`, `/other-operational-allocations`)
+- `PreAllocationService` — **legado** `/preallocations` (tela `/cadastros/pre-alocacoes`)
 
 ## Cadastros operacionais (Fase 6.3)
 
@@ -290,9 +296,10 @@ Menu **Cadastros Operacionais** — alimenta o motor antes de gerar escala:
 | Férias | `CalendarRepository.listVacationDaysForMonth` |
 | FP aprovada | `listApprovedDayOffForMonth` |
 | Voo | `listFlightDaysForMonth` |
-| Pré-alocação | `preAllocations` do mês → bloqueios na geração |
+| Simulador / Curso / CMA / Outros | Bloqueios rotulados por recurso dedicado |
+| Pré-alocação legada | `preAllocations` genéricos (`/preallocations`) — substituída pelos cadastros rotulados no menu |
 
-Exclusões pedem confirmação. Visual GOL: tabelas `gol-table`, botões laranja.
+Exclusões pedem confirmação; cadastros com tabela suportam exclusão em lote. Visual GOL: tabelas `gol-table`, checkbox de seleção à direita (antes de Excluir), botões laranja.
 
 ## Calendário operacional GOL (Fase 6.3.4)
 
@@ -313,7 +320,8 @@ Componente `OperationalCalendarComponent` (`components/operational-calendar/`):
 | Férias | `multiple` + drag | `POST /vacations/batch` (agrupa em períodos contínuos) |
 | FP | `multiple` + drag | `POST /requested-day-offs/batch` |
 | Voos | `multiple` + drag | `POST /flight-assignments/batch` |
-| Pré-alocações | `multiple` + drag | `POST /preallocations/batch` |
+| Simulador / Curso / CMA / Outros | `multiple` + drag | `POST /{resource}/batch` |
+| Pré-alocações legadas | `multiple` + drag | `POST /preallocations/batch` (fora do menu) |
 
 **Visual GOL:** laranja na seleção, hover suave, cabeçalho cinza antracite, fins de semana diferenciados, dia atual com contorno, botões Hoje/Limpar.
 
