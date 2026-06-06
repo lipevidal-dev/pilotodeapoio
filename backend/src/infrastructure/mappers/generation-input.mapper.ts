@@ -1,5 +1,9 @@
 import type { Employee, PreAllocation, Role, Shift } from "@prisma/client";
-import type { GenerationInput, GenerationInputEmployee } from "../../domain/schedule/generation-types.js";
+import type {
+  GenerationInput,
+  GenerationInputEmployee,
+  ShiftRestrictionRow,
+} from "../../domain/schedule/generation-types.js";
 import { isoDateKey } from "../../domain/rules/date-keys.js";
 import { resolveMotorRoleCodes } from "../../domain/role/motor-codes.js";
 import { normalizeOperationalLabel } from "../../domain/schedule/operational-labels.js";
@@ -20,7 +24,9 @@ export function buildGenerationInput(params: {
   approvedDayOff: Array<{ employeeUuid: string; date: string }>;
   flightDays: Array<{ employeeUuid: string; date: string; description?: string }>;
   crossMonthHistory?: import("../../domain/schedule/cross-month-history.js").CrossMonthHistory;
-}): GenerationInput {  const sorted = [...params.employees].sort((a, b) => a.name.localeCompare(b.name));
+  shiftRestrictionRows?: ShiftRestrictionRow[];
+}): GenerationInput {
+  const sorted = [...params.employees].sort((a, b) => a.name.localeCompare(b.name));
   const genEmployees: GenerationInputEmployee[] = sorted.map((e, i) => ({
     uuid: e.id,
     domainId: i + 1,
@@ -41,8 +47,30 @@ export function buildGenerationInput(params: {
     approvedDayOff: params.approvedDayOff,
     flightDays: params.flightDays,
     crossMonthHistory: params.crossMonthHistory,
+    shiftRestrictions: buildShiftRestrictionMap(genEmployees, params.shiftRestrictionRows ?? []),
   };
 }
+
+export function buildShiftRestrictionMap(
+  employees: GenerationInputEmployee[],
+  rows: ShiftRestrictionRow[],
+): Map<number, Set<string>> | undefined {
+  if (rows.length === 0) return undefined;
+
+  const uuidToDomain = new Map(employees.map((e) => [e.uuid, e.domainId]));
+  const map = new Map<number, Set<string>>();
+
+  for (const row of rows) {
+    const domainId = uuidToDomain.get(row.employeeUuid);
+    if (domainId == null) continue;
+    const codes = map.get(domainId) ?? new Set<string>();
+    codes.add(row.shiftCode.toUpperCase());
+    map.set(domainId, codes);
+  }
+
+  return map.size > 0 ? map : undefined;
+}
+
 export function preAllocationsToLocked(
   rows: (PreAllocation & { employee: Employee })[],
 ): Array<{ employeeUuid: string; date: string; label: string }> {

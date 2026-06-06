@@ -1,4 +1,5 @@
 import type { RuleSeverity } from "@prisma/client";
+import type { ShiftRestrictionRow } from "../../domain/schedule/generation-types.js";
 import {
   allocationsFromDb,
   assignmentsFromDb,
@@ -160,6 +161,26 @@ export class ScheduleRepository {
       where: activeOnly ? { active: true } : undefined,
       orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
     });
+  }
+
+  /**
+   * Restrições mensais de turno por funcionário.
+   * Origem: tabela legada `shift_restrictions` (quando presente no banco).
+   */
+  async listShiftRestrictionsForMonth(year: number, month: number): Promise<ShiftRestrictionRow[]> {
+    try {
+      const rows = await prisma.$queryRaw<{ employee_id: string; shift_code: string }[]>`
+        SELECT employee_id, shift_code
+        FROM shift_restrictions
+        WHERE year = ${year} AND month = ${month}
+      `;
+      return rows.map((r) => ({
+        employeeUuid: r.employee_id,
+        shiftCode: String(r.shift_code).toUpperCase(),
+      }));
+    } catch {
+      return [];
+    }
   }
 
   /** Histórico operacional do mês anterior (últimos 15 dias) para continuidade. */

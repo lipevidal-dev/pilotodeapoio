@@ -4,6 +4,7 @@ import { PROTECTED_PREALLOC_TYPES, VACATION_TYPES } from "../rules/constants.js"
 export const REGENERATION_CLEAR_LABELS = [
   "FOLGA",
   "FOLGA SOCIAL",
+  "FOLGA AGRUPADA",
   "FOLGA ANIVERSÁRIO",
   "ND",
   "FÉRIAS",

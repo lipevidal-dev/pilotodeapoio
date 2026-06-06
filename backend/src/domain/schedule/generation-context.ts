@@ -1,9 +1,32 @@
-import type { ScheduleContext } from "./types.js";
+import type { ScheduleAssignment, ScheduleContext } from "./types.js";
 import type {
   GeneratedAllocation,
   GeneratedAssignment,
   GenerationInput,
 } from "./generation-types.js";
+
+export function crossHistoryToPreviousMonthAssignments(
+  input: GenerationInput,
+): ScheduleAssignment[] | undefined {
+  const hist = input.crossMonthHistory?.assignments;
+  if (!hist?.length) return undefined;
+
+  const byUuid = new Map(input.employees.map((e) => [e.uuid, e]));
+  const rows: ScheduleAssignment[] = [];
+
+  for (const a of hist) {
+    const emp = byUuid.get(a.employeeUuid);
+    if (!emp) continue;
+    rows.push({
+      employeeId: emp.domainId,
+      employeeName: emp.employee.name,
+      workDate: a.date,
+      shiftCode: a.shiftCode,
+    });
+  }
+
+  return rows.length > 0 ? rows : undefined;
+}
 
 export function generationToScheduleContext(
   input: GenerationInput,
@@ -27,6 +50,8 @@ export function generationToScheduleContext(
     employees: input.employees.map((e) => ({ ...e.employee, id: e.domainId })),
     shifts: input.shifts,
     requestedOffByEmployeeId,
+    shiftRestrictions: input.shiftRestrictions,
+    previousMonthAssignments: crossHistoryToPreviousMonthAssignments(input),
     assignments: assignments.map((a) => {
       const emp = byUuid.get(a.employeeUuid)!;
       return {

@@ -165,6 +165,7 @@ describe("GenerateScheduleUseCase — persistência de cadastros operacionais", 
         findMonth: async () => null,
         listActiveEmployees: async () => employees,
         loadCrossMonthHistory: async () => ({ assignments: [], allocations: [] }),
+        listShiftRestrictionsForMonth: async () => [],
         listRoles: async () => [
           {
             id: "role-pao",

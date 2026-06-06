@@ -26,8 +26,9 @@ export class Rest12hRule implements Rule {
     const issues: ValidationIssue[] = [];
     const byEmployee = new Map<number, { name: string; rows: { day: string; code: string }[] }>();
 
-    for (const a of ctx.assignments) {
-      if (!isInMonth(a.workDate, ctx.year, ctx.month)) continue;
+    const allAssignments = [...(ctx.previousMonthAssignments ?? []), ...ctx.assignments];
+
+    for (const a of allAssignments) {
       if (!byEmployee.has(a.employeeId)) {
         byEmployee.set(a.employeeId, { name: a.employeeName, rows: [] });
       }
@@ -46,6 +47,7 @@ export class Rest12hRule implements Rule {
       for (let i = 1; i < intervals.length; i++) {
         const prev = intervals[i - 1];
         const curr = intervals[i];
+        if (!isInMonth(curr.day, ctx.year, ctx.month)) continue;
         const restHours = (curr.start.getTime() - prev.end.getTime()) / 3_600_000;
         if (restHours < 12) {
           issues.push({

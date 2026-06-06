@@ -54,6 +54,7 @@ export class GenerationWorkspace {
   readonly canWorkOpts: {
     shiftMap: ShiftMap;
     roleByEmployeeId: Map<number, string>;
+    shiftRestrictions?: Map<number, Set<string>>;
   };
 
   private coverageGapsCache: Array<{ date: string; shiftCode: string }> | null = null;
@@ -87,7 +88,11 @@ export class GenerationWorkspace {
     this.apaoEmps = input.employees.filter((e) =>
       isMotorApaoRole(e.employee.role, this.motorRoleCodes),
     );
-    this.canWorkOpts = { shiftMap: this.shiftMap, roleByEmployeeId: this.roleByDomain };
+    this.canWorkOpts = {
+      shiftMap: this.shiftMap,
+      roleByEmployeeId: this.roleByDomain,
+      shiftRestrictions: input.shiftRestrictions,
+    };
     this.seedCrossMonthHistory();
   }
 

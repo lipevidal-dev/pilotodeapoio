@@ -106,6 +106,7 @@ export class GenerateScheduleUseCase {
     const vacationReturnDays = await this.calendarRepo.listVacationReturnDaysForMonth(year, month);
 
     const crossMonthHistory = await this.scheduleRepo.loadCrossMonthHistory(year, month);
+    const shiftRestrictionRows = await this.scheduleRepo.listShiftRestrictionsForMonth(year, month);
 
     const approvedDayOff = await this.calendarRepo.listApprovedDayOffForMonth(year, month);
 
@@ -156,6 +157,7 @@ export class GenerateScheduleUseCase {
       vacationReturnDays,
 
       crossMonthHistory,
+      shiftRestrictionRows,
 
       approvedDayOff,
       flightDays,

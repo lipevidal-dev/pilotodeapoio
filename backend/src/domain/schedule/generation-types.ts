@@ -33,6 +33,13 @@ export interface GenerationInput {
   approvedDayOff: Array<{ employeeUuid: string; date: string }>;
   flightDays: Array<{ employeeUuid: string; date: string; description?: string }>;
   crossMonthHistory?: CrossMonthHistory;
+  /** employeeId (domínio) → turnos bloqueados no mês */
+  shiftRestrictions?: Map<number, Set<string>>;
+}
+
+export interface ShiftRestrictionRow {
+  employeeUuid: string;
+  shiftCode: string;
 }
 export interface GeneratedAssignment {
   employeeUuid: string;
