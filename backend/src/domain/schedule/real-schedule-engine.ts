@@ -1,7 +1,7 @@
 import { validateSchedule } from "../rules/engine.js";
 import { runFinalCoverageGate } from "../rules/coverage-gate.js";
 import { IDEAL_PAO_REST_COUNT } from "../rules/constants.js";
-import { calculateOperationalDemand } from "./demand-planning-demand.js";
+import { calculateTurnRateioDemand } from "./demand-planning-demand.js";
 import { buildGenerationInsights } from "./generation-insights.js";
 import { buildExtendedSummary } from "./generation-summary.js";
 import { GenerationWorkspace } from "./generation-workspace.js";
@@ -39,9 +39,10 @@ export class RealScheduleEngine {
 
   execute(ws: GenerationWorkspace): RealMotorReport {
     ws.realV1ManualCommonFolga = true;
+    ws.enforceMonthStart6x1FromPrevious();
     const stepNotes: string[] = [];
     const warnings: RealMotorReport["warnings"] = [];
-    const demand = calculateOperationalDemand(ws.days.length);
+    const demand = calculateTurnRateioDemand(ws.days.length, ws.input.shifts);
     stepNotes.push(`[1] Dados carregados: ${ws.paoEmps.length} PAO(s), demanda ${demand.totalDemand}.`);
     stepNotes.push(
       "[1b] REAL_V1: turnos + 1 folga social/PAO; folga comum, FA e voos ficam para edição manual.",
@@ -127,8 +128,8 @@ export class RealScheduleEngine {
       stepNotes.push("[7] Voos não gerados — alocação manual na escala.");
     }
 
-    ws.ensureMinShiftsForFullMonthNoFlight(["T6", "T7", "T8"]);
-    stepNotes.push("[7b] PAO mês sem voo: turnos T6/T7 priorizados para meta de 20 dias.");
+    ws.ensureMinShiftsForFullMonthNoFlight();
+    stepNotes.push("[7b] PAO mês sem voo: turnos priorizados até meta do rateio.");
 
     const parallel = allocateParallelShifts(ws);
     stepNotes.push(

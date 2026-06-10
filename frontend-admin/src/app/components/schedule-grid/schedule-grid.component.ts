@@ -9,6 +9,7 @@ import { ButtonModule } from 'primeng/button';
 import { ScheduleCellComponent } from '../schedule-cell/schedule-cell.component';
 import { EmployeeSummaryComponent } from '../employee-summary/employee-summary.component';
 import { OperationalTotalsPanelComponent } from '../operational-totals-panel/operational-totals-panel.component';
+import type { EmployeeType } from '../../models/api.models';
 import type { ScheduleCellData, ScheduleCellKind, ScheduleGridData } from '../../models/schedule-grid.models';
 import type { GridAuditTotals } from '../../utils/operational-audit.util';
 import {
@@ -25,6 +26,7 @@ import {
 export interface GridSelectionComplete {
   employeeId: string;
   employeeName: string;
+  employeeType: EmployeeType;
   startDay: number;
   endDay: number;
   /** Dias selecionados com Ctrl+clique (podem ser não contíguos). */
@@ -138,11 +140,27 @@ export class ScheduleGridComponent {
   }
 
   employeeName(employeeId: string): string {
+    return this.employeeRow(employeeId)?.name ?? employeeId;
+  }
+
+  employeeType(employeeId: string): EmployeeType {
     for (const group of this.grid().groups) {
       const row = group.rows.find((r) => r.employeeId === employeeId);
-      if (row) return row.name;
+      if (row) {
+        const normalized = String(row.type ?? '').trim().toUpperCase();
+        if (normalized === 'PAO' || normalized === 'APAO') return normalized;
+        return group.type === 'PAO' ? 'PAO' : 'APAO';
+      }
     }
-    return employeeId;
+    return 'PAO';
+  }
+
+  private employeeRow(employeeId: string) {
+    for (const group of this.grid().groups) {
+      const row = group.rows.find((r) => r.employeeId === employeeId);
+      if (row) return row;
+    }
+    return undefined;
   }
 
   /** Modo 1a — Shift+clique: multi-select em células preenchidas; popup ao soltar Shift. */
@@ -258,6 +276,7 @@ export class ScheduleGridComponent {
     this.selectionCompleted.emit({
       employeeId: this.ctrlMultiEmployeeId,
       employeeName: this.employeeName(this.ctrlMultiEmployeeId),
+      employeeType: this.employeeType(this.ctrlMultiEmployeeId),
       startDay: days[0]!,
       endDay: days[days.length - 1]!,
       days,
@@ -334,6 +353,7 @@ export class ScheduleGridComponent {
     this.selectionCompleted.emit({
       employeeId: this.dragAnchor.employeeId,
       employeeName: this.employeeName(this.dragAnchor.employeeId),
+      employeeType: this.employeeType(this.dragAnchor.employeeId),
       startDay,
       endDay,
     });

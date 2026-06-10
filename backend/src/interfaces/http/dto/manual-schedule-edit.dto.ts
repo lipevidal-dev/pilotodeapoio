@@ -4,6 +4,10 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const employeeIdSchema = z.string().uuid();
 
 export const manualAllocationTypeSchema = z.enum([
+  "T1",
+  "T2",
+  "T3",
+  "T4",
   "T6",
   "T7",
   "T8",

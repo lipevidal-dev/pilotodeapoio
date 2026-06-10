@@ -238,6 +238,22 @@ $summary-block-w: calc(9 * #{$sum-narrow-w} + #{$sum-status-w});
     max-width: var(--col-day-w);
   }
 
+  .day-head-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.05rem;
+    min-height: 2rem;
+  }
+
+  .coverage-gap-icon {
+    width: 0.85rem;
+    height: 0.85rem;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
   .col-weekend {
     background: rgba(241, 90, 34, 0.04);
   }

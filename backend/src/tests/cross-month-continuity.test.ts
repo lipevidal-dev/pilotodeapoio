@@ -106,6 +106,21 @@ describe("Continuidade entre meses", () => {
     ).toBe(0);
   });
 
+  it("4. folga pós-férias no 1º dia quando férias terminaram no mês anterior", () => {
+    const input = realisticGenerationInput({
+      year: 2026,
+      month: 7,
+      vacationReturnDays: [{ employeeUuid: paoUuid(2), date: "2026-07-01" }],
+    });
+    const ws = new GenerationWorkspace(input);
+    ws.applyHardBlocks();
+    expect(
+      ws.allocations.some(
+        (a) => a.employeeUuid === paoUuid(2) && a.date === "2026-07-01" && a.label === "FOLGA",
+      ),
+    ).toBe(true);
+  });
+
   it("5. FANI no último dia do mês anterior gera folga no 1º dia do mês seguinte", () => {
     const input = realisticGenerationInput({
       year: 2026,
@@ -126,19 +141,55 @@ describe("Continuidade entre meses", () => {
     ).toBe(true);
   });
 
-  it("4. folga pós-férias no 1º dia quando férias terminaram no mês anterior", () => {
+  it("7. carryover 6x1 impõe folga no 1º dia após 6 turnos no fim de junho", () => {
+    const uuid = paoUuid(0);
     const input = realisticGenerationInput({
       year: 2026,
       month: 7,
-      vacationReturnDays: [{ employeeUuid: paoUuid(2), date: "2026-07-01" }],
+      crossMonthHistory: {
+        assignments: [
+          { employeeUuid: uuid, date: "2026-06-25", shiftCode: "T6" },
+          { employeeUuid: uuid, date: "2026-06-26", shiftCode: "T6" },
+          { employeeUuid: uuid, date: "2026-06-27", shiftCode: "T6" },
+          { employeeUuid: uuid, date: "2026-06-28", shiftCode: "T6" },
+          { employeeUuid: uuid, date: "2026-06-29", shiftCode: "T6" },
+          { employeeUuid: uuid, date: "2026-06-30", shiftCode: "T6" },
+        ],
+        allocations: [],
+      },
     });
     const ws = new GenerationWorkspace(input);
     ws.applyHardBlocks();
+    ws.enforceMonthStart6x1FromPrevious();
     expect(
       ws.allocations.some(
-        (a) => a.employeeUuid === paoUuid(2) && a.date === "2026-07-01" && a.label === "FOLGA",
+        (a) => a.employeeUuid === uuid && a.date === "2026-07-01" && a.label === "FOLGA",
       ),
     ).toBe(true);
+  });
+
+  it("9. simuladores no fim de junho contam na continuidade 6x1 de julho", () => {
+    const uuid = paoUuid(2);
+    const input = realisticGenerationInput({
+      year: 2026,
+      month: 7,
+      crossMonthHistory: {
+        assignments: [],
+        allocations: [
+          { employeeUuid: uuid, date: "2026-06-29", label: "SIMULADOR" },
+          { employeeUuid: uuid, date: "2026-06-30", label: "SIMULADOR" },
+        ],
+      },
+    });
+    const ws = new GenerationWorkspace(input);
+    ws.applyHardBlocks();
+    const did = ws.uuidToDomain.get(uuid)!;
+    expect(ws.tryAssignShift(uuid, "2026-07-01", "T6")).toBe(true);
+    expect(ws.tryAssignShift(uuid, "2026-07-02", "T6")).toBe(true);
+    expect(ws.tryAssignShift(uuid, "2026-07-03", "T6")).toBe(true);
+    expect(ws.tryAssignShift(uuid, "2026-07-04", "T6")).toBe(true);
+    expect(ws.tryAssignShift(uuid, "2026-07-05", "T6")).toBe(false);
+    expect(ws.planned.get(`${did}|2026-07-05`)).toBeUndefined();
   });
 
   it(

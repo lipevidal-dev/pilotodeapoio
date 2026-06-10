@@ -28,6 +28,8 @@ export interface GenerationInput {
     employeeUuid: string;
     date: string;
     label: string;
+    startTime?: string;
+    endTime?: string;
   }>;
   vacationDays: Array<{ employeeUuid: string; date: string }>;
   vacationReturnDays?: VacationReturnDay[];
@@ -61,6 +63,8 @@ export interface GeneratedAllocation {
   employeeUuid: string;
   date: string;
   label: string;
+  startTime?: string;
+  endTime?: string;
 }
 
 export interface GenerationSummary {

@@ -60,6 +60,8 @@ export class PreAllocationRepository {
     date: Date;
     label: string;
     notes?: string;
+    startTime?: string;
+    endTime?: string;
   }) {
     return prisma.preAllocation.create({
       data,

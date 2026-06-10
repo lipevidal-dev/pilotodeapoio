@@ -32,8 +32,14 @@ export interface CanWorkOptions {
   roleByEmployeeId: Map<number, string>;
   maxMonthlyWork?: number;
   coverageEmergency?: boolean;
+  /** Edição manual: operador pode alocar APAO sem PAO cobrindo o intervalo. */
+  skipApaoPaoCoverageCheck?: boolean;
+  /** Edição manual: operador pode alocar APAO mesmo com outro APAO no mesmo intervalo. */
+  skipApaoOverlapCheck?: boolean;
   /** Edição manual: operador pode alocar além do limite físico de 2 estações. */
   skipSimultaneousStationsCheck?: boolean;
+  /** Bloqueios do mês anterior + corrente para continuidade 6x1 (VOO, SIM, etc.). */
+  continuityBlocked?: BlockedMap;
 }
 
 function monthlyWorkCount(employeeId: number, planned: PlannedMap): number {
@@ -64,6 +70,8 @@ export function canWork(
     roleByEmployeeId,
     maxMonthlyWork,
     coverageEmergency = false,
+    skipApaoPaoCoverageCheck = false,
+    skipApaoOverlapCheck = false,
     skipSimultaneousStationsCheck = false,
   } = options;
 
@@ -169,26 +177,31 @@ export function canWork(
   const isApaoShift = shiftRole === "APAO" || shiftRole === "BOTH";
 
   if (isApaoShift && cargo === "APAO") {
-    if (!apaoHasNoOtherApaoOverlap(empId, workDay, shiftCode, planned, shiftMap)) {
+    if (
+      !skipApaoOverlapCheck &&
+      !apaoHasNoOtherApaoOverlap(empId, workDay, shiftCode, planned, shiftMap)
+    ) {
       return { ok: false, reason: "dois APAOs simultâneos não permitido" };
     }
 
-    const { start, end } = shiftStartEnd(workDay, info!.startTime, info!.endTime);
-    const tempPlanned = new Map(planned);
-    tempPlanned.set(blockKey, shiftCode);
-    if (!intervalCoveredByPao(start, end, tempPlanned, shiftMap, roleByEmployeeId)) {
-      return { ok: false, reason: "APAO sem PAO cobrindo o turno" };
+    if (!skipApaoPaoCoverageCheck) {
+      const { start, end } = shiftStartEnd(workDay, info!.startTime, info!.endTime);
+      const tempPlanned = new Map(planned);
+      tempPlanned.set(blockKey, shiftCode);
+      if (!intervalCoveredByPao(start, end, tempPlanned, shiftMap, roleByEmployeeId)) {
+        return { ok: false, reason: "APAO sem PAO cobrindo o turno" };
+      }
     }
   }
 
   if (isApaoShift && cargo === "APAO") {
-    if (consecutiveWorkCount(empId, workDay, planned) >= 6) {
+    if (consecutiveWorkCount(empId, workDay, planned, options.continuityBlocked) >= 6) {
       return { ok: false, reason: "APAO precisa folgar após 6 dias consecutivos" };
     }
   }
 
   if (cargo !== "PAO FCF" && !coverageEmergency) {
-    if (consecutiveWorkCount(empId, workDay, planned) >= 6) {
+    if (consecutiveWorkCount(empId, workDay, planned, options.continuityBlocked) >= 6) {
       return { ok: false, reason: "mais de 6 dias consecutivos" };
     }
     if (shiftCode === "T8" && t8PreviousCount(empId, workDay, planned) >= 2) {

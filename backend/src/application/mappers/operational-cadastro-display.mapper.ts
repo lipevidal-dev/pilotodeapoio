@@ -22,7 +22,7 @@ export interface OperationalCadastroDisplay {
   metadata?: Record<string, unknown>;
 }
 
-const PRE_ALLOC_LABELS = new Set(["SIMULADOR", "CURSO", "CMA", "OUTRO"]);
+const PRE_ALLOC_LABELS = new Set(["SIMULADOR", "CURSO", "CMA", "OUTRO", "FOLGA PEDIDA", "FP"]);
 
 function toIsoNoon(date: string): string {
   if (date.includes("T")) return date;
@@ -92,12 +92,15 @@ export function buildOperationalCadastroDisplay(input: {
 
   for (const p of input.preAllocations) {
     const label = p.label.toUpperCase();
-    if (!PRE_ALLOC_LABELS.has(label)) continue;
+    if (!PRE_ALLOC_LABELS.has(label) && !label.includes("FOLGA PEDIDA") && label !== "FP") {
+      continue;
+    }
+    const displayLabel = label.includes("FOLGA PEDIDA") || label === "FP" ? "FOLGA PEDIDA" : p.label;
     out.push({
       id: p.id,
       employeeId: p.employeeId,
       date: toIsoNoon(isoDateKey(p.date)),
-      label: p.label,
+      label: displayLabel,
       source: "pre_allocation",
       sourceId: p.id,
       priority: operationalLabelPriority(p.label),

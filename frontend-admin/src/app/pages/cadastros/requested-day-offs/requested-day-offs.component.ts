@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TableModule } from 'primeng/table';
@@ -16,6 +16,8 @@ import { EmployeeService } from '../../../services/employee.service';
 import type { DayOccupancyMap } from '../../../utils/employee-occupancy.util';
 import { sortEmployeesBySeniority } from '../../../utils/employee-sort.util';
 import { OperationalCalendarComponent } from '../../../components/operational-calendar/operational-calendar.component';
+import { CadastroEmployeeFilterComponent } from '../../../components/cadastro-employee-filter/cadastro-employee-filter.component';
+import { filterCadastroRowsByEmployee } from '../../../utils/cadastro-list-filter.util';
 import {
   batchDeleteDetail,
   batchResultDetail,
@@ -38,6 +40,7 @@ import type { Employee, RequestedDayOff, RequestedDayOffStatus } from '../../../
     SelectModule,
     TextareaModule,
     OperationalCalendarComponent,
+    CadastroEmployeeFilterComponent,
   ],
   templateUrl: './requested-day-offs.component.html',
   styleUrl: '../cadastros-shared.scss',
@@ -52,6 +55,14 @@ export class RequestedDayOffsComponent implements OnInit {
 
   readonly rows = signal<RequestedDayOff[]>([]);
   readonly employees = signal<Employee[]>([]);
+  readonly filterEmployeeId = signal('');
+  readonly filteredRows = computed(() =>
+    filterCadastroRowsByEmployee(
+      this.rows(),
+      this.filterEmployeeId(),
+      (row) => row.employeeId,
+    ),
+  );
   readonly loading = signal(false);
   readonly dialogVisible = signal(false);
   readonly saving = signal(false);
@@ -75,6 +86,11 @@ export class RequestedDayOffsComponent implements OnInit {
     { label: 'Pendente', value: 'PENDING' as const },
     { label: 'Rejeitada', value: 'REJECTED' as const },
   ];
+
+  onFilterEmployeeChange(employeeId: string): void {
+    this.filterEmployeeId.set(employeeId);
+    this.selectedRows = [];
+  }
 
   ngOnInit(): void {
     this.loadEmployees();

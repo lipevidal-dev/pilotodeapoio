@@ -11,10 +11,19 @@
       <label class="field-label">Mês filtro</label>
       <p-inputNumber [(ngModel)]="filterMonth" [useGrouping]="false" [min]="1" [max]="12" />
     </div>
+    <app-cadastro-employee-filter
+      [employees]="employees()"
+      [employeeId]="filterEmployeeId()"
+      (employeeIdChange)="onFilterEmployeeChange($event)"
+    />
     <p-button label="Filtrar" icon="pi pi-filter" severity="secondary" (onClick)="load()" />
   </div>
 
   <div class="toolbar-row">
+    <span class="toolbar-hint">
+      <i class="pi pi-calendar"></i>
+      {{ filteredRows().length }} de {{ rows().length }} registros
+    </span>
     <div class="toolbar-actions">
       <p-button
         label="Excluir selecionados"
@@ -30,12 +39,12 @@
   </div>
 
   <p-table
-    [value]="rows()"
+    [value]="filteredRows()"
     [(selection)]="selectedRows"
     dataKey="id"
     [loading]="loading()"
     styleClass="gol-table p-datatable-sm"
-    [paginator]="rows().length > 15"
+    [paginator]="filteredRows().length > 15"
     [rows]="15"
   >
     <ng-template pTemplate="colgroup">
@@ -53,6 +62,9 @@
       <tr>
         <th>Funcionário</th>
         <th>Data</th>
+        @if (isSimulatorCadastro) {
+          <th>Horário</th>
+        }
         <th>Tipo</th>
         <th>Mês ref.</th>
         <th>Observação</th>
@@ -64,6 +76,9 @@
       <tr>
         <td>{{ row.employee?.name ?? row.employeeId }}</td>
         <td>{{ formatDate(row.date) }}</td>
+        @if (isSimulatorCadastro) {
+          <td>{{ formatTimeRange(row) }}</td>
+        }
         <td><p-tag [value]="config.label" [severity]="config.tagSeverity" /></td>
         <td>{{ row.scheduleMonth?.month }}/{{ row.scheduleMonth?.year }}</td>
         <td>{{ row.notes ?? '—' }}</td>
@@ -74,7 +89,7 @@
       </tr>
     </ng-template>
     <ng-template pTemplate="emptymessage">
-      <tr><td colspan="7">Nenhum registro neste período.</td></tr>
+      <tr><td [attr.colspan]="isSimulatorCadastro ? 8 : 7">Nenhum registro neste período.</td></tr>
     </ng-template>
   </p-table>
 </p-card>
@@ -137,6 +152,19 @@
       [syncMonth]="formMonth"
       hint="Datas ocupadas mostram a sigla e ficam bloqueadas"
     />
+    @if (isSimulatorCadastro) {
+      <div class="form-row-2">
+        <div>
+          <label class="field-label">Hora início (HH:MM)</label>
+          <input pInputText class="w-full" [(ngModel)]="formStartTime" placeholder="08:00" />
+        </div>
+        <div>
+          <label class="field-label">Hora fim (HH:MM)</label>
+          <input pInputText class="w-full" [(ngModel)]="formEndTime" placeholder="20:00" />
+        </div>
+      </div>
+      <p class="occupancy-loading">Horário opcional — quando informado, o motor respeita descanso mínimo de 12h.</p>
+    }
     <div>
       <label class="field-label">Observação</label>
       <textarea pTextarea class="w-full" rows="2" [(ngModel)]="formNotes"></textarea>

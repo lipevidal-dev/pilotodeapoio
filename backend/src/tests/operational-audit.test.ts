@@ -15,6 +15,7 @@ function baseStats(overrides: Partial<EmployeeOperationalSummary> = {}): Employe
     name: "PAO Test",
     type: "PAO",
     turnos: 20,
+    assignedShiftCount: 20,
     diasTrabalhados: 22,
     folgas: 10,
     folgaSocial: 2,

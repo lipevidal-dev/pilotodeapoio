@@ -160,7 +160,7 @@ export class EmployeesComponent implements OnInit {
 
   calendarViewMonth = new Date().getMonth() + 1;
 
-  filter: EmployeeFilter = 'all';
+  filter = signal<EmployeeFilter>('all');
 
 
 
@@ -226,7 +226,7 @@ export class EmployeesComponent implements OnInit {
 
     let filtered: Employee[];
 
-    switch (this.filter) {
+    switch (this.filter()) {
 
       case 'active':
 
@@ -248,7 +248,7 @@ export class EmployeesComponent implements OnInit {
 
       default:
 
-        filtered = rows.filter((e) => e.cargoCode === this.filter);
+        filtered = rows.filter((e) => e.cargoCode === this.filter());
 
     }
 

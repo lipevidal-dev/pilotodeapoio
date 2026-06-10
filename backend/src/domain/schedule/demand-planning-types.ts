@@ -17,7 +17,7 @@ export interface OperationalDemand {
   daysInMonth: number;
   shiftsPerDay: number;
   totalDemand: number;
-  perShift: { T6: number; T7: number; T8: number };
+  perShift: Record<string, number>;
 }
 
 export interface EmployeeCapacity {

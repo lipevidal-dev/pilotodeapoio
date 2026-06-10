@@ -10,6 +10,15 @@ export interface RepairResult {
 const MAX_REPAIR_ROUNDS = 40;
 const REPAIR_SHIFTS = ["T6", "T7", "T8"] as const;
 
+function tryAssignForCoverage(
+  ws: GenerationWorkspace,
+  uuid: string,
+  day: string,
+  code: string,
+): boolean {
+  return ws.tryAssignShift(uuid, day, code) || ws.tryAssignShift(uuid, day, code, true);
+}
+
 /**
  * Repara furos de cobertura sem sobrescrever bloqueios ou criar T8 isolado.
  */
@@ -53,11 +62,15 @@ export class ScheduleRepairEngine {
   ): boolean {
     if (this.tryDirectFill(ws, gap.date, gap.shiftCode)) return true;
 
-    for (const c of [...ws.paoEmps].sort((a, b) => ws.workCount(a.uuid) - ws.workCount(b.uuid))) {
+    for (const c of [...ws.paoEmps].sort(
+      (a, b) =>
+        ws.workCount(a.uuid) - ws.workCount(b.uuid) ||
+        a.employee.seniority - b.employee.seniority,
+    )) {
       if (!ws.releaseOneGeneratorFolga(c.uuid, gap.date)) continue;
       if (gap.shiftCode === "T8") {
         if (ws.tryAssignT8Coverage(gap.date, [c])) return true;
-      } else if (ws.tryAssignShift(c.uuid, gap.date, gap.shiftCode)) {
+      } else if (tryAssignForCoverage(ws, c.uuid, gap.date, gap.shiftCode)) {
         return true;
       }
     }
@@ -75,7 +88,7 @@ export class ScheduleRepairEngine {
       return ws.tryAssignT8Coverage(day, candidates);
     }
     for (const c of candidates) {
-      if (ws.tryAssignShift(c.uuid, day, code)) return true;
+      if (tryAssignForCoverage(ws, c.uuid, day, code)) return true;
     }
     return false;
   }
@@ -89,7 +102,7 @@ export class ScheduleRepairEngine {
         if (ws.planned.get(`${did}|${day}`) !== code) continue;
 
         ws.unassignShift(c.uuid, day);
-        if (ws.tryAssignShift(c.uuid, day, missingCode)) {
+        if (tryAssignForCoverage(ws, c.uuid, day, missingCode)) {
           if (this.tryDirectFill(ws, day, code)) return true;
           ws.unassignShift(c.uuid, day);
           ws.tryAssignShift(c.uuid, day, code);

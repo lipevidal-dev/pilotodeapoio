@@ -7,6 +7,7 @@ import { classifyIssue, filterByLevel } from "../domain/schedule/violation-level
 import { ScheduleRepairEngine } from "../domain/schedule/schedule-repair-engine.js";
 import { GenerationWorkspace } from "../domain/schedule/generation-workspace.js";
 import { minimalPaoInput } from "./generation-fixtures.js";
+import { paoUuid } from "./schedule-slices/slice-helpers.js";
 import { ScheduleGenerationEngine } from "../domain/schedule/schedule-generation-engine.js";
 import { PublishScheduleUseCase } from "../application/use-cases/publish-schedule.use-case.js";
 import { PublishBlockedCriticalViolationsError } from "../application/errors/schedule.errors.js";
@@ -127,8 +128,14 @@ describe("RepairEngine", () => {
       const ws = new GenerationWorkspace(input);
       ws.applyHardBlocks();
       const day = "2026-06-15";
-      ws.tryAssignShift("uuid-2", day, "T7");
-      ws.tryAssignShift("uuid-3", day, "T8");
+      for (const d of ws.days) {
+        if (d === day) continue;
+        ws.tryAssignShift(paoUuid(0), d, "T6", true);
+        ws.tryAssignShift(paoUuid(1), d, "T7", true);
+        ws.tryAssignShift(paoUuid(2), d, "T8", true);
+      }
+      ws.tryAssignShift(paoUuid(1), day, "T7", true);
+      ws.tryAssignShift(paoUuid(2), day, "T8", true);
       expect(ws.hasPaoCoverage(day, "T6")).toBe(false);
 
       const repair = new ScheduleRepairEngine().repair(ws, []);

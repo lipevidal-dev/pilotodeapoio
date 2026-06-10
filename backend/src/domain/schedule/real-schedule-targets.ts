@@ -65,8 +65,7 @@ export function calculateRequiredT6T7Shifts(
       vacationDays -
       breakdown.turnosT8 -
       breakdown.turnosT6 -
-      breakdown.turnosT7 -
-      entry.usefulOperationalDays,
+      breakdown.turnosT7,
   );
 
   let requiredT6T7 = Math.min(entry.requiredT6T7, maxAdditionalT6T7);

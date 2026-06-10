@@ -5,6 +5,8 @@ import type {
   ScheduleAssignmentRow,
 } from '../models/api.models';
 import { compareEmployeesBySeniority } from './employee-sort.util';
+import { listParallelShiftCodes } from './coverage-type.util';
+import type { Shift } from '../models/api.models';
 
 import type {
 
@@ -87,9 +89,9 @@ export function mapLabelToCell(label: string): ScheduleCellData {
 
   if (n.includes('VOO')) return { display: 'VOO', kind: 'voo', title: label };
 
-  if (n.includes('SIMULADOR')) return { display: 'SIMULADOR', kind: 'simulador', title: label };
+  if (n.includes('SIMULADOR')) return { display: 'SIM', kind: 'simulador', title: label };
 
-  if (n.includes('CURSO')) return { display: 'CURSO', kind: 'curso', title: label };
+  if (n.includes('CURSO')) return { display: 'CRS', kind: 'curso', title: label };
 
   if (n.includes('CMA')) return { display: 'CMA', kind: 'cma', title: label };
 
@@ -167,6 +169,32 @@ function isGeneratorPreallocDisplayLabel(label: string): boolean {
   return false;
 }
 
+/** Cadastros operacionais e FP manual persistidos em preAllocations. */
+function isCadastroPreallocDisplayLabel(label: string): boolean {
+  const n = normalizeLabelKey(label);
+  if (n === 'SIMULADOR' || n.includes('SIMULADOR')) return true;
+  if (n === 'CURSO' || n.includes('CURSO')) return true;
+  if (n === 'CMA') return true;
+  if (n === 'OUTRO') return true;
+  if (n === 'FP' || n.includes('FOLGA PEDIDA')) return true;
+  return false;
+}
+
+function buildCadastroPreallocLabelMap(
+  preAllocations: PreAllocationRow[],
+): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+
+  for (const row of preAllocations) {
+    if (!isCadastroPreallocDisplayLabel(row.label)) continue;
+    const key = `${row.employeeId}|${dateKey(row.date)}`;
+    const labels = map.get(key) ?? [];
+    labels.push(row.label);
+    map.set(key, labels);
+  }
+  return map;
+}
+
 export function labelDisplayPriority(label: string): number {
   const n = normalizeText(label);
   if (n.includes('FERIAS')) return 100;
@@ -204,7 +232,7 @@ export function mapCellToCalendarDisplay(cell: ScheduleCellData): { display: str
     case 'simulador':
       return { display: 'SIM', title };
     case 'curso':
-      return { display: 'CURSO', title };
+      return { display: 'CRS', title };
     case 'cma':
       return { display: 'CMA', title };
     case 'outro':
@@ -247,28 +275,34 @@ export function resolveScheduleCell(
 
 
 
-function countForSummary(cell: ScheduleCellData, stats: EmployeeSummaryStats): void {
+function countForSummary(
+  cell: ScheduleCellData,
+  stats: EmployeeSummaryStats,
+  parallelShiftCodes: Set<string>,
+): void {
 
   switch (cell.kind) {
     case 'shift': {
       const d = cell.display.toUpperCase();
+      const isParallel = parallelShiftCodes.has(d);
       if (d === 'T6') {
         stats.t6++;
         stats.turnos++;
-        stats.diasTrabalhados++;
+        if (!isParallel) stats.diasTrabalhados++;
       } else if (d === 'T7') {
         stats.t7++;
         stats.turnos++;
-        stats.diasTrabalhados++;
+        if (!isParallel) stats.diasTrabalhados++;
       } else if (d === 'T8') {
         stats.t8++;
         stats.turnos++;
-        stats.diasTrabalhados++;
+        if (!isParallel) stats.diasTrabalhados++;
       } else if (['T1', 'T2', 'T3', 'T4'].includes(d)) {
         stats.turnos++;
         stats.diasTrabalhados++;
       } else {
-        stats.diasTrabalhados++;
+        stats.turnos++;
+        if (!isParallel) stats.diasTrabalhados++;
       }
       break;
     }
@@ -528,6 +562,7 @@ function buildEmployeeRow(
   days: number,
   assignmentMap: Map<string, ScheduleAssignmentRow>,
   operationalLabelMap: Map<string, string[]>,
+  parallelShiftCodes: Set<string>,
 ): EmployeeRowData {
   const cells: ScheduleCellData[] = [];
   const summary = emptySummary();
@@ -544,7 +579,7 @@ function buildEmployeeRow(
   applyWeekendFpAsFolgaSocial(cells, year, month);
 
   for (const cell of cells) {
-    countForSummary(cell, summary);
+    countForSummary(cell, summary, parallelShiftCodes);
   }
 
   summary.folgaSocialOk = summary.folgaSocial >= 2;
@@ -576,6 +611,7 @@ export interface BuildGridInput {
   assignments: ScheduleAssignmentRow[];
   preAllocations: PreAllocationRow[];
   operationalCadastros?: OperationalCadastroRow[];
+  shifts?: Shift[];
 }
 
 
@@ -623,9 +659,10 @@ function mergeLabelMaps(
 }
 
 export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
-  const { year, month, employees, assignments, preAllocations, operationalCadastros } = input;
+  const { year, month, employees, assignments, preAllocations, operationalCadastros, shifts } = input;
   const days = daysInMonth(year, month);
   const dayNumbers = Array.from({ length: days }, (_, i) => i + 1);
+  const parallelShiftCodes = listParallelShiftCodes(shifts);
 
   const weekdayLabels = dayNumbers.map((d) => {
     const wd = new Date(year, month - 1, d).getDay();
@@ -639,7 +676,10 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
 
   const operationalLabelMap = mergeLabelMaps(
     buildOperationalLabelMap(operationalCadastros),
-    buildGeneratorPreallocLabelMap(preAllocations),
+    mergeLabelMaps(
+      buildCadastroPreallocLabelMap(preAllocations),
+      buildGeneratorPreallocLabelMap(preAllocations),
+    ),
   );
 
   const employeeById = new Map(employees.map((e) => [e.id, e]));
@@ -667,7 +707,15 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
   const apaoRows: EmployeeRowData[] = [];
 
   for (const emp of allEmployees) {
-    const row = buildEmployeeRow(emp, year, month, days, assignmentMap, operationalLabelMap);
+    const row = buildEmployeeRow(
+      emp,
+      year,
+      month,
+      days,
+      assignmentMap,
+      operationalLabelMap,
+      parallelShiftCodes,
+    );
     if (emp.type === 'PAO') {
       paoRows.push(row);
     } else {

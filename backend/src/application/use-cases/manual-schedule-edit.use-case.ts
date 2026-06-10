@@ -12,6 +12,7 @@ import { CalendarRepository } from "../../infrastructure/repositories/calendar.r
 import { ManualScheduleEditRepository } from "../../infrastructure/repositories/manual-schedule-edit.repository.js";
 import { ScheduleRepository } from "../../infrastructure/repositories/schedule.repository.js";
 import { buildContextFromDbParts } from "../../infrastructure/mappers/schedule-context.mapper.js";
+import { employeeCargoCode } from "../../infrastructure/mappers/employee.mapper.js";
 import { validationIssuesToDb } from "../../infrastructure/mappers/violation.mapper.js";
 import { isoDateKey } from "../../domain/rules/date-keys.js";
 import {
@@ -267,7 +268,7 @@ export class ManualScheduleEditUseCase {
     const approvedDayOff = await this.calendarRepo.listApprovedDayOffForMonth(month.year, month.month);
     const flightDays = await this.calendarRepo.listFlightDaysForMonth(month.year, month.month);
 
-    const ctx = buildContextFromDbParts({
+    const { context: ctx, uuidToDomainId } = buildContextFromDbParts({
       year: month.year,
       month: month.month,
       employees,
@@ -278,10 +279,11 @@ export class ManualScheduleEditUseCase {
 
     return buildManualEditValidationContext({
       ctx,
+      uuidToDomainId,
       employees: employees.map((e) => ({
         id: e.id,
         name: e.name,
-        role: e.type,
+        role: employeeCargoCode(e),
         seniorityNumber: e.seniorityNumber,
       })),
       shiftRestrictionRows,
@@ -318,7 +320,7 @@ export class ManualScheduleEditUseCase {
       month.month,
     );
 
-    const domainContext = buildContextFromDbParts({
+    const { context: domainContext } = buildContextFromDbParts({
       year: month.year,
       month: month.month,
       employees,

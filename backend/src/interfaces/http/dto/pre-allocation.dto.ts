@@ -26,13 +26,24 @@ export const createPreAllocationBatchSchema = z.object({
 
 export type CreatePreAllocationBatchBody = z.infer<typeof createPreAllocationBatchSchema>;
 
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
 export const labeledPreAllocationBatchSchema = z.object({
   year: z.number().int().min(2000).max(2100),
   month: z.number().int().min(1).max(12),
   employeeId: z.string().uuid(),
   dates: z.array(dateStr).min(1, "Informe ao menos uma data"),
   notes: z.string().optional(),
-});
+  startTime: hhmm.optional(),
+  endTime: hhmm.optional(),
+}).refine(
+  (data) => {
+    const hasStart = !!data.startTime;
+    const hasEnd = !!data.endTime;
+    return hasStart === hasEnd;
+  },
+  { message: "Informe hora inicial e final do simulador", path: ["endTime"] },
+);
 
 export type LabeledPreAllocationBatchBody = z.infer<typeof labeledPreAllocationBatchSchema>;
 

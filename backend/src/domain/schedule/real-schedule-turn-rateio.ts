@@ -1,19 +1,14 @@
-import { MIN_SHIFTS_FULL_NO_FLIGHT_MONTH } from "../employee/restrictions.js";
 import {
   calculateCapacitySummary,
   classifyPlanningGroup,
 } from "./demand-planning-capacity.js";
-import { calculateOperationalDemand } from "./demand-planning-demand.js";
+import { calculateTurnRateioDemand } from "./demand-planning-demand.js";
 import type { IndividualTarget, OperationalDemand, PlanningGroup } from "./demand-planning-types.js";
-import {
-  FULL_NO_FLIGHT_TARGET,
-  VACATION_TARGET_30,
-  VACATION_TARGET_31,
-} from "./demand-planning-types.js";
 import type { GenerationInputEmployee } from "./generation-types.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import type { ValidationIssue } from "./types.js";
 import { countWorkdayBreakdown } from "./real-schedule-workdays.js";
+import { countAllocatedOperationalTurns } from "./pao-rateio-shifts.js";
 
 export interface TurnRateioEntry {
   employeeUuid: string;
@@ -21,6 +16,7 @@ export interface TurnRateioEntry {
   group: PlanningGroup;
   seniority: number;
   turnTarget: number;
+  /** Informativo — cadastros não alteram meta de turnos. */
   usefulOperationalDays: number;
   allocatedTurns: number;
   requiredT6T7: number;
@@ -38,41 +34,26 @@ export interface TurnRateioResult {
   warnings: ValidationIssue[];
 }
 
-/** Curso/Simulador/CMA/Outro — reduz alvo de turnos; voo não entra no rateio. */
+/** Informativo — SIM/CRS/CMA/OUTRO não entram no rateio de turnos. */
 export function countUsefulOperationalDays(ws: GenerationWorkspace, uuid: string): number {
   const b = countWorkdayBreakdown(ws, uuid);
   return b.cursos + b.simuladores + b.cma + b.outros;
 }
 
-/** T6+T7+T8 alocados — ND, folgas e FP não contam. */
+/** Turnos alocados para fairness (T6/T7/T8/T9/…). */
 export function countAllocatedTurns(ws: GenerationWorkspace, uuid: string): number {
-  const b = countWorkdayBreakdown(ws, uuid);
-  return b.turnosT6 + b.turnosT7 + b.turnosT8;
+  return countAllocatedOperationalTurns(ws, uuid);
 }
 
-function vacationFixedTarget(daysInMonth: number): number {
-  return daysInMonth >= 31 ? VACATION_TARGET_31 : VACATION_TARGET_30;
-}
-
-function distributeIntegerTargets(
-  normals: Array<{ employeeUuid: string; useful: number }>,
-  totalPool: number,
-): Map<string, number> {
+function distributeIntegerTargets(employeeUuids: string[], totalPool: number): Map<string, number> {
   const out = new Map<string, number>();
-  if (normals.length === 0 || totalPool <= 0) return out;
+  if (employeeUuids.length === 0 || totalPool <= 0) return out;
 
-  const usefulSum = normals.reduce((n, x) => n + x.useful, 0);
-  const meta = (totalPool + usefulSum) / normals.length;
-
-  const floats = normals.map((n) => {
-    const raw = meta - n.useful;
+  const meta = totalPool / employeeUuids.length;
+  const floats = employeeUuids.map((uuid) => {
+    const raw = meta;
     const floor = Math.max(0, Math.floor(raw));
-    return {
-      uuid: n.employeeUuid,
-      raw,
-      floor,
-      frac: raw - floor,
-    };
+    return { uuid, raw, floor, frac: raw - floor };
   });
 
   let assigned = floats.reduce((n, f) => n + f.floor, 0);
@@ -98,15 +79,6 @@ function distributeIntegerTargets(
 
 function deviationReason(entry: TurnRateioEntry): string | undefined {
   if (entry.turnDeviation === 0) return undefined;
-  if (entry.group === "FULL_NO_FLIGHT") {
-    if (entry.turnDeviation < 0) {
-      return `PAO mês sem voo: ${entry.allocatedTurns}/${entry.turnTarget} turnos.`;
-    }
-    return `PAO mês sem voo acima da meta (${entry.allocatedTurns}/${entry.turnTarget}).`;
-  }
-  if (entry.usefulOperationalDays > 0 && entry.turnDeviation <= 0) {
-    return `${entry.usefulOperationalDays} cadastro(s) útil(is) reduziram alvo em ${entry.usefulOperationalDays} turno(s).`;
-  }
   if (entry.turnDeviation < 0) {
     return `Abaixo da meta de turnos (${entry.allocatedTurns}/${entry.turnTarget}).`;
   }
@@ -114,11 +86,11 @@ function deviationReason(entry: TurnRateioEntry): string | undefined {
 }
 
 /**
- * Rateio por turnos alocados — voos não entram; cadastros úteis reduzem alvo individual.
- * PAO FULL_NO_FLIGHT fica fora do rateio normal (meta fixa 20 turnos).
+ * Rateio por turnos alocados — média = demanda REQUIRED ÷ PAOs.
+ * Cadastros operacionais e dias trabalhados não alteram a meta.
  */
 export function computeTurnRateio(ws: GenerationWorkspace): TurnRateioResult {
-  const demand = calculateOperationalDemand(ws.days.length);
+  const demand = calculateTurnRateioDemand(ws.days.length, ws.input.shifts);
   const capacity = calculateCapacitySummary(ws);
   const capByUuid = new Map(capacity.byEmployee.map((c) => [c.employeeUuid, c]));
   const warnings: ValidationIssue[] = [];
@@ -126,106 +98,25 @@ export function computeTurnRateio(ws: GenerationWorkspace): TurnRateioResult {
   const targets: IndividualTarget[] = [];
 
   const sorted = [...ws.paoEmps].sort((a, b) => a.employee.seniority - b.employee.seniority);
-  let reservedDemand = 0;
+  const turnosRateio = demand.totalDemand;
+  const metaTurnosNormal = sorted.length > 0 ? turnosRateio / sorted.length : 0;
+  const turnTargets = distributeIntegerTargets(
+    sorted.map((e) => e.uuid),
+    turnosRateio,
+  );
 
   for (const emp of sorted) {
     const group = classifyPlanningGroup(ws, emp.uuid);
     const useful = countUsefulOperationalDays(ws, emp.uuid);
     const allocated = countAllocatedTurns(ws, emp.uuid);
     const cap = capByUuid.get(emp.uuid)!;
-
-    if (group === "FULL_NO_FLIGHT") {
-      const turnTarget = FULL_NO_FLIGHT_TARGET;
-      reservedDemand += turnTarget;
-      const requiredT6T7 = Math.max(0, turnTarget - allocated);
-      const entry: TurnRateioEntry = {
-        employeeUuid: emp.uuid,
-        name: emp.employee.name,
-        group,
-        seniority: emp.employee.seniority,
-        turnTarget,
-        usefulOperationalDays: useful,
-        allocatedTurns: allocated,
-        requiredT6T7,
-        turnDeviation: allocated - turnTarget,
-      };
-      entry.reasonForDeviation = deviationReason(entry);
-      entries.push(entry);
-      targets.push({
-        employeeUuid: emp.uuid,
-        name: emp.employee.name,
-        group,
-        seniority: emp.employee.seniority,
-        target: Math.min(requiredT6T7, cap.capacity),
-        capacity: cap.capacity,
-      });
-      if (turnTarget < MIN_SHIFTS_FULL_NO_FLIGHT_MONTH) {
-        warnings.push({
-          severity: "MÉDIA",
-          level: "WARNING",
-          type: "RESTRIÇÃO VOO MÊS INTEIRO",
-          date: "",
-          employee: emp.employee.name,
-          detail: `Motor real: meta ${turnTarget}/${MIN_SHIFTS_FULL_NO_FLIGHT_MONTH} turnos para mês sem voo.`,
-        });
-      }
-      continue;
-    }
-
-    if (group === "VACATION") {
-      const fixed = vacationFixedTarget(ws.days.length);
-      reservedDemand += fixed;
-      const turnTarget = Math.max(0, fixed - useful);
-      const requiredT6T7 = Math.max(0, turnTarget - allocated);
-      const entry: TurnRateioEntry = {
-        employeeUuid: emp.uuid,
-        name: emp.employee.name,
-        group,
-        seniority: emp.employee.seniority,
-        turnTarget,
-        usefulOperationalDays: useful,
-        allocatedTurns: allocated,
-        requiredT6T7,
-        turnDeviation: allocated - turnTarget,
-      };
-      entry.reasonForDeviation = deviationReason(entry);
-      entries.push(entry);
-      targets.push({
-        employeeUuid: emp.uuid,
-        name: emp.employee.name,
-        group,
-        seniority: emp.employee.seniority,
-        target: Math.min(requiredT6T7, cap.capacity),
-        capacity: cap.capacity,
-      });
-    }
-  }
-
-  const normals = sorted.filter((e) => classifyPlanningGroup(ws, e.uuid) === "NORMAL");
-  const turnosRateio = Math.max(0, demand.totalDemand - reservedDemand);
-  const usefulSum = normals.reduce((n, e) => n + countUsefulOperationalDays(ws, e.uuid), 0);
-  const metaTurnosNormal =
-    normals.length > 0 ? (turnosRateio + usefulSum) / normals.length : 0;
-
-  const normalTargets = distributeIntegerTargets(
-    normals.map((e) => ({
-      employeeUuid: e.uuid,
-      useful: countUsefulOperationalDays(ws, e.uuid),
-    })),
-    turnosRateio,
-  );
-
-  for (const emp of normals) {
-    const useful = countUsefulOperationalDays(ws, emp.uuid);
-    const allocated = countAllocatedTurns(ws, emp.uuid);
-    const cap = capByUuid.get(emp.uuid)!;
-    const turnTarget = normalTargets.get(emp.uuid) ?? 0;
+    const turnTarget = turnTargets.get(emp.uuid) ?? 0;
     const requiredT6T7 = Math.max(0, turnTarget - allocated);
 
     const entry: TurnRateioEntry = {
       employeeUuid: emp.uuid,
       name: emp.employee.name,
-      group: "NORMAL",
+      group,
       seniority: emp.employee.seniority,
       turnTarget,
       usefulOperationalDays: useful,
@@ -239,7 +130,7 @@ export function computeTurnRateio(ws: GenerationWorkspace): TurnRateioResult {
     targets.push({
       employeeUuid: emp.uuid,
       name: emp.employee.name,
-      group: "NORMAL",
+      group,
       seniority: emp.employee.seniority,
       target: Math.min(requiredT6T7, cap.capacity),
       capacity: cap.capacity,
@@ -270,26 +161,31 @@ function groupOrder(group: PlanningGroup): number {
   return 2;
 }
 
-/** Ordena PAOs para cobertura residual respeitando equilíbrio de turnos. */
+/** Ordena PAOs pelo desvio de turnos (assignedShiftCount vs meta). */
+export function sortPaoByAssignedTurnBalance(
+  ws: GenerationWorkspace,
+  entries?: TurnRateioEntry[],
+): GenerationInputEmployee[] {
+  const rateioEntries = entries ?? computeTurnRateio(ws).entries;
+  const byUuid = new Map(rateioEntries.map((e) => [e.employeeUuid, e]));
+  return [...ws.paoEmps].sort((a, b) => {
+    const devA = byUuid.get(a.uuid)?.turnDeviation ?? 0;
+    const devB = byUuid.get(b.uuid)?.turnDeviation ?? 0;
+    if (devA !== devB) return devA - devB;
+    return a.employee.seniority - b.employee.seniority;
+  });
+}
+
+/** Ordena PAOs abaixo da meta para cobertura residual. */
 export function sortPaoForTurnBalance(
   ws: GenerationWorkspace,
   _dayIndex: number,
   entries: TurnRateioEntry[],
 ): GenerationInputEmployee[] {
   const byUuid = new Map(entries.map((e) => [e.employeeUuid, e]));
-  return [...ws.paoEmps]
-    .filter((c) => {
-      const entry = byUuid.get(c.uuid);
-      if (!entry) return true;
-      if (entry.group === "FULL_NO_FLIGHT") return entry.allocatedTurns < entry.turnTarget;
-      return entry.allocatedTurns < entry.turnTarget;
-    })
-    .sort((a, b) => {
-      const ea = byUuid.get(a.uuid);
-      const eb = byUuid.get(b.uuid);
-      const devA = ea?.turnDeviation ?? 0;
-      const devB = eb?.turnDeviation ?? 0;
-      if (devA !== devB) return devA - devB;
-      return a.employee.seniority - b.employee.seniority;
-    });
+  return sortPaoByAssignedTurnBalance(ws, entries).filter((c) => {
+    const entry = byUuid.get(c.uuid);
+    if (!entry) return true;
+    return entry.allocatedTurns < entry.turnTarget;
+  });
 }

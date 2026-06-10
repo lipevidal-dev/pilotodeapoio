@@ -5,13 +5,15 @@ import {
   allocationsFromDb,
   assignmentsFromDb,
   filterHistoryByLookback,
+  lookbackStartDate,
+  mergeCrossMonthAllocations,
   type CrossMonthHistory,
 } from "../../domain/schedule/cross-month-history.js";
 import {
   CLEAR_GENERATED_LABELS,
   REGENERATION_CLEAR_LABELS,
 } from "../../domain/schedule/operational-labels.js";
-import { iterDays } from "../../domain/rules/dates.js";
+import { iterDays, addDays } from "../../domain/rules/dates.js";
 import { isoDateKey, toDbDate } from "../../domain/rules/date-keys.js";
 import { prisma } from "../database/prisma-client.js";
 export class ScheduleRepository {
@@ -19,8 +21,8 @@ export class ScheduleRepository {
     return prisma.scheduleMonth.findUnique({
       where: { year_month: { year, month } },
       include: {
-        assignments: { include: { employee: true }, orderBy: { date: "asc" } },
-        preAllocations: { include: { employee: true }, orderBy: { date: "asc" } },
+        assignments: { include: { employee: { include: { role: true } } }, orderBy: { date: "asc" } },
+        preAllocations: { include: { employee: { include: { role: true } } }, orderBy: { date: "asc" } },
         ruleViolations: { orderBy: { createdAt: "desc" } },
       },
     });
@@ -30,8 +32,8 @@ export class ScheduleRepository {
     return prisma.scheduleMonth.findUnique({
       where: { id },
       include: {
-        assignments: { include: { employee: true }, orderBy: { date: "asc" } },
-        preAllocations: { include: { employee: true }, orderBy: { date: "asc" } },
+        assignments: { include: { employee: { include: { role: true } } }, orderBy: { date: "asc" } },
+        preAllocations: { include: { employee: { include: { role: true } } }, orderBy: { date: "asc" } },
         ruleViolations: { orderBy: { createdAt: "desc" } },
       },
     });
@@ -41,8 +43,8 @@ export class ScheduleRepository {
     return prisma.scheduleMonth.findFirst({
       where: { year, month, status: "PUBLISHED" },
       include: {
-        assignments: { include: { employee: true }, orderBy: { date: "asc" } },
-        preAllocations: { include: { employee: true }, orderBy: { date: "asc" } },
+        assignments: { include: { employee: { include: { role: true } } }, orderBy: { date: "asc" } },
+        preAllocations: { include: { employee: { include: { role: true } } }, orderBy: { date: "asc" } },
       },
     });
   }
@@ -239,22 +241,40 @@ export class ScheduleRepository {
       },
     });
 
-    if (!prev || prev.status === "DRAFT") {
-      return { assignments: [], allocations: [] };
-    }
+    let assignments = prev
+      ? filterHistoryByLookback(assignmentsFromDb(prev.assignments), year, month)
+      : [];
+    let allocations = prev
+      ? filterHistoryByLookback(allocationsFromDb(prev.preAllocations), year, month)
+      : [];
 
-    const assignments = filterHistoryByLookback(
-      assignmentsFromDb(prev.assignments),
-      year,
-      month,
-    );
-    const allocations = filterHistoryByLookback(
-      allocationsFromDb(prev.preAllocations),
-      year,
-      month,
-    );
+    const calendarAllocations = await this.loadCalendarCrossMonthAllocations(year, month);
+    allocations = mergeCrossMonthAllocations(allocations, calendarAllocations);
 
     return { assignments, allocations };
+  }
+
+  /** Voos cadastrados no calendário do mês anterior (não duplicar preAllocations). */
+  private async loadCalendarCrossMonthAllocations(
+    targetYear: number,
+    targetMonth: number,
+  ): Promise<CrossMonthHistory["allocations"]> {
+    const lookbackStart = lookbackStartDate(targetYear, targetMonth);
+    const monthStart = iterDays(targetYear, targetMonth)[0];
+    const start = toDbDate(lookbackStart);
+    const end = toDbDate(addDays(monthStart, -1));
+
+    const flights = await prisma.flightAssignment.findMany({
+      where: { date: { gte: start, lte: end } },
+      select: { employeeId: true, date: true },
+      orderBy: { date: "asc" },
+    });
+
+    return flights.map((row) => ({
+      employeeUuid: row.employeeId,
+      date: isoDateKey(row.date),
+      label: "VOO",
+    }));
   }
 
   async saveViolations(

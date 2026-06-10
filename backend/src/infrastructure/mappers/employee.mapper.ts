@@ -2,10 +2,15 @@ import type { Employee as PrismaEmployee, EmployeeType, Role } from "@prisma/cli
 import type { Employee as DomainEmployee } from "../../domain/employee/types.js";
 import { isoDateKey } from "../../domain/rules/date-keys.js";
 
-type PrismaEmployeeWithRole = PrismaEmployee & { role?: Role | null };
+export type PrismaEmployeeWithRole = PrismaEmployee & { role?: Role | null };
+
+/** Cargo efetivo: prioriza Role cadastrado sobre enum legacy `type`. */
+export function employeeCargoCode(row: PrismaEmployeeWithRole): string {
+  return row.role?.code ?? row.type;
+}
 
 export function prismaEmployeeToDomain(row: PrismaEmployeeWithRole): DomainEmployee {
-  const roleCode = row.role?.code ?? row.type;
+  const roleCode = employeeCargoCode(row);
   return {
     id: hashUuidToNumber(row.id),
     name: row.name,

@@ -18,6 +18,10 @@ import {
 } from "../../../application/errors/schedule.errors.js";
 import { dtoToScheduleContext } from "../../../infrastructure/mappers/schedule-context.mapper.js";
 import {
+  mapScheduleEmployees,
+  mapScheduleShifts,
+} from "../../../infrastructure/mappers/schedule-api.mapper.js";
+import {
   generateScheduleBodySchema,
   generateScheduleByStepsBodySchema,
   validateScheduleBodySchema,
@@ -48,8 +52,8 @@ export async function getScheduleMonthController(
     const data = await scheduleUseCase.getMonth(year, month);
     return reply.send({
       scheduleMonth: data.scheduleMonth,
-      employees: data.employees,
-      shifts: data.shifts,
+      employees: mapScheduleEmployees(data.employees),
+      shifts: mapScheduleShifts(data.shifts),
       assignments: data.assignments,
       preAllocations: data.preAllocations,
       operationalCadastros: data.operationalCadastros,
@@ -199,8 +203,8 @@ export async function getPublishedScheduleController(
     const data = await scheduleUseCase.getPublishedMonth(year, month);
     return reply.send({
       scheduleMonth: data.scheduleMonth,
-      employees: data.employees,
-      shifts: data.shifts,
+      employees: mapScheduleEmployees(data.employees),
+      shifts: mapScheduleShifts(data.shifts),
       assignments: data.assignments,
       preAllocations: data.preAllocations,
     });

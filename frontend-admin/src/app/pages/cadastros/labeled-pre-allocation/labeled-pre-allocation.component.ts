@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -9,6 +9,7 @@ import { TagModule } from 'primeng/tag';
 import { DialogModule } from 'primeng/dialog';
 import { SelectModule } from 'primeng/select';
 import { InputNumberModule } from 'primeng/inputnumber';
+import { InputTextModule } from 'primeng/inputtext';
 import { TextareaModule } from 'primeng/textarea';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import {
@@ -21,9 +22,12 @@ import {
 import { EmployeeService } from '../../../services/employee.service';
 import { EmployeeOccupancyService } from '../../../services/employee-occupancy.service';
 import { ScheduleRefreshService } from '../../../services/schedule-refresh.service';
+import { ScheduleWorkspaceService } from '../../../services/schedule-workspace.service';
 import type { DayOccupancyMap } from '../../../utils/employee-occupancy.util';
 import { sortEmployeesBySeniority } from '../../../utils/employee-sort.util';
 import { OperationalCalendarComponent } from '../../../components/operational-calendar/operational-calendar.component';
+import { CadastroEmployeeFilterComponent } from '../../../components/cadastro-employee-filter/cadastro-employee-filter.component';
+import { filterCadastroRowsByEmployee } from '../../../utils/cadastro-list-filter.util';
 import {
   batchDeleteDetail,
   batchResultDetail,
@@ -55,8 +59,10 @@ export interface LabeledCadastroRouteData {
     DialogModule,
     SelectModule,
     InputNumberModule,
+    InputTextModule,
     TextareaModule,
     OperationalCalendarComponent,
+    CadastroEmployeeFilterComponent,
   ],
   templateUrl: './labeled-pre-allocation.component.html',
   styleUrl: '../cadastros-shared.scss',
@@ -70,6 +76,7 @@ export class LabeledPreAllocationComponent implements OnInit {
   private readonly employeeService = inject(EmployeeService);
   private readonly occupancyService = inject(EmployeeOccupancyService);
   private readonly scheduleRefresh = inject(ScheduleRefreshService);
+  private readonly workspace = inject(ScheduleWorkspaceService);
   private readonly messages = inject(MessageService);
   private readonly confirm = inject(ConfirmationService);
 
@@ -77,6 +84,14 @@ export class LabeledPreAllocationComponent implements OnInit {
 
   readonly rows = signal<PreAllocation[]>([]);
   readonly employees = signal<Employee[]>([]);
+  readonly filterEmployeeId = signal('');
+  readonly filteredRows = computed(() =>
+    filterCadastroRowsByEmployee(
+      this.rows(),
+      this.filterEmployeeId(),
+      (row) => row.employeeId,
+    ),
+  );
   readonly loading = signal(false);
   readonly dialogVisible = signal(false);
   readonly saving = signal(false);
@@ -84,18 +99,31 @@ export class LabeledPreAllocationComponent implements OnInit {
 
   selectedRows: PreAllocation[] = [];
 
-  filterYear = new Date().getFullYear();
-  filterMonth = new Date().getMonth() + 1;
+  filterYear = this.workspace.year();
+  filterMonth = this.workspace.month();
 
   formYear = this.filterYear;
   formMonth = this.filterMonth;
   formEmployeeId = '';
   formDates: Date[] = [];
   formNotes = '';
+  formStartTime = '';
+  formEndTime = '';
 
   readonly dayOccupancy = signal<DayOccupancyMap>({});
   readonly occupancyLoading = signal(false);
+  readonly isSimulatorCadastro = this.config.resource === 'simulators';
   readonly formatDate = formatIsoDate;
+
+  formatTimeRange(row: PreAllocation): string {
+    if (row.startTime && row.endTime) return `${row.startTime}–${row.endTime}`;
+    return '—';
+  }
+
+  onFilterEmployeeChange(employeeId: string): void {
+    this.filterEmployeeId.set(employeeId);
+    this.selectedRows = [];
+  }
 
   private get service(): LabeledPreAllocationService {
     switch (this.config.resource) {
@@ -119,6 +147,10 @@ export class LabeledPreAllocationComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.filterYear = this.workspace.year();
+    this.filterMonth = this.workspace.month();
+    this.formYear = this.filterYear;
+    this.formMonth = this.filterMonth;
     this.loadEmployees();
     this.load();
   }
@@ -159,6 +191,8 @@ export class LabeledPreAllocationComponent implements OnInit {
     this.formEmployeeId = '';
     this.formDates = [];
     this.formNotes = '';
+    this.formStartTime = '';
+    this.formEndTime = '';
     this.dayOccupancy.set({});
     this.occupancyLoading.set(false);
   }
@@ -208,15 +242,48 @@ export class LabeledPreAllocationComponent implements OnInit {
       });
       return;
     }
+    if (this.isSimulatorCadastro) {
+      const start = this.formStartTime.trim();
+      const end = this.formEndTime.trim();
+      if ((start && !end) || (!start && end)) {
+        this.messages.add({
+          severity: 'warn',
+          summary: 'Validação',
+          detail: 'Informe hora inicial e final do simulador.',
+        });
+        return;
+      }
+      if (start && !/^([01]\d|2[0-3]):[0-5]\d$/.test(start)) {
+        this.messages.add({
+          severity: 'warn',
+          summary: 'Validação',
+          detail: 'Hora inicial inválida (use HH:MM).',
+        });
+        return;
+      }
+      if (end && !/^([01]\d|2[0-3]):[0-5]\d$/.test(end)) {
+        this.messages.add({
+          severity: 'warn',
+          summary: 'Validação',
+          detail: 'Hora final inválida (use HH:MM).',
+        });
+        return;
+      }
+    }
     this.saving.set(true);
+    const payload: Parameters<LabeledPreAllocationService['createBatch']>[0] = {
+      year: this.formYear,
+      month: this.formMonth,
+      employeeId: this.formEmployeeId,
+      dates: datesToIsoList(this.formDates),
+      notes: this.formNotes.trim() || undefined,
+    };
+    if (this.isSimulatorCadastro && this.formStartTime.trim() && this.formEndTime.trim()) {
+      payload.startTime = this.formStartTime.trim();
+      payload.endTime = this.formEndTime.trim();
+    }
     this.service
-      .createBatch({
-        year: this.formYear,
-        month: this.formMonth,
-        employeeId: this.formEmployeeId,
-        dates: datesToIsoList(this.formDates),
-        notes: this.formNotes.trim() || undefined,
-      })
+      .createBatch(payload)
       .subscribe({
         next: (res) => {
           this.saving.set(false);
@@ -228,6 +295,8 @@ export class LabeledPreAllocationComponent implements OnInit {
             detail: batchResultDetail(res, this.config.entityLabel),
           });
           if (res.created > 0) {
+            this.workspace.year.set(this.formYear);
+            this.workspace.month.set(this.formMonth);
             this.load();
             this.scheduleRefresh.notify();
           }

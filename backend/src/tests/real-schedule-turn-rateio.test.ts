@@ -29,7 +29,7 @@ function runTurnPipeline(ws: ReturnType<typeof freshWorkspace>) {
 }
 
 describe("REAL_V1 — equilíbrio por turnos", () => {
-  it("1. PAO com não alocar voo fica fora do rateio normal", () => {
+  it("1. PAO com não alocar voo participa do mesmo rateio", () => {
     const input = minimalPaoInput(4);
     const noFlightUuid = paoUuid(0);
     input.noFlightDates = fullMonthNoFlight(noFlightUuid);
@@ -39,18 +39,12 @@ describe("REAL_V1 — equilíbrio por turnos", () => {
 
     const rateio = computeTurnRateio(ws);
     const noFlight = rateio.entries.find((e) => e.employeeUuid === noFlightUuid)!;
-    const normals = rateio.entries.filter((e) => e.group === "NORMAL");
 
     expect(noFlight.group).toBe("FULL_NO_FLIGHT");
-    expect(noFlight.turnTarget).toBe(20);
-    expect(normals.length).toBe(3);
-    expect(rateio.metaTurnosNormal).toBeGreaterThan(0);
-    expect(normals.every((n) => n.turnTarget !== noFlight.turnTarget || n.metaTurnosNormal)).toBe(
-      true,
-    );
+    expect(Math.abs(noFlight.turnTarget - rateio.metaTurnosNormal)).toBeLessThanOrEqual(1);
   });
 
-  it("2. PAO com não alocar voo tenta atingir 20 turnos", () => {
+  it("2. PAO com não alocar voo tenta atingir meta do rateio", () => {
     const input = minimalPaoInput(4);
     const uuid = paoUuid(0);
     input.noFlightDates = fullMonthNoFlight(uuid);
@@ -58,13 +52,13 @@ describe("REAL_V1 — equilíbrio por turnos", () => {
     ws.applyHardBlocks();
     runTurnPipeline(ws);
     ws.allocatePaoRestDaysAfterCoverage();
-    ws.ensureMinShiftsForFullMonthNoFlight(["T6", "T7", "T8"]);
+    ws.ensureMinShiftsForFullMonthNoFlight();
 
     const entry = computeTurnRateio(ws).entries.find((e) => e.employeeUuid === uuid)!;
-    expect(entry.turnTarget).toBe(20);
+    expect(entry.turnTarget).toBeGreaterThan(0);
     const turns = countAllocatedTurns(ws, uuid);
     expect(turns).toBeGreaterThan(0);
-    expect(turns).toBeLessThanOrEqual(20);
+    expect(turns).toBeLessThanOrEqual(entry.turnTarget + 1);
   });
 
   it("3. PAOs normais são equilibrados por turnos, não por dias trabalhados", () => {
@@ -91,7 +85,7 @@ describe("REAL_V1 — equilíbrio por turnos", () => {
     expect(afterFlights.some((w, i) => w > allocatedAfter[i])).toBe(true);
   });
 
-  it("4. Curso/simulador/CMA reduzem alvo de turnos do PAO normal", () => {
+  it("4. Curso/simulador/CMA não alteram alvo de turnos do PAO normal", () => {
     const input = minimalPaoInput(3);
     const uuid = paoUuid(0);
     input.lockedAllocations = [
@@ -108,11 +102,11 @@ describe("REAL_V1 — equilíbrio por turnos", () => {
     const other = rateio.entries.find((e) => e.group === "NORMAL" && e.employeeUuid !== uuid)!;
 
     expect(countUsefulOperationalDays(ws, uuid)).toBe(3);
-    expect(withCadastro.turnTarget).toBeLessThan(other.turnTarget);
+    expect(withCadastro.turnTarget).toBe(other.turnTarget);
     expect(withCadastro.usefulOperationalDays).toBe(3);
   });
 
-  it("5. Diferença reduzida é redistribuída entre demais PAOs normais", () => {
+  it("5. Cadastros não redistribuem meta entre PAOs normais", () => {
     const input = minimalPaoInput(3);
     const uuid = paoUuid(0);
     input.lockedAllocations = [
@@ -130,7 +124,7 @@ describe("REAL_V1 — equilíbrio por turnos", () => {
     expect(sumTargets).toBe(rateio.turnosRateio);
     const withCadastro = normals.find((e) => e.employeeUuid === uuid)!;
     const others = normals.filter((e) => e.employeeUuid !== uuid);
-    expect(others.every((o) => o.turnTarget > withCadastro.turnTarget)).toBe(true);
+    expect(others.every((o) => o.turnTarget === withCadastro.turnTarget)).toBe(true);
   });
 
   it("6. Voos não entram no equilíbrio de turnos", () => {
@@ -182,7 +176,7 @@ describe("REAL_V1 — equilíbrio por turnos", () => {
     const ws = freshWorkspace(input);
     ws.applyHardBlocks();
     runTurnPipeline(ws);
-    ws.ensureMinShiftsForFullMonthNoFlight(["T6", "T7", "T8"]);
+    ws.ensureMinShiftsForFullMonthNoFlight();
 
     const t8 = ws.toAssignments().filter((a) => a.employeeUuid === uuid && a.shiftCode === "T8");
     expect(t8.length).toBe(0);

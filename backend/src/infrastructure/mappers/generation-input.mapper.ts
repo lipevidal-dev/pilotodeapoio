@@ -99,10 +99,12 @@ export function buildPreferredShiftMap(
 
 export function preAllocationsToLocked(
   rows: (PreAllocation & { employee: Employee })[],
-): Array<{ employeeUuid: string; date: string; label: string }> {
+): Array<{ employeeUuid: string; date: string; label: string; startTime?: string; endTime?: string }> {
   return rows.map((p) => ({
     employeeUuid: p.employeeId,
     date: isoDateKey(p.date),
     label: normalizeOperationalLabel(p.label),
+    startTime: p.startTime ?? undefined,
+    endTime: p.endTime ?? undefined,
   }));
 }

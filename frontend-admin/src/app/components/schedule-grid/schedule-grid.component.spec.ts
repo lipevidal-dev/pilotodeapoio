@@ -148,6 +148,7 @@ describe('ScheduleGridComponent — edição interativa 8.1A', () => {
     expect(emitted[0]).toEqual({
       employeeId: 'emp-1',
       employeeName: 'PAO Test',
+      employeeType: 'PAO',
       startDay: 1,
       endDay: 3,
       days: [1, 3],
@@ -199,5 +200,32 @@ describe('ScheduleGridComponent — edição interativa 8.1A', () => {
       { display: 'T6', kind: 't6' },
     );
     expect(comp.isCellDeleteHighlighted('emp-1', 1)).toBe(true);
+  });
+
+  it('ícone de cobertura usa o dia correto do mês', () => {
+    const comp = fixture.componentInstance;
+    fixture.componentRef.setInput('auditTotals', {
+      totalPaos: 1,
+      totalApaos: 0,
+      totalTurnos: 0,
+      totalDiasTrabalhados: 0,
+      totalFolgas: 0,
+      totalFolgaSocial: 0,
+      totalFp: 0,
+      totalFani: 0,
+      totalFerias: 0,
+      totalVoos: 0,
+      totalVooDisp: 0,
+      coverageT6: 90,
+      coverageT7: 80,
+      coverageT8: 100,
+      coverageGapDays: {
+        19: ['T7'],
+      },
+    });
+    fixture.detectChanges();
+    expect(comp.hasCoverageGap(19)).toBe(true);
+    expect(comp.hasCoverageGap(13)).toBe(false);
+    expect(comp.coverageGapTooltip(19)).toContain('T7');
   });
 });

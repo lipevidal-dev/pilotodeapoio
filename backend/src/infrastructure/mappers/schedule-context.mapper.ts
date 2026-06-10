@@ -7,7 +7,7 @@ import type {
 } from "../../domain/schedule/types.js";
 import type { Employee as DomainEmployee } from "../../domain/employee/types.js";
 import type { Shift as DomainShift } from "../../domain/shift/types.js";
-import { prismaEmployeeToDomain } from "./employee.mapper.js";
+import { employeeCargoCode, prismaEmployeeToDomain, type PrismaEmployeeWithRole } from "./employee.mapper.js";
 import { prismaShiftToDomain } from "./shift.mapper.js";
 import type {
   Employee,
@@ -15,6 +15,18 @@ import type {
   ScheduleAssignment as PrismaAssignment,
   Shift,
 } from "@prisma/client";
+
+function mergeEmployeeRecord(
+  existing: PrismaEmployeeWithRole | undefined,
+  incoming: PrismaEmployeeWithRole,
+): PrismaEmployeeWithRole {
+  if (!existing) return incoming;
+  return {
+    ...existing,
+    ...incoming,
+    role: incoming.role ?? existing.role,
+  };
+}
 
 export interface ScheduleContextInputDto {
   year: number;
@@ -103,13 +115,28 @@ export function buildContextFromDbParts(params: {
   shifts: Shift[];
   assignments: (PrismaAssignment & { employee: Employee })[];
   preAllocations: (PreAllocation & { employee: Employee })[];
-}): ScheduleContext {
-  const byUuid = new Map<string, Employee>();
+}): { context: ScheduleContext; uuidToDomainId: Map<string, number> } {
+  const byUuid = new Map<string, PrismaEmployeeWithRole>();
   for (const e of params.employees) byUuid.set(e.id, e);
-  for (const a of params.assignments) byUuid.set(a.employee.id, a.employee);
-  for (const p of params.preAllocations) byUuid.set(p.employee.id, p.employee);
+  for (const a of params.assignments) {
+    byUuid.set(
+      a.employee.id,
+      mergeEmployeeRecord(byUuid.get(a.employee.id), a.employee as PrismaEmployeeWithRole),
+    );
+  }
+  for (const p of params.preAllocations) {
+    byUuid.set(
+      p.employee.id,
+      mergeEmployeeRecord(byUuid.get(p.employee.id), p.employee as PrismaEmployeeWithRole),
+    );
+  }
 
-  const sorted = [...byUuid.values()].sort(compareEmployeesBySeniority);
+  const sorted = [...byUuid.values()].sort((a, b) =>
+    compareEmployeesBySeniority(
+      { type: employeeCargoCode(a), seniorityNumber: a.seniorityNumber, name: a.name },
+      { type: employeeCargoCode(b), seniorityNumber: b.seniorityNumber, name: b.name },
+    ),
+  );
   const idMap = new Map(sorted.map((e, i) => [e.id, i + 1]));
 
   const domainEmployees = sorted.map((e, i) => ({
@@ -144,12 +171,15 @@ export function buildContextFromDbParts(params: {
   });
 
   return {
-    year: params.year,
-    month: params.month,
-    employees: domainEmployees,
-    shifts: params.shifts.map(prismaShiftToDomain),
-    assignments,
-    allocations,
+    context: {
+      year: params.year,
+      month: params.month,
+      employees: domainEmployees,
+      shifts: params.shifts.map(prismaShiftToDomain),
+      assignments,
+      allocations,
+    },
+    uuidToDomainId: idMap,
   };
 }
 

@@ -12,7 +12,9 @@
 
       [options]="filterOptions()"
 
-      [(ngModel)]="filter"
+      [ngModel]="filter()"
+
+      (ngModelChange)="filter.set($event)"
 
       optionLabel="label"
 

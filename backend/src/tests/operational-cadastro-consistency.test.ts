@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildOperationalCadastroDisplay } from "../application/mappers/operational-cadastro-display.mapper.js";
 import { deduplicateOperationalCadastros } from "../domain/rules/operational-cadastro-priority.js";
+import { mockCadastroPreAllocationRow } from "./pre-allocation-fixtures.js";
 
 describe("operationalCadastros — consistência calendário x escala", () => {
   it("VOO manual aparece em operationalCadastros", () => {
@@ -25,12 +26,12 @@ describe("operationalCadastros — consistência calendário x escala", () => {
       approvedDayOffs: [],
       flightDays: [],
       preAllocations: [
-        {
+        mockCadastroPreAllocationRow({
           id: "pre-voo-ghost",
           employeeId: "emp-1",
           date: new Date("2026-06-05T00:00:00.000Z"),
           label: "VOO",
-        },
+        }),
       ],
     });
     expect(rows.filter((r) => r.label === "VOO")).toHaveLength(0);
@@ -42,12 +43,12 @@ describe("operationalCadastros — consistência calendário x escala", () => {
       approvedDayOffs: [],
       flightDays: [{ employeeUuid: "emp-1", date: "2026-06-05" }],
       preAllocations: [
-        {
+        mockCadastroPreAllocationRow({
           id: "pre-voo",
           employeeId: "emp-1",
           date: new Date("2026-06-05T00:00:00.000Z"),
           label: "VOO",
-        },
+        }),
       ],
     });
     const vooRows = rows.filter((r) => r.label === "VOO");
@@ -74,32 +75,54 @@ describe("operationalCadastros — consistência calendário x escala", () => {
       approvedDayOffs: [],
       flightDays: [],
       preAllocations: [
-        {
+        mockCadastroPreAllocationRow({
           id: "1",
           employeeId: "emp-1",
           date: new Date("2026-06-01T12:00:00.000Z"),
           label: "SIMULADOR",
-        },
-        {
+        }),
+        mockCadastroPreAllocationRow({
           id: "2",
           employeeId: "emp-1",
           date: new Date("2026-06-02T12:00:00.000Z"),
           label: "CURSO",
-        },
-        {
+        }),
+        mockCadastroPreAllocationRow({
           id: "3",
           employeeId: "emp-1",
           date: new Date("2026-06-03T12:00:00.000Z"),
           label: "CMA",
-        },
-        {
+        }),
+        mockCadastroPreAllocationRow({
           id: "4",
           employeeId: "emp-1",
           date: new Date("2026-06-04T12:00:00.000Z"),
           label: "OUTRO",
-        },
+        }),
       ],
     });
     expect(rows.map((r) => r.label)).toEqual(["SIMULADOR", "CURSO", "CMA", "OUTRO"]);
+  });
+
+  it("FOLGA PEDIDA manual em preAllocations aparece em operationalCadastros", () => {
+    const rows = buildOperationalCadastroDisplay({
+      vacationDays: [],
+      approvedDayOffs: [],
+      flightDays: [],
+      preAllocations: [
+        mockCadastroPreAllocationRow({
+          id: "fp-1",
+          employeeId: "emp-1",
+          date: new Date("2026-06-05T12:00:00.000Z"),
+          label: "FOLGA PEDIDA",
+        }),
+      ],
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      employeeId: "emp-1",
+      label: "FOLGA PEDIDA",
+      source: "pre_allocation",
+    });
   });
 });

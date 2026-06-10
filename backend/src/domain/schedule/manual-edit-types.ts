@@ -1,4 +1,8 @@
 export type ManualAllocationType =
+  | "T1"
+  | "T2"
+  | "T3"
+  | "T4"
   | "T6"
   | "T7"
   | "T8"
@@ -49,7 +53,16 @@ export interface ManualEditMovePayload {
   force?: boolean;
 }
 
-export const SHIFT_ALLOCATION_TYPES = new Set<ManualAllocationType>(["T6", "T7", "T8", "T9"]);
+export const SHIFT_ALLOCATION_TYPES = new Set<ManualAllocationType>([
+  "T1",
+  "T2",
+  "T3",
+  "T4",
+  "T6",
+  "T7",
+  "T8",
+  "T9",
+]);
 
 export const PREALLOC_ALLOCATION_TYPES = new Set<ManualAllocationType>([
   "ND",

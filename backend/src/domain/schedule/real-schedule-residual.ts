@@ -51,7 +51,7 @@ function tryPlaceResidualBlock(
         placed = -1;
         break;
       }
-      if (!ws.tryAssignShift(c.uuid, day, code)) {
+      if (!ws.tryAssignShift(c.uuid, day, code) && !ws.tryAssignShift(c.uuid, day, code, true)) {
         for (let j = 0; j < placed; j++) {
           ws.unassignShift(c.uuid, ws.days[startDi + j]!);
         }
@@ -103,7 +103,7 @@ export function coverResidualT6T7Only(ws: GenerationWorkspace): ResidualT6T7Resu
       for (const c of candidates) {
         if (shouldReserveDaysForFolgas(ws, c.uuid)) continue;
         if (wouldExceedT6T7BlockMax(ws, c.uuid, day, code)) continue;
-        if (ws.tryAssignShift(c.uuid, day, code)) {
+        if (ws.tryAssignShift(c.uuid, day, code) || ws.tryAssignShift(c.uuid, day, code, true)) {
           unitCoverageApplied++;
           break;
         }

@@ -296,6 +296,10 @@ export interface ScheduleMonthRecord {
 }
 
 export type ManualAllocationType =
+  | 'T1'
+  | 'T2'
+  | 'T3'
+  | 'T4'
   | 'T6'
   | 'T7'
   | 'T8'
@@ -389,6 +393,8 @@ export interface CreateLabeledPreAllocationBatchPayload {
   employeeId: string;
   dates: string[];
   notes?: string;
+  startTime?: string;
+  endTime?: string;
 }
 
 export interface UpdateLabeledPreAllocationPayload {
@@ -495,6 +501,8 @@ export interface PreAllocation {
   date: string;
   label: string;
   notes: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
   employee?: Employee;
   scheduleMonth?: ScheduleMonthRecord;
 }

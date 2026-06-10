@@ -58,7 +58,7 @@ export class PublishScheduleUseCase {
     const shifts = await this.scheduleRepo.listShifts(true);
     const employees = await this.scheduleRepo.listActiveEmployees();
 
-    const ctx = buildContextFromDbParts({
+    const { context: ctx } = buildContextFromDbParts({
       year: record.year,
       month: record.month,
       employees,

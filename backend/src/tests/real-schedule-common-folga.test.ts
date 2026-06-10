@@ -3,6 +3,7 @@ import { addDays } from "../domain/rules/dates.js";
 import { assignmentKey } from "../domain/schedule/types.js";
 import {
   buildManualEditValidationContext,
+  buildUuidToDomainIdByName,
   validateManualSet,
 } from "../domain/schedule/manual-edit-validator.js";
 import { operationalBalancer } from "../domain/schedule/operational-balancer.js";
@@ -167,6 +168,7 @@ describe("CORREÇÃO REAL_V1 — folga comum manual", () => {
     }));
     const v = buildManualEditValidationContext({
       ctx,
+      uuidToDomainId: buildUuidToDomainIdByName(ctx, employees),
       employees,
       shiftRestrictionRows: [],
       noFlightDates: input.noFlightDates ?? [],

@@ -37,7 +37,7 @@ export class DemandPlanningEngine {
   execute(ws: GenerationWorkspace): DemandPlanningReport {
     const stepNotes: string[] = [];
 
-    const demand = calculateOperationalDemand(ws.days.length);
+    const demand = calculateOperationalDemand(ws.days.length, ws.input.shifts);
     stepNotes.push(`[1] Demanda operacional: ${demand.totalDemand} turnos.`);
 
     const capacity = calculateCapacitySummary(ws);

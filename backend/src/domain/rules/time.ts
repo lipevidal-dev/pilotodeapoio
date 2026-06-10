@@ -40,11 +40,33 @@ export function has12hRest(
   shiftCode: string,
   planned: PlannedMap,
   shiftMap: ShiftMap,
+  timedIntervals: Array<{ employeeId: number; day: string; startTime: string; endTime: string }> = [],
 ): { ok: boolean; reason: string } {
   const info = shiftMap[shiftCode];
   if (!info) return { ok: true, reason: "" };
 
   const { start: candStart, end: candEnd } = shiftStartEnd(workDay, info.startTime, info.endTime);
+
+  const checkGap = (
+    otherStart: Date,
+    otherEnd: Date,
+    otherLabel: string,
+  ): { ok: boolean; reason: string } => {
+    if (candStart >= otherEnd) {
+      const restHours = (candStart.getTime() - otherEnd.getTime()) / 3_600_000;
+      if (restHours < 12) {
+        return { ok: false, reason: `descanso de apenas ${restHours.toFixed(1)}h após ${otherLabel}` };
+      }
+    } else if (otherStart >= candEnd) {
+      const restHours = (otherStart.getTime() - candEnd.getTime()) / 3_600_000;
+      if (restHours < 12) {
+        return { ok: false, reason: `descanso de apenas ${restHours.toFixed(1)}h antes de ${otherLabel}` };
+      }
+    } else {
+      return { ok: false, reason: `sobreposição com ${otherLabel}` };
+    }
+    return { ok: true, reason: "" };
+  };
 
   for (const [key, otherShift] of planned) {
     const { employeeId: otherId, day: otherDay } = parseAssignmentKey(key);
@@ -52,21 +74,24 @@ export function has12hRest(
     const otherInfo = shiftMap[otherShift];
     if (!otherInfo) continue;
 
-    const { start: otherStart, end: otherEnd } = shiftStartEnd(otherDay, otherInfo.startTime, otherInfo.endTime);
+    const { start: otherStart, end: otherEnd } = shiftStartEnd(
+      otherDay,
+      otherInfo.startTime,
+      otherInfo.endTime,
+    );
+    const gap = checkGap(otherStart, otherEnd, otherShift);
+    if (!gap.ok) return gap;
+  }
 
-    if (candStart >= otherEnd) {
-      const restHours = (candStart.getTime() - otherEnd.getTime()) / 3_600_000;
-      if (restHours < 12) {
-        return { ok: false, reason: `descanso de apenas ${restHours.toFixed(1)}h após ${otherShift}` };
-      }
-    } else if (otherStart >= candEnd) {
-      const restHours = (otherStart.getTime() - candEnd.getTime()) / 3_600_000;
-      if (restHours < 12) {
-        return { ok: false, reason: `descanso de apenas ${restHours.toFixed(1)}h antes de ${otherShift}` };
-      }
-    } else {
-      return { ok: false, reason: `sobreposição com ${otherShift}` };
-    }
+  for (const interval of timedIntervals) {
+    if (interval.employeeId !== employeeId) continue;
+    const { start: otherStart, end: otherEnd } = shiftStartEnd(
+      interval.day,
+      interval.startTime,
+      interval.endTime,
+    );
+    const gap = checkGap(otherStart, otherEnd, "SIMULADOR");
+    if (!gap.ok) return gap;
   }
 
   return { ok: true, reason: "" };

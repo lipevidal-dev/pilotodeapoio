@@ -55,7 +55,7 @@ export class RolesComponent implements OnInit {
   formDescription = '';
   formActive = true;
   formDisplayOrder = 0;
-  filter: RoleFilter = 'all';
+  filter = signal<RoleFilter>('all');
 
   readonly filterOptions = [
     { label: 'Todos', value: 'all' as const },
@@ -65,7 +65,7 @@ export class RolesComponent implements OnInit {
 
   readonly filteredRoles = computed(() => {
     const rows = this.roles();
-    switch (this.filter) {
+    switch (this.filter()) {
       case 'active':
         return rows.filter((r) => r.active);
       case 'inactive':

@@ -1,5 +1,7 @@
 import { isoDateKey, toDbDate } from "../../domain/rules/date-keys.js";
-import { manualTypeToPreallocLabel } from "../../domain/schedule/manual-edit-types.js";
+import {
+  manualTypeToPreallocLabel,
+} from "../../domain/schedule/manual-edit-types.js";
 import type { ManualAllocationType } from "../../domain/schedule/manual-edit-types.js";
 import { prisma } from "../database/prisma-client.js";
 
@@ -8,8 +10,8 @@ export class ManualScheduleEditRepository {
     return prisma.scheduleMonth.findUnique({
       where: { id },
       include: {
-        assignments: { include: { employee: true }, orderBy: { date: "asc" } },
-        preAllocations: { include: { employee: true }, orderBy: { date: "asc" } },
+        assignments: { include: { employee: { include: { role: true } } }, orderBy: { date: "asc" } },
+        preAllocations: { include: { employee: { include: { role: true } } }, orderBy: { date: "asc" } },
       },
     });
   }
@@ -141,6 +143,10 @@ export class ManualScheduleEditRepository {
       await this.clearDay(scheduleMonthId, employeeId, date);
       return null;
     }
+    if (type === "VOO") {
+      await this.clearDayAllocations(scheduleMonthId, employeeId, date, { keepProtected: false });
+      return this.upsertFlight(employeeId, date);
+    }
     const preLabel = manualTypeToPreallocLabel(type);
     if (preLabel) {
       return this.upsertPreAllocation(
@@ -151,10 +157,7 @@ export class ManualScheduleEditRepository {
         "escala-manual",
       );
     }
-    if (type === "T6" || type === "T7" || type === "T8") {
-      return this.upsertShiftAssignment(scheduleMonthId, employeeId, date, type);
-    }
-    return null;
+    return this.upsertShiftAssignment(scheduleMonthId, employeeId, date, type);
   }
 
   formatAssignmentDate(d: Date): string {

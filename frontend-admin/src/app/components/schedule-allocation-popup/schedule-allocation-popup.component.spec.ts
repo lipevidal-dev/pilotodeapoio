@@ -46,6 +46,7 @@ describe('ScheduleAllocationPopupComponent', () => {
     fixture.componentRef.setInput('visible', true);
     fixture.componentRef.setInput('context', {
       employeeName: 'PAO Test',
+      employeeType: 'PAO',
       startDay: 15,
       endDay: 17,
     });
@@ -77,9 +78,41 @@ describe('ScheduleAllocationPopupComponent', () => {
     expect(fixture.componentInstance.subtitle()).toContain('17/07');
   });
 
-  it('lista opções dinâmicas incluindo T9 paralelo', () => {
+  it('lista opções dinâmicas incluindo T9 paralelo para PAO', () => {
     const keys = fixture.componentInstance.selectOptions().map((o) => o.key);
     expect(keys).toContain('T6');
     expect(keys).toContain('T9');
+  });
+
+  it('lista turnos APAO quando contexto é APAO', () => {
+    fixture.componentRef.setInput('shifts', [
+      ...mockShifts,
+      {
+        id: 's1',
+        code: 'T1',
+        name: 'Turno 1 APAO',
+        startTime: '06:00',
+        endTime: '14:00',
+        roleType: 'APAO',
+        active: true,
+        displayOrder: 0,
+        mandatoryCoverage: true,
+        requiresT8PairNd: false,
+        coverageType: 'REQUIRED',
+        durationHours: 8,
+      },
+    ]);
+    fixture.componentRef.setInput('context', {
+      employeeName: 'APAO César',
+      employeeType: 'APAO',
+      startDay: 10,
+      endDay: 10,
+    });
+    fixture.detectChanges();
+
+    const keys = fixture.componentInstance.selectOptions().map((o) => o.key);
+    expect(keys).toContain('T1');
+    expect(keys.includes('T6')).toBe(false);
+    expect(keys.includes('T9')).toBe(false);
   });
 });

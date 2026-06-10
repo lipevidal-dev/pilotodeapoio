@@ -197,8 +197,12 @@ describe("Motor — turnos paralelos T9", () => {
     return input;
   }
 
-  it("8. T9 PARALLEL não entra na demanda mensal", () => {
-    const demand = calculateOperationalDemand(30);
+  it("8. T9 PARALLEL não entra na demanda mensal obrigatória", () => {
+    const shifts = [
+      ...minimalPaoInput(1).shifts.map((s) => ({ ...s, coverageType: "REQUIRED" as const })),
+      t9Shift(),
+    ];
+    const demand = calculateOperationalDemand(30, shifts);
     expect(demand.shiftsPerDay).toBe(3);
     expect(demand.totalDemand).toBe(90);
     expect((demand.perShift as Record<string, number>).T9).toBeUndefined();
@@ -273,6 +277,7 @@ describe("Motor — turnos paralelos T9", () => {
     };
     const v = buildManualEditValidationContext({
       ctx,
+      uuidToDomainId: new Map(employees.map((e, i) => [e.id, i + 1])),
       employees,
       shiftRestrictionRows: [],
       preferredShiftRows: [{ employeeUuid: paoUuid(0), shiftCode: "T9" }],

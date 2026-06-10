@@ -155,6 +155,9 @@ describe("Publicação cenário-base", () => {
             employeeId: empId,
             date: new Date(`${al.date}T12:00:00.000Z`),
             label: al.label,
+            notes: null,
+            startTime: al.startTime ?? null,
+            endTime: al.endTime ?? null,
             employee: { id: empId, name: emp.employee.name, type: emp.employee.role, active: true },
           };
         }),

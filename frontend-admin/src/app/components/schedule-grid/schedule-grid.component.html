@@ -21,35 +21,24 @@
   (selectstart)="$event.preventDefault()"
 >
   <div class="schedule-grid-scroller">
-    @if (hasAnyCoverageGap()) {
-      <div class="coverage-gaps-rail" aria-hidden="true">
-        <span class="coverage-gaps-rail__employee"></span>
-        @for (day of grid().dayNumbers; track day; let i = $index) {
-          <span class="coverage-gaps-rail__day" [class.coverage-gaps-rail__day--weekend]="isWeekend(i)">
-            @if (hasCoverageGap(day)) {
-              <img
-                class="coverage-gaps-rail__icon"
-                src="assets/icons/coverage-attention.svg"
-                [attr.alt]="'Falta cobertura PAO no dia ' + day"
-                [title]="coverageGapTooltip(day)"
-              />
-            }
-          </span>
-        }
-        @if (summaryVisible()) {
-          <span class="coverage-gaps-rail__summary"></span>
-        }
-      </div>
-    }
-
     <table class="schedule-grid">
       <thead>
         <tr>
           <th class="col-employee sticky-col">Funcionário</th>
           @for (day of grid().dayNumbers; track day; let i = $index) {
             <th class="col-day" [class.col-weekend]="isWeekend(i)">
-              <span class="day-num">{{ day < 10 ? '0' + day : day }}</span>
-              <span class="day-wd">{{ grid().weekdayLabels[i] }}</span>
+              <div class="day-head-stack">
+                @if (hasCoverageGap(day)) {
+                  <img
+                    class="coverage-gap-icon"
+                    src="assets/icons/coverage-attention.svg"
+                    [attr.alt]="'Falta cobertura PAO no dia ' + day"
+                    [title]="coverageGapTooltip(day)"
+                  />
+                }
+                <span class="day-num">{{ day < 10 ? '0' + day : day }}</span>
+                <span class="day-wd">{{ grid().weekdayLabels[i] }}</span>
+              </div>
             </th>
           }
           @if (summaryVisible()) {

@@ -59,3 +59,19 @@ export function allocationsFromDb(
     label: r.label,
   }));
 }
+
+/** Mescla alocações evitando duplicatas employee|date|label. */
+export function mergeCrossMonthAllocations(
+  base: CrossMonthAllocation[],
+  extra: CrossMonthAllocation[],
+): CrossMonthAllocation[] {
+  const seen = new Set(base.map((row) => `${row.employeeUuid}|${row.date}|${row.label.toUpperCase()}`));
+  const merged = [...base];
+  for (const row of extra) {
+    const key = `${row.employeeUuid}|${row.date}|${row.label.toUpperCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(row);
+  }
+  return merged;
+}

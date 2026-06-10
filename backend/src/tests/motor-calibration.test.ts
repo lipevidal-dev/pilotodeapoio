@@ -9,8 +9,8 @@ import { addDays } from "../domain/rules/dates.js";
 import { ClearGeneratedScheduleUseCase } from "../application/use-cases/clear-generated-schedule.use-case.js";
 import { PublishedScheduleCannotBeClearedError } from "../application/errors/schedule.errors.js";
 import { realisticGenerationInput, REALISTIC_TEST_MONTH, REALISTIC_TEST_YEAR } from "./realistic-fixtures.js";
-import type { Employee } from "@prisma/client";
-const engine = new ScheduleGenerationEngine();
+import { mockPreAllocationRow } from "./pre-allocation-fixtures.js";
+import type { Employee } from "@prisma/client";const engine = new ScheduleGenerationEngine();
 const SLOW_MS = 120_000;
 
 function paoUuid(index: number): string {
@@ -190,7 +190,7 @@ describe("Calibração do motor", () => {
         updatedAt: new Date(),
       }));
 
-      const dbCtx = buildContextFromDbParts({
+      const { context: dbCtx } = buildContextFromDbParts({
         year: REALISTIC_TEST_YEAR,
         month: REALISTIC_TEST_MONTH,
         employees,
@@ -227,19 +227,19 @@ describe("Calibração do motor", () => {
         }),
         preAllocations: result.allocations.map((a) => {
           const emp = employees.find((e) => e.id === a.employeeUuid)!;
-          return {
-            id: `pre-${a.employeeUuid}-${a.date}`,
-            scheduleMonthId: "m1",
-            employeeId: a.employeeUuid,
-            date: new Date(`${a.date}T12:00:00.000Z`),
-            label: a.label,
-            notes: null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            employee: emp,
-          };
-        }),
-      });
+          return mockPreAllocationRow(
+            {
+              id: `pre-${a.employeeUuid}-${a.date}`,
+              scheduleMonthId: "m1",
+              employeeId: a.employeeUuid,
+              date: new Date(`${a.date}T12:00:00.000Z`),
+              label: a.label,
+              startTime: a.startTime ?? null,
+              endTime: a.endTime ?? null,
+            },
+            emp,
+          );
+        }),      });
 
       expect(listPaoCoverageGaps(dbCtx).length).toBe(listPaoCoverageGaps(genCtx).length);
       expect(

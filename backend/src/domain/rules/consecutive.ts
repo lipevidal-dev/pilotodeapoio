@@ -4,9 +4,28 @@ import {
   assignmentKey,
   parseAssignmentKey,
   type PlannedMap,
+  type BlockedMap,
 } from "../schedule/types.js";
 import { addDays } from "./dates.js";
+import { normalizeOperationalLabel } from "../schedule/operational-labels.js";
 import { shiftStartEnd } from "./time.js";
+
+/** Labels de pré-alocação que contam como dia trabalhado na continuidade 6x1. */
+const PRODUCTIVE_WORK_ALLOC_LABELS = new Set([
+  "ND",
+  "VOO",
+  "SIMULADOR",
+  "CURSO",
+  "CURSO ONLINE",
+  "CMA",
+  "OUTRO",
+]);
+
+export function isProductiveWorkAllocationLabel(label: string | undefined): boolean {
+  if (!label) return false;
+  const n = normalizeOperationalLabel(label).toUpperCase();
+  return PRODUCTIVE_WORK_ALLOC_LABELS.has(n);
+}
 
 export function buildPlannedWithHistory(ctx: ScheduleContext): PlannedMap {
   const planned: PlannedMap = new Map();
@@ -23,12 +42,20 @@ export function consecutiveWorkCount(
   employeeId: number,
   workDay: string,
   planned: PlannedMap,
+  blocked?: BlockedMap,
 ): number {
   let count = 0;
   let d = addDays(workDay, -1);
 
-  while (planned.has(assignmentKey(employeeId, d))) {
-    count++;
+  while (true) {
+    const key = assignmentKey(employeeId, d);
+    if (planned.has(key)) {
+      count++;
+    } else if (blocked && isProductiveWorkAllocationLabel(blocked.get(key))) {
+      count++;
+    } else {
+      break;
+    }
     d = addDays(d, -1);
   }
 

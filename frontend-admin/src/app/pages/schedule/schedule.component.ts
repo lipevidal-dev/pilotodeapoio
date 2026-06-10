@@ -138,6 +138,10 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   private readonly collapsedSections = signal<Set<string>>(new Set());
 
   readonly generation = computed(() => this.workspace.lastGeneration());
+  /** Mês exibido na grade — prioriza o carregado em tela, não o id stale da última geração. */
+  readonly activeScheduleMonthId = computed(
+    () => this.scheduleData()?.scheduleMonth.id ?? this.workspace.scheduleMonthId(),
+  );
   readonly scheduleMonthId = computed(() => this.workspace.scheduleMonthId());
 
   readonly gridEditable = computed(() => {
@@ -210,6 +214,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
       assignments: viewData.assignments,
       preAllocations: viewData.preAllocations,
       operationalCadastros: viewData.operationalCadastros,
+      shifts: viewData.shifts,
     });
   });
 
@@ -349,7 +354,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   }
 
   generateApao(): void {
-    const id = this.scheduleMonthId() ?? this.scheduleData()?.scheduleMonth.id;
+    const id = this.activeScheduleMonthId();
     if (!id) return;
     this.generatingApao.set(true);
     this.scheduleService.generateApaoSchedule(id).subscribe({
@@ -371,7 +376,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   }
 
   generateFlights(): void {
-    const id = this.scheduleMonthId() ?? this.scheduleData()?.scheduleMonth.id;
+    const id = this.activeScheduleMonthId();
     if (!id) return;
     this.generatingFlights.set(true);
     this.scheduleService.generateFlights(id).subscribe({
@@ -393,7 +398,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   }
 
   clearGeneration(): void {
-    const id = this.scheduleMonthId() ?? this.scheduleData()?.scheduleMonth.id;
+    const id = this.activeScheduleMonthId();
     if (!id) return;
     if (
       !window.confirm(
@@ -423,7 +428,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   }
 
   publish(): void {
-    const id = this.scheduleMonthId();
+    const id = this.activeScheduleMonthId();
     if (!id) return;
     this.publishing.set(true);
     this.publishBlocked.set(null);
@@ -458,8 +463,12 @@ export class ScheduleComponent implements OnInit, OnDestroy {
 
   onSelectionCompleted(selection: GridSelectionComplete): void {
     this.pendingSelection = selection;
+    const emp = this.scheduleData()?.employees.find((e) => e.id === selection.employeeId);
+    const employeeType =
+      emp?.cargoCode ?? emp?.type ?? selection.employeeType;
     this.allocationContext.set({
       employeeName: selection.employeeName,
+      employeeType,
       startDay: selection.startDay,
       endDay: selection.endDay,
       selectedDays: selection.days,
@@ -495,7 +504,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
 
   onDeleteConfirmed(opts: { force: boolean }): void {
     const selection = this.pendingDeleteSelection;
-    const monthId = this.scheduleMonthId() ?? this.scheduleData()?.scheduleMonth.id;
+    const monthId = this.activeScheduleMonthId();
     if (!selection || !monthId) return;
 
     const ranges = groupContiguousDays(selection.days);
@@ -533,7 +542,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
 
   onAllocationOption(option: ManualAllocationOption): void {
     const selection = this.pendingSelection;
-    const monthId = this.scheduleMonthId() ?? this.scheduleData()?.scheduleMonth.id;
+    const monthId = this.activeScheduleMonthId();
     if (!selection || !monthId) return;
 
     const ranges = selection.days?.length
@@ -572,7 +581,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   }
 
   onMoveRequested(move: GridMoveRequest): void {
-    const monthId = this.scheduleMonthId() ?? this.scheduleData()?.scheduleMonth.id;
+    const monthId = this.activeScheduleMonthId();
     if (!monthId) return;
     this.manualEditing.set(true);
     this.scheduleService
@@ -593,33 +602,49 @@ export class ScheduleComponent implements OnInit, OnDestroy {
       });
   }
 
-  private handleManualEditSuccess(res: ManualEditResponse, detail: string): void {
+  private handleManualEditSuccess(_res: ManualEditResponse, detail: string): void {
     this.manualEditing.set(false);
     this.scheduleGrid?.clearSelection();
     this.pendingSelection = null;
     this.pendingDeleteSelection = null;
     this.allocationContext.set(null);
     this.deleteContext.set(null);
-    const ruleViolations = res.validation.violations.map((v, idx) => ({
-      id: `manual-${idx}`,
-      severity: v.severity,
-      ruleCode: v.ruleCode,
-      message: v.message,
-      date: v.date ?? null,
-      employeeId: res.employees.find((e) => e.name === v.employee)?.id ?? null,
-    }));
+    this.stepAuditResult.set(null);
     this.workspace.lastGeneration.set(null);
-    this.scheduleData.set({
-      scheduleMonth: res.scheduleMonth,
-      employees: res.employees,
-      shifts: res.shifts,
-      assignments: res.assignments,
-      preAllocations: res.preAllocations,
-      operationalCadastros: res.operationalCadastros,
-      ruleViolations,
-      validation: res.validation,
+    this.syncWorkspacePeriod();
+    this.loadingView.set(true);
+    this.scheduleService.getSchedule(this.yearSig(), this.monthSig()).subscribe({
+      next: (data) => {
+        this.loadingView.set(false);
+        this.scheduleData.set(data);
+        this.workspace.scheduleMonthId.set(data.scheduleMonth.id);
+        const grid = buildScheduleGrid({
+          year: this.yearSig(),
+          month: this.monthSig(),
+          employees: data.employees,
+          assignments: data.assignments,
+          preAllocations: data.preAllocations,
+          operationalCadastros: data.operationalCadastros,
+          shifts: data.shifts,
+        });
+        this.exportService.prepareExportPayload(grid);
+        this.messages.add({ severity: 'success', summary: 'Escala', detail, life: 4000 });
+      },
+      error: () => {
+        this.loadingView.set(false);
+        this.messages.add({
+          severity: 'warn',
+          summary: 'Escala',
+          detail: 'Alteração salva, mas falha ao recarregar a grade. Atualize o período.',
+          life: 5000,
+        });
+      },
     });
-    this.messages.add({ severity: 'success', summary: 'Escala', detail, life: 4000 });
+  }
+
+  private syncWorkspacePeriod(): void {
+    this.workspace.year.set(this.yearSig());
+    this.workspace.month.set(this.monthSig());
   }
 
   private handleManualEditError(err: HttpErrorResponse): void {
@@ -637,11 +662,13 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   }
 
   loadScheduleView(): void {
+    this.syncWorkspacePeriod();
     this.loadingView.set(true);
     this.scheduleService.getSchedule(this.yearSig(), this.monthSig()).subscribe({
       next: (data) => {
         this.loadingView.set(false);
         this.scheduleData.set(data);
+        this.workspace.scheduleMonthId.set(data.scheduleMonth.id);
         const grid = buildScheduleGrid({
           year: this.yearSig(),
           month: this.monthSig(),
@@ -649,6 +676,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
           assignments: data.assignments,
           preAllocations: data.preAllocations,
           operationalCadastros: data.operationalCadastros,
+          shifts: data.shifts,
         });
         this.exportService.prepareExportPayload(grid);
       },

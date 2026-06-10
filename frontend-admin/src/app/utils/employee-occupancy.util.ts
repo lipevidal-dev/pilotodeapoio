@@ -13,6 +13,34 @@ import {
   sanitizeAssignmentForGrid,
 } from './schedule-cell.mapper';
 
+function isCadastroPreallocDisplayLabel(label: string): boolean {
+  const n = label
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .trim();
+  if (n === 'SIMULADOR' || n.includes('SIMULADOR')) return true;
+  if (n === 'CURSO' || n.includes('CURSO')) return true;
+  if (n === 'CMA') return true;
+  if (n === 'OUTRO') return true;
+  if (n === 'FP' || n.includes('FOLGA PEDIDA')) return true;
+  return false;
+}
+
+function isGeneratorPreallocDisplayLabel(label: string): boolean {
+  const n = label
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .trim();
+  if (['ND', 'FOLGA', 'FOLGA SOCIAL', 'FOLGA AGRUPADA', 'FOLGA ANIVERSÁRIO', 'FANI', 'VOO'].includes(n)) {
+    return true;
+  }
+  if (n.includes('FOLGA ANIVERS')) return true;
+  if (n.includes('FOLGA') && !n.includes('PEDIDA')) return true;
+  return false;
+}
+
 export interface DayOccupancy {
   display: string;
   kind: ScheduleCellKind;
@@ -94,6 +122,24 @@ export function buildEmployeeOccupancyMap(input: BuildEmployeeOccupancyInput): D
     bucket.labels.push(row.label);
     bucket.source = row.source;
     if (row.notes) bucket.notes = row.notes;
+    operationalByDate.set(key, bucket);
+  }
+
+  for (const row of schedule?.preAllocations ?? []) {
+    if (row.employeeId !== employeeId) continue;
+    const normalized = row.label
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .trim();
+    if (normalized.includes('VOO')) continue;
+    if (!isCadastroPreallocDisplayLabel(row.label) && !isGeneratorPreallocDisplayLabel(row.label)) {
+      continue;
+    }
+    const key = apiDateKey(row.date);
+    const bucket = operationalByDate.get(key) ?? { labels: [] };
+    bucket.labels.push(row.label);
+    bucket.source = bucket.source ?? 'pre_allocation';
     operationalByDate.set(key, bucket);
   }
 

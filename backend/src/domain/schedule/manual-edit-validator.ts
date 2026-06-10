@@ -1,4 +1,3 @@
-import { compareEmployeesBySeniority } from "../employee/seniority.js";
 import { wouldApaoFolgaBlockOffice } from "../rules/apao-availability.js";
 import { addDays } from "../rules/dates.js";
 import { canWork } from "../rules/eligibility.js";
@@ -44,8 +43,23 @@ function occKey(employeeId: string, date: string): string {
   return `${employeeId}|${date}`;
 }
 
+/** Alinha UUID → id numérico do domínio pelo nome (testes / contextos sintéticos). */
+export function buildUuidToDomainIdByName(
+  ctx: ScheduleContext,
+  employees: Array<{ id: string; name: string }>,
+): Map<string, number> {
+  const nameToDomainId = new Map(ctx.employees.map((e) => [e.name, e.id]));
+  const map = new Map<string, number>();
+  for (const employee of employees) {
+    const domainId = nameToDomainId.get(employee.name);
+    if (domainId != null) map.set(employee.id, domainId);
+  }
+  return map;
+}
+
 export function buildManualEditValidationContext(params: {
   ctx: ScheduleContext;
+  uuidToDomainId: Map<string, number>;
   employees: Array<{ id: string; name: string; role: string; seniorityNumber?: number }>;
   shiftRestrictionRows: Array<{ employeeUuid: string; shiftCode: string }>;
   preferredShiftRows?: Array<{ employeeUuid: string; shiftCode: string }>;
@@ -56,23 +70,12 @@ export function buildManualEditValidationContext(params: {
   preAllocations: Array<{ employeeId: string; date: string; label: string }>;
   flightDays: Array<{ employeeUuid: string; date: string }>;
 }): ManualEditValidationContext {
-  const sorted = [...params.employees].sort((a, b) =>
-    compareEmployeesBySeniority(
-      {
-        type: a.role as "PAO" | "APAO",
-        seniorityNumber: a.seniorityNumber ?? 1,
-        name: a.name,
-      },
-      {
-        type: b.role as "PAO" | "APAO",
-        seniorityNumber: b.seniorityNumber ?? 1,
-        name: b.name,
-      },
-    ),
-  );
-  const idByUuid = new Map(sorted.map((e, i) => [e.id, i + 1]));
-  const uuidById = new Map(sorted.map((e, i) => [i + 1, e.id]));
-  const nameByUuid = new Map(sorted.map((e) => [e.id, e.name]));
+  const idByUuid = params.uuidToDomainId;
+  const uuidById = new Map<number, string>();
+  for (const [uuid, domainId] of idByUuid) {
+    uuidById.set(domainId, uuid);
+  }
+  const nameByUuid = new Map(params.employees.map((e) => [e.id, e.name]));
 
   const shiftRestrictions = new Map<string, Set<string>>();
   for (const row of params.shiftRestrictionRows) {
@@ -199,7 +202,9 @@ function employeeDomainId(v: ManualEditValidationContext, uuid: string): number 
 }
 
 function isManualShiftAllocation(type: ManualAllocationType, v: ManualEditValidationContext): boolean {
-  return SHIFT_ALLOCATION_TYPES.has(type) || v.parallelShiftCodes.has(type);
+  const upper = type.toUpperCase();
+  if (SHIFT_ALLOCATION_TYPES.has(type) || v.parallelShiftCodes.has(type)) return true;
+  return v.scheduleContext.shifts.some((s) => s.code.toUpperCase() === upper);
 }
 
 function preferredShiftsForCanWork(v: ManualEditValidationContext): Map<number, Set<string>> | undefined {
@@ -378,6 +383,8 @@ export function validateManualT8BlockSet(
       roleByEmployeeId: roleMap,
       shiftRestrictions: v.scheduleContext.shiftRestrictions,
       skipSimultaneousStationsCheck: true,
+      skipApaoPaoCoverageCheck: true,
+      skipApaoOverlapCheck: true,
     });
     if (!r.ok) {
       conflicts.push({ code: "CANNOT_WORK", message: `Conflito: ${r.reason}.` });
@@ -501,6 +508,8 @@ export function validateManualSet(
       preferredShifts: preferredShiftsForCanWork(v),
       parallelShiftCodes: v.parallelShiftCodes,
       skipSimultaneousStationsCheck: true,
+      skipApaoPaoCoverageCheck: true,
+      skipApaoOverlapCheck: true,
     });
     if (!r.ok) {
       conflicts.push({ code: "CANNOT_WORK", message: `Conflito: ${r.reason}.` });
@@ -551,7 +560,7 @@ export function validateManualMove(
   }
 
   let moveType: ManualAllocationType | null = null;
-  if (src.shiftCode && ["T6", "T7", "T8"].includes(src.shiftCode)) {
+  if (src.shiftCode && SHIFT_ALLOCATION_TYPES.has(src.shiftCode as ManualAllocationType)) {
     moveType = src.shiftCode as ManualAllocationType;
   } else if (src.hasFlight || isPreallocVoo(src)) {
     moveType = "VOO";

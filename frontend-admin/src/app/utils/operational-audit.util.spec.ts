@@ -717,6 +717,37 @@ describe('operational-audit.util', () => {
     expect(gaps[3]).toEqual(['T6', 'T7', 'T8']);
   });
 
+  it('9c. computeCoverageGapsByDay usa dia real da data (ex.: dia 19)', () => {
+    const emp: Employee = {
+      id: 'p1',
+      name: 'PAO',
+      type: 'PAO',
+      roleId: 'r1',
+      cargoCode: 'PAO',
+      cargoName: 'PAO',
+      active: true,
+    };
+    const gaps = computeCoverageGapsByDay(
+      31,
+      [
+        {
+          id: '1',
+          scheduleMonthId: 'm',
+          employeeId: 'p1',
+          date: '2026-07-19T12:00:00.000Z',
+          shiftCode: 'T6',
+          label: null,
+          source: 'generated',
+          employee: emp,
+        },
+      ],
+      new Set(['p1']),
+    );
+    expect(gaps[19]).toEqual(['T7', 'T8']);
+    expect(gaps[13]).toBeUndefined();
+    expect(gaps[14]).toBeUndefined();
+  });
+
   it('9. cobertura T6 percentual', () => {
     const emp: Employee = {
       id: 'p1',

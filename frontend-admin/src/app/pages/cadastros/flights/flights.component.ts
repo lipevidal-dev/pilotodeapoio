@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TableModule } from 'primeng/table';
@@ -11,11 +11,14 @@ import { InputTextModule } from 'primeng/inputtext';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { FlightAssignmentService } from '../../../services/flight-assignment.service';
 import { ScheduleRefreshService } from '../../../services/schedule-refresh.service';
+import { ScheduleWorkspaceService } from '../../../services/schedule-workspace.service';
 import { EmployeeService } from '../../../services/employee.service';
 import { EmployeeOccupancyService } from '../../../services/employee-occupancy.service';
 import type { DayOccupancyMap } from '../../../utils/employee-occupancy.util';
 import { sortEmployeesBySeniority } from '../../../utils/employee-sort.util';
 import { OperationalCalendarComponent } from '../../../components/operational-calendar/operational-calendar.component';
+import { CadastroEmployeeFilterComponent } from '../../../components/cadastro-employee-filter/cadastro-employee-filter.component';
+import { filterCadastroRowsByEmployee } from '../../../utils/cadastro-list-filter.util';
 import {
   batchDeleteDetail,
   batchResultDetail,
@@ -38,6 +41,7 @@ import type { Employee, FlightAssignment } from '../../../models/api.models';
     SelectModule,
     InputTextModule,
     OperationalCalendarComponent,
+    CadastroEmployeeFilterComponent,
   ],
   templateUrl: './flights.component.html',
   styleUrl: '../cadastros-shared.scss',
@@ -49,9 +53,18 @@ export class FlightsComponent implements OnInit {
   private readonly messages = inject(MessageService);
   private readonly confirm = inject(ConfirmationService);
   private readonly scheduleRefresh = inject(ScheduleRefreshService);
+  private readonly workspace = inject(ScheduleWorkspaceService);
 
   readonly rows = signal<FlightAssignment[]>([]);
   readonly employees = signal<Employee[]>([]);
+  readonly filterEmployeeId = signal('');
+  readonly filteredRows = computed(() =>
+    filterCadastroRowsByEmployee(
+      this.rows(),
+      this.filterEmployeeId(),
+      (row) => row.employeeId,
+    ),
+  );
   readonly loading = signal(false);
   readonly dialogVisible = signal(false);
   readonly saving = signal(false);
@@ -65,12 +78,19 @@ export class FlightsComponent implements OnInit {
 
   readonly dayOccupancy = signal<DayOccupancyMap>({});
   readonly occupancyLoading = signal(false);
-  readonly calendarYear = signal(new Date().getFullYear());
-  readonly calendarMonth = signal(new Date().getMonth() + 1);
+  readonly calendarYear = signal(this.workspace.year());
+  readonly calendarMonth = signal(this.workspace.month());
 
   readonly formatDate = formatIsoDate;
 
+  onFilterEmployeeChange(employeeId: string): void {
+    this.filterEmployeeId.set(employeeId);
+    this.selectedRows = [];
+  }
+
   ngOnInit(): void {
+    this.calendarYear.set(this.workspace.year());
+    this.calendarMonth.set(this.workspace.month());
     this.loadEmployees();
     this.load();
   }
@@ -183,6 +203,8 @@ export class FlightsComponent implements OnInit {
             detail: batchResultDetail(res, 'voo'),
           });
           if (res.created > 0) {
+            this.workspace.year.set(this.calendarYear());
+            this.workspace.month.set(this.calendarMonth());
             this.load();
             this.scheduleRefresh.notify();
           }

@@ -128,6 +128,15 @@ describe("descanso mínimo 12h", () => {
     const r = has12hRest(1, "2026-06-11", "T7", plan, shiftMap);
     expect(r.ok).toBe(true);
   });
+
+  it("simulador com fim 00:00 bloqueia T6 no dia seguinte antes de 12h", () => {
+    const plan = planned([]);
+    const timed = [{ employeeId: 1, day: "2026-06-10", startTime: "12:00", endTime: "00:00" }];
+    const blockedT6 = has12hRest(1, "2026-06-11", "T6", plan, shiftMap, timed);
+    const allowedT7 = has12hRest(1, "2026-06-11", "T7", plan, shiftMap, timed);
+    expect(blockedT6.ok).toBe(false);
+    expect(allowedT7.ok).toBe(true);
+  });
 });
 
 describe("máximo 2 pessoas simultâneas", () => {

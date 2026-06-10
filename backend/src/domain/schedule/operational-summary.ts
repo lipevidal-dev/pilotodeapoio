@@ -8,19 +8,25 @@ import {
 } from "./operational-audit.js";
 import { listAvailableForFlightFromWorkspace } from "./available-for-flight.js";
 import { normalizeOperationalLabel } from "./operational-labels.js";
+import { listPaoRateioShiftCodesFromWorkspace } from "./pao-rateio-shifts.js";
+import { listParallelShiftCodes } from "../shift/coverage-type.js";
 import type { ScheduleContext, ValidationIssue } from "./types.js";
 import { assignmentKey } from "./types.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 
 export type { OperationalStatus };
 
-const PAO_TURNO_CODES = new Set(["T6", "T7", "T8"]);
+function paoTurnoCodes(ws: GenerationWorkspace): Set<string> {
+  return new Set(listPaoRateioShiftCodesFromWorkspace(ws));
+}
 
 export interface EmployeeOperationalSummary {
   employeeUuid: string;
   name: string;
   type: string;
   turnos: number;
+  /** Turnos alocados para rateio (inclui PARALLEL). */
+  assignedShiftCount: number;
   diasTrabalhados: number;
   /** F + FS + FA + FP (folgas computáveis) */
   folgas: number;
@@ -180,6 +186,7 @@ function emptyStats(emp: { uuid: string; employee: { name: string; role: string 
     name: emp.employee.name,
     type: emp.employee.role,
     turnos: 0,
+    assignedShiftCount: 0,
     diasTrabalhados: 0,
     folgas: 0,
     folgaSocial: 0,
@@ -218,6 +225,7 @@ function exclusiveDayBuckets(
   let folgas = 0;
   let ferias = 0;
   let disponivel = 0;
+  const parallelCodes = new Set(listParallelShiftCodes(ws.input.shifts));
 
   for (const day of ws.days) {
     const shift = ws.planned.get(assignmentKey(did, day));
@@ -228,7 +236,7 @@ function exclusiveDayBuckets(
       ferias++;
       continue;
     }
-    if (shift) {
+    if (shift && !parallelCodes.has(shift.toUpperCase())) {
       trabalho++;
       continue;
     }
@@ -256,19 +264,25 @@ export function buildOperationalSummary(
   }
 
   const apaoCodes = apaoTurnoCodes(ws);
+  const paoCodes = paoTurnoCodes(ws);
+  const parallelCodes = new Set(listParallelShiftCodes(ws.input.shifts));
 
   for (const a of ws.toAssignments()) {
     const stats = byUuid.get(a.employeeUuid);
     if (!stats) continue;
     const code = a.shiftCode.toUpperCase();
-    if (stats.type === "PAO" && PAO_TURNO_CODES.has(code)) {
+    if (stats.type === "PAO" && paoCodes.has(code)) {
       stats.turnos++;
-      stats.diasTrabalhados++;
-      if (code === "T6") stats.t6++;
-      if (code === "T7") stats.t7++;
-      if (code === "T8") stats.t8++;
+      stats.assignedShiftCount++;
+      if (!parallelCodes.has(code)) {
+        stats.diasTrabalhados++;
+        if (code === "T6") stats.t6++;
+        if (code === "T7") stats.t7++;
+        if (code === "T8") stats.t8++;
+      }
     } else if (stats.type === "APAO" && apaoCodes.has(code)) {
       stats.turnos++;
+      stats.assignedShiftCount++;
       stats.diasTrabalhados++;
     }
   }

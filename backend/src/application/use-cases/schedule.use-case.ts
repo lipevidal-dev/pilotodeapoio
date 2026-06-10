@@ -49,6 +49,7 @@ export class ScheduleUseCase {
     const record = await this.scheduleRepo.findMonth(year, month);
     if (!record) {
       const ensured = await this.scheduleRepo.ensureMonth(year, month);
+      const fresh = await this.scheduleRepo.findMonth(year, month);
       const shifts = await this.scheduleRepo.listShifts();
       const employees = await this.scheduleRepo.listActiveEmployees();
       const operationalCadastros = await this.loadOperationalCadastros(year, month);
@@ -56,8 +57,8 @@ export class ScheduleUseCase {
         scheduleMonth: ensured,
         employees,
         shifts,
-        assignments: [],
-        preAllocations: [],
+        assignments: fresh?.assignments ?? [],
+        preAllocations: fresh?.preAllocations ?? [],
         operationalCadastros,
         ruleViolations: [],
         validation: null,
@@ -67,7 +68,7 @@ export class ScheduleUseCase {
     const shifts = await this.scheduleRepo.listShifts();
     const employees = await this.scheduleRepo.listActiveEmployees();
 
-    const domainContext = buildContextFromDbParts({
+    const { context: domainContext } = buildContextFromDbParts({
       year,
       month,
       employees,

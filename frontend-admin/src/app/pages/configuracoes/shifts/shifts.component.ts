@@ -61,7 +61,7 @@ export class ShiftsComponent implements OnInit {
   formMandatoryCoverage = false;
   formRequiresT8PairNd = false;
   formCoverageType: 'REQUIRED' | 'PARALLEL' = 'REQUIRED';
-  filter: ShiftFilter = 'all';
+  filter = signal<ShiftFilter>('all');
 
   readonly coverageTypeOptions = [
     { label: 'Cobertura obrigatória', value: 'REQUIRED' as const },
@@ -85,7 +85,7 @@ export class ShiftsComponent implements OnInit {
 
   readonly filteredShifts = computed(() => {
     const rows = this.shifts();
-    switch (this.filter) {
+    switch (this.filter()) {
       case 'active':
         return rows.filter((s) => s.active);
       case 'inactive':

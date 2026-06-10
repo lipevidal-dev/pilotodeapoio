@@ -146,6 +146,39 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
     expect(summary.diasTrabalhados).toBe(2);
   });
 
+  it('9. T9 paralelo conta em turnos mas não em dias trabalhados', () => {
+    const emp: Employee = {
+      id: 'pao-t9',
+      name: 'PAO T9',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 6,
+      employees: [emp],
+      assignments: [
+        { id: '1', scheduleMonthId: 'm1', employeeId: 'pao-t9', date: '2026-06-01T00:00:00.000Z', shiftCode: 'T7', label: null, source: 'generated', employee: emp },
+        { id: '2', scheduleMonthId: 'm1', employeeId: 'pao-t9', date: '2026-06-02T00:00:00.000Z', shiftCode: 'T8', label: null, source: 'generated', employee: emp },
+        { id: '3', scheduleMonthId: 'm1', employeeId: 'pao-t9', date: '2026-06-03T00:00:00.000Z', shiftCode: 'T9', label: null, source: 'generated', employee: emp },
+      ],
+      preAllocations: [],
+      shifts: [
+        { id: 's-t7', code: 'T7', name: 'T7', startTime: '12:00', endTime: '18:00', roleType: 'PAO', durationHours: 6, active: true, displayOrder: 1, mandatoryCoverage: true, requiresT8PairNd: false, coverageType: 'REQUIRED' },
+        { id: 's-t8', code: 'T8', name: 'T8', startTime: '18:00', endTime: '00:00', roleType: 'PAO', durationHours: 6, active: true, displayOrder: 2, mandatoryCoverage: true, requiresT8PairNd: true, coverageType: 'REQUIRED' },
+        { id: 's-t9', code: 'T9', name: 'T9', startTime: '10:00', endTime: '18:00', roleType: 'PAO', durationHours: 8, active: true, displayOrder: 3, mandatoryCoverage: false, requiresT8PairNd: false, coverageType: 'PARALLEL' },
+      ],
+    });
+    const summary = grid.groups[0].rows[0].summary;
+    expect(summary.turnos).toBe(3);
+    expect(summary.diasTrabalhados).toBe(2);
+    expect(summary.t7).toBe(1);
+    expect(summary.t8).toBe(1);
+  });
+
   it('10. FANI exibe sigla e conta em folgas', () => {
     expect(mapLabelToCell('FOLGA ANIVERSÁRIO').display).toBe('FANI');
     expect(mapLabelToCell('FOLGA ANIVERSÁRIO').kind).toBe('fani');
@@ -271,10 +304,100 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
     expect(grid.groups[0].rows[0].cells[4].display).toBe('VOO');
   });
 
-  it('calendário usa sigla compacta SIM e escala mantém SIMULADOR', () => {
+  it('assignment T9 aparece na grade como turno', () => {
+    const emp: Employee = {
+      id: 'pao-1',
+      name: 'Palombino',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 6,
+      employees: [emp],
+      assignments: [
+        {
+          id: 'a-t9',
+          scheduleMonthId: 'm1',
+          employeeId: 'pao-1',
+          date: '2026-06-18T12:00:00.000Z',
+          shiftCode: 'T9',
+          label: null,
+          source: 'MANUAL',
+        },
+      ],
+      preAllocations: [],
+      operationalCadastros: [],
+    });
+    expect(grid.groups[0].rows[0].cells[17].display).toBe('T9');
+    expect(grid.groups[0].rows[0].cells[17].kind).toBe('shift');
+  });
+
+  it('preAllocation CURSO aparece na grade mesmo sem operationalCadastros', () => {
+    const emp: Employee = {
+      id: 'pao-1',
+      name: 'PAO Test',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 6,
+      employees: [emp],
+      assignments: [],
+      preAllocations: [
+        {
+          id: 'pre-curso',
+          employeeId: 'pao-1',
+          date: '2026-06-10T12:00:00.000Z',
+          label: 'CURSO',
+        },
+      ],
+      operationalCadastros: [],
+    });
+    expect(grid.groups[0].rows[0].cells[9].display).toBe('CRS');
+    expect(grid.groups[0].rows[0].summary.cursos).toBe(1);
+  });
+
+  it('preAllocation FOLGA PEDIDA aparece como FP na grade', () => {
+    const emp: Employee = {
+      id: 'pao-1',
+      name: 'PAO Test',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 6,
+      employees: [emp],
+      assignments: [],
+      preAllocations: [
+        {
+          id: 'pre-fp',
+          employeeId: 'pao-1',
+          date: '2026-06-11T12:00:00.000Z',
+          label: 'FOLGA PEDIDA',
+        },
+      ],
+      operationalCadastros: [],
+    });
+    expect(grid.groups[0].rows[0].cells[10].display).toBe('FP');
+    expect(grid.groups[0].rows[0].summary.fp).toBe(1);
+  });
+
+  it('escala e calendário usam sigla compacta SIM para simulador', () => {
     const full = mapLabelToCell('SIMULADOR');
     const compact = mapCellToCalendarDisplay(full);
-    expect(full.display).toBe('SIMULADOR');
+    expect(full.display).toBe('SIM');
     expect(compact.display).toBe('SIM');
   });
 

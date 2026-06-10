@@ -73,6 +73,7 @@ export class PortalScheduleComponent implements OnInit {
       assignments: data.assignments,
       preAllocations: data.preAllocations,
       operationalCadastros: data.operationalCadastros,
+      shifts: data.shifts,
     });
     return applyGridFilters(grid, {
       type: this.filterType(),

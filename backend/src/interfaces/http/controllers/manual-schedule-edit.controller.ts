@@ -10,6 +10,10 @@ import {
   manualMoveBodySchema,
   manualRangeBodySchema,
 } from "../dto/manual-schedule-edit.dto.js";
+import {
+  mapScheduleEmployees,
+  mapScheduleShifts,
+} from "../../../infrastructure/mappers/schedule-api.mapper.js";
 
 function mapManualEditResult(result: Awaited<ReturnType<typeof manualScheduleEditUseCase.editCell>>) {
   return {
@@ -18,8 +22,8 @@ function mapManualEditResult(result: Awaited<ReturnType<typeof manualScheduleEdi
     conflicts: result.conflicts,
     warnings: result.warnings,
     scheduleMonth: result.scheduleMonth,
-    employees: result.employees,
-    shifts: result.shifts,
+    employees: mapScheduleEmployees(result.employees),
+    shifts: mapScheduleShifts(result.shifts),
     assignments: result.assignments,
     preAllocations: result.preAllocations,
     operationalCadastros: result.operationalCadastros,

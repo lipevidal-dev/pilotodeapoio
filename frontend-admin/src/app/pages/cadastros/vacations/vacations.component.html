@@ -6,7 +6,19 @@
 
 <p-card styleClass="gol-card-accent">
 
+  <div class="filter-bar">
+    <app-cadastro-employee-filter
+      [employees]="employees()"
+      [employeeId]="filterEmployeeId()"
+      (employeeIdChange)="onFilterEmployeeChange($event)"
+    />
+  </div>
+
   <div class="toolbar-row">
+    <span class="toolbar-hint">
+      <i class="pi pi-calendar"></i>
+      {{ filteredRows().length }} de {{ rows().length }} registros
+    </span>
     <div class="toolbar-actions">
       <p-button
         label="Excluir selecionados"
@@ -22,12 +34,12 @@
   </div>
 
   <p-table
-    [value]="rows()"
+    [value]="filteredRows()"
     [(selection)]="selectedRows"
     dataKey="id"
     [loading]="loading()"
     styleClass="gol-table p-datatable-sm"
-    [paginator]="rows().length > 15"
+    [paginator]="filteredRows().length > 15"
     [rows]="15"
   >
     <ng-template pTemplate="colgroup">

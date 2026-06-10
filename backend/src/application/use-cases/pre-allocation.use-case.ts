@@ -51,6 +51,8 @@ export class PreAllocationUseCase {
     dates: string[];
     label: string;
     notes?: string;
+    startTime?: string;
+    endTime?: string;
   }): Promise<PreAllocationBatchResult> {
     if (input.dates.length === 0) {
       throw new Error("Informe ao menos uma data");
@@ -92,6 +94,8 @@ export class PreAllocationUseCase {
         date: new Date(`${date}T12:00:00.000Z`),
         label,
         notes: input.notes,
+        startTime: input.startTime,
+        endTime: input.endTime,
       });
       items.push(row);
     }

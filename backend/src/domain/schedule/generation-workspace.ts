@@ -2,7 +2,7 @@ import type { ShiftMap } from "../shift/types.js";
 import { buildShiftMap } from "../shift/default-shifts.js";
 import { listParallelShiftCodes } from "../shift/coverage-type.js";
 import { canWork } from "../rules/eligibility.js";
-import { consecutiveWorkCount } from "../rules/consecutive.js";
+import { consecutiveWorkCount, isProductiveWorkAllocationLabel } from "../rules/consecutive.js";
 import { has12hRest } from "../rules/time.js";
 import {
   IDEAL_PAO_REST_COUNT,
@@ -13,6 +13,7 @@ import {
   VACATION_TYPES,
 } from "../rules/constants.js";
 import { isOperationalHardBlock, normalizeOperationalLabel } from "./operational-labels.js";
+import { listPaoMinShiftFillCodesFromWorkspace, listPaoRateioShiftCodesFromWorkspace } from "./pao-rateio-shifts.js";
 import { assignmentKey, type BlockedMap, type PlannedMap } from "./types.js";
 import { birthdayInMonth, FANI_LABEL } from "../rules/birthday.js";
 import { addDays, iterDays, weekday } from "../rules/dates.js";
@@ -29,13 +30,12 @@ import type {
   GenerationInputEmployee,
 } from "./generation-types.js";
 import type { ScheduleContext, ValidationIssue } from "./types.js";
-import { MIN_SHIFTS_FULL_NO_FLIGHT_MONTH } from "../employee/restrictions.js";
 import { coverT6T7ByBlocks, wouldExceedT6T7BlockMax } from "./t6-t7-block-coverage.js";
 import {
   correctMonoFolgasPedidas,
   type MonoFolgaAuditResult,
 } from "./mono-folga-pedida.js";
-import { countAllocatedTurns } from "./real-schedule-turn-rateio.js";
+import { countAllocatedTurns, computeTurnRateio, sortPaoByAssignedTurnBalance } from "./real-schedule-turn-rateio.js";
 import { sortPaoByOperationalPriority } from "./pao-operational-priority.js";
 import {
   maxConsecutiveWorkDays,
@@ -62,6 +62,13 @@ export class GenerationWorkspace {
   readonly historyPlanned: PlannedMap = new Map();
   readonly historyBlocked: BlockedMap = new Map();
   readonly allocations: GeneratedAllocation[] = [];
+  /** Ocupações com janela de horário (ex.: simulador) para descanso 12h. */
+  readonly timedOccupancies: Array<{
+    employeeId: number;
+    day: string;
+    startTime: string;
+    endTime: string;
+  }> = [];
   readonly days: string[];
   readonly paoEmps: GenerationInputEmployee[];
   readonly apaoEmps: GenerationInputEmployee[];
@@ -147,32 +154,32 @@ export class GenerationWorkspace {
     return countAllocatedTurns(this, uuid);
   }
 
-  /** Turnos elegíveis para o PAO (exclui restrições permanentes como T8). */
-  allowedShiftsForEmployee(
-    uuid: string,
-    fallback: readonly ("T6" | "T7" | "T8")[] = PAO_COVERAGE_SHIFTS,
-  ): ("T6" | "T7" | "T8")[] {
+  /** Turnos elegíveis para o PAO (exclui restrições permanentes). */
+  allowedShiftsForEmployee(uuid: string, fallback?: readonly string[]): string[] {
+    const shifts = fallback ?? listPaoRateioShiftCodesFromWorkspace(this);
     const did = this.uuidToDomain.get(uuid);
-    if (!did) return [...fallback];
+    if (!did) return [...shifts];
     const restricted = this.input.shiftRestrictions?.get(did);
-    if (!restricted || restricted.size === 0) return [...fallback];
-    return fallback.filter((code) => !restricted.has(code));
+    if (!restricted || restricted.size === 0) return [...shifts];
+    return shifts.filter((code) => !restricted.has(code));
   }
 
-  /** PAO com mês inteiro sem voo: tenta atingir 20 turnos; senão emite WARNING. */
-  ensureMinShiftsForFullMonthNoFlight(
-    allowedShifts: readonly ("T6" | "T7" | "T8")[] = PAO_COVERAGE_SHIFTS,
-  ): void {
+  /** PAO com mês inteiro sem voo: tenta atingir meta de turnos do rateio. */
+  ensureMinShiftsForFullMonthNoFlight(allowedShifts?: readonly string[]): void {
+    const shifts = allowedShifts ?? listPaoMinShiftFillCodesFromWorkspace(this);
     this.noFlightWarnings.length = 0;
+    const rateio = computeTurnRateio(this);
+    const targetByUuid = new Map(rateio.entries.map((e) => [e.employeeUuid, e.turnTarget]));
     const prioritized = sortPaoByOperationalPriority(this, 0).filter((c) =>
       this.isFullMonthNoFlight(c.uuid),
     );
 
     for (const c of prioritized) {
+      const turnTarget = targetByUuid.get(c.uuid) ?? 0;
       let count = countAllocatedTurns(this, c.uuid);
-      if (count >= MIN_SHIFTS_FULL_NO_FLIGHT_MONTH) continue;
+      if (count >= turnTarget) continue;
 
-      const shiftsForEmployee = this.allowedShiftsForEmployee(c.uuid, allowedShifts);
+      const shiftsForEmployee = this.allowedShiftsForEmployee(c.uuid, shifts);
       if (shiftsForEmployee.length === 0) {
         this.noFlightWarnings.push({
           severity: "MÉDIA",
@@ -187,7 +194,7 @@ export class GenerationWorkspace {
       }
 
       for (const day of this.days) {
-        if (count >= MIN_SHIFTS_FULL_NO_FLIGHT_MONTH) break;
+        if (count >= turnTarget) break;
         const did = this.uuidToDomain.get(c.uuid)!;
         if (this.planned.has(assignmentKey(did, day))) continue;
         if (this.allocations.some((a) => a.employeeUuid === c.uuid && a.date === day && a.label === "ND")) {
@@ -201,7 +208,7 @@ export class GenerationWorkspace {
         }
       }
 
-      if (count < MIN_SHIFTS_FULL_NO_FLIGHT_MONTH) {
+      if (count < turnTarget) {
         this.noFlightWarnings.push({
           severity: "MÉDIA",
           level: "WARNING",
@@ -209,7 +216,7 @@ export class GenerationWorkspace {
           date: "",
           employee: c.employee.name,
           detail:
-            "Funcionário com restrição de voo no mês inteiro não atingiu 20 turnos por inviabilidade operacional.",
+            `Funcionário com restrição de voo no mês inteiro não atingiu ${turnTarget} turno(s) (${count}/${turnTarget}).`,
         });
       }
     }
@@ -219,9 +226,9 @@ export class GenerationWorkspace {
   private shiftOrderRespectingBlocks(
     uuid: string,
     day: string,
-    allowed: readonly ("T6" | "T7" | "T8")[],
-  ): ("T6" | "T7" | "T8")[] {
-    const order: ("T6" | "T7" | "T8")[] = [];
+    allowed: readonly string[],
+  ): string[] {
+    const order: string[] = [];
     for (const code of allowed) {
       if (code === "T8" || !wouldExceedT6T7BlockMax(this, uuid, day, code)) {
         order.push(code);
@@ -268,13 +275,24 @@ export class GenerationWorkspace {
     return merged;
   }
 
+  /** Bloqueios produtivos e operacionais incluindo histórico anterior ao mês. */
+  private mergedBlockedForContinuity(): BlockedMap {
+    const merged = new Map(this.historyBlocked);
+    for (const [k, v] of this.blocked) merged.set(k, v);
+    return merged;
+  }
+
   private consecutiveDaysBeforeMonth(uuid: string): number {
     const did = this.uuidToDomain.get(uuid);
     if (!did || this.days.length === 0) return 0;
     const merged = this.mergedPlannedForContinuity();
+    const blocked = this.mergedBlockedForContinuity();
     let count = 0;
     let d = addDays(this.days[0], -1);
-    while (merged.has(assignmentKey(did, d))) {
+    while (
+      merged.has(assignmentKey(did, d)) ||
+      isProductiveWorkAllocationLabel(blocked.get(assignmentKey(did, d)))
+    ) {
       count++;
       d = addDays(d, -1);
       if (count >= 6) break;
@@ -282,12 +300,51 @@ export class GenerationWorkspace {
     return count;
   }
 
-  lockDay(uuid: string, day: string, label: string, track = true): void {
+  /**
+   * Folga obrigatória no 1º dia quando o funcionário encerrou o mês anterior
+   * com 6+ dias trabalhados consecutivos (continuidade 6x1 entre meses).
+   */
+  enforceMonthStart6x1FromPrevious(): void {
+    if (this.days.length === 0) return;
+    const firstDay = this.days[0]!;
+    for (const ge of this.input.employees) {
+      const role = ge.employee.role;
+      if (role !== "PAO" && role !== "APAO") continue;
+      if (this.consecutiveDaysBeforeMonth(ge.uuid) < MAX_CONSECUTIVE_WORK_DAYS) continue;
+      const did = this.uuidToDomain.get(ge.uuid);
+      if (!did) continue;
+      const key = assignmentKey(did, firstDay);
+      if (this.planned.has(key) || this.blocked.has(key)) continue;
+      this.lockDay(ge.uuid, firstDay, "FOLGA");
+    }
+  }
+
+  lockDay(
+    uuid: string,
+    day: string,
+    label: string,
+    track = true,
+    times?: { startTime: string; endTime: string },
+  ): void {
     const did = this.uuidToDomain.get(uuid);
     if (!did) return;
     this.blocked.set(assignmentKey(did, day), label);
     if (track) {
-      this.allocations.push({ employeeUuid: uuid, date: day, label });
+      this.allocations.push({
+        employeeUuid: uuid,
+        date: day,
+        label,
+        startTime: times?.startTime,
+        endTime: times?.endTime,
+      });
+    }
+    if (times?.startTime && times?.endTime) {
+      this.timedOccupancies.push({
+        employeeId: did,
+        day,
+        startTime: times.startTime,
+        endTime: times.endTime,
+      });
     }
     this.coverageGapsCache = null;
   }
@@ -304,6 +361,9 @@ export class GenerationWorkspace {
   }
 
   tryAssignShift(uuid: string, day: string, code: string, coverageEmergency = false): boolean {
+    if (coverageEmergency && this.canWorkOpts.parallelShiftCodes?.has(code.toUpperCase())) {
+      return false;
+    }
     if (this.isDayBlockedForShift(uuid, day)) return false;
     const did = this.uuidToDomain.get(uuid)!;
     const emp = this.input.employees.find((e) => e.uuid === uuid)!.employee;
@@ -314,12 +374,14 @@ export class GenerationWorkspace {
       if (maxWork != null && this.workCount(uuid) >= maxWork) return false;
     }
     const continuity = this.mergedPlannedForContinuity();
+    const continuityBlocked = this.mergedBlockedForContinuity();
     const r = canWork(emp, day, code, this.blocked, continuity, {
       ...this.canWorkOpts,
+      continuityBlocked,
       coverageEmergency,
     });
     if (!r.ok) return false;
-    const rest12 = has12hRest(did, day, code, continuity, this.shiftMap);
+    const rest12 = has12hRest(did, day, code, continuity, this.shiftMap, this.timedOccupancies);
     if (!rest12.ok) return false;
     this.planned.set(assignmentKey(did, day), code);
     this.coverageGapsCache = null;
@@ -337,9 +399,12 @@ export class GenerationWorkspace {
 
   workCount(uuid: string): number {
     const did = this.uuidToDomain.get(uuid)!;
+    const parallel = new Set(listParallelShiftCodes(this.input.shifts));
     let n = 0;
-    for (const k of this.planned.keys()) {
-      if (k.startsWith(`${did}|`)) n++;
+    for (const [k, shiftCode] of this.planned.entries()) {
+      if (!k.startsWith(`${did}|`)) continue;
+      if (parallel.has(shiftCode.toUpperCase())) continue;
+      n++;
     }
     return n;
   }
@@ -1047,7 +1112,12 @@ export class GenerationWorkspace {
       this.lockDay(f.employeeUuid, f.date, "VOO");
     }
     for (const la of this.input.lockedAllocations) {
-      this.lockDay(la.employeeUuid, la.date, normalizeOperationalLabel(la.label));
+      const label = normalizeOperationalLabel(la.label);
+      const times =
+        la.startTime && la.endTime && label.toUpperCase().includes("SIMULADOR")
+          ? { startTime: la.startTime, endTime: la.endTime }
+          : undefined;
+      this.lockDay(la.employeeUuid, la.date, label, true, times);
     }
     this.applyBirthdayFolgas();
     this.applyPostFaniRestDays();
@@ -1116,11 +1186,7 @@ export class GenerationWorkspace {
     let blockIndex = 0;
     for (let i = 0; i < this.days.length; ) {
       const d0 = this.days[i];
-      const order = [...this.paoEmps].sort(
-        (a, b) =>
-          this.workCount(a.uuid) - this.workCount(b.uuid) ||
-          a.employee.seniority - b.employee.seniority,
-      );
+      const order = sortPaoByAssignedTurnBalance(this);
 
       let placed = false;
       for (let attempt = 0; attempt < order.length; attempt++) {
@@ -1336,14 +1402,13 @@ export class GenerationWorkspace {
       for (const code of shiftCodes) {
         if (this.hasPaoCoverage(day, code)) continue;
 
-        const candidates = [...this.paoEmps].sort(
-          (a, b) =>
-            this.workCount(a.uuid) - this.workCount(b.uuid) ||
-            a.employee.seniority - b.employee.seniority,
-        );
+        const candidates = sortPaoByAssignedTurnBalance(this);
         let placed = false;
         for (const c of candidates) {
-          if (this.tryAssignShift(c.uuid, day, code)) {
+          if (
+            this.tryAssignShift(c.uuid, day, code) ||
+            this.tryAssignShift(c.uuid, day, code, true)
+          ) {
             placed = true;
             break;
           }
@@ -1444,13 +1509,19 @@ export class GenerationWorkspace {
 
   private consecutiveWorkDays(uuid: string, day: string): number {
     const did = this.uuidToDomain.get(uuid)!;
-    return consecutiveWorkCount(did, day, this.mergedPlannedForContinuity());
+    return consecutiveWorkCount(
+      did,
+      day,
+      this.mergedPlannedForContinuity(),
+      this.mergedBlockedForContinuity(),
+    );
   }
 
   private workedPreviousDay(uuid: string, day: string): boolean {
     const did = this.uuidToDomain.get(uuid)!;
     const prev = addDays(day, -1);
-    return this.shiftOnDay(did, prev) !== undefined;
+    if (this.shiftOnDay(did, prev) !== undefined) return true;
+    return isProductiveWorkAllocationLabel(this.blockLabelOnDay(did, prev));
   }
 
   /** Turnos APAO ativos cadastrados (APAO ou BOTH), em ordem operacional. */
@@ -1493,8 +1564,15 @@ export class GenerationWorkspace {
 
   private apaoCanWorkOnDay(c: GenerationInputEmployee, day: string): boolean {
     if (this.consecutiveWorkDays(c.uuid, day) >= 6) return false;
+    const continuity = this.mergedPlannedForContinuity();
+    const continuityBlocked = this.mergedBlockedForContinuity();
     for (const code of this.activeApaoShiftCodes()) {
-      if (canWork(c.employee, day, code, this.blocked, this.planned, this.canWorkOpts).ok) {
+      if (
+        canWork(c.employee, day, code, this.blocked, continuity, {
+          ...this.canWorkOpts,
+          continuityBlocked,
+        }).ok
+      ) {
         return true;
       }
     }
@@ -1940,7 +2018,12 @@ export class GenerationWorkspace {
       const did = c.domainId;
       for (const day of this.days) {
         if (this.planned.get(assignmentKey(did, day)) !== undefined) {
-          const before = consecutiveWorkCount(did, day, this.mergedPlannedForContinuity());
+          const before = consecutiveWorkCount(
+            did,
+            day,
+            this.mergedPlannedForContinuity(),
+            this.mergedBlockedForContinuity(),
+          );
           if (before >= 6) {
             this.unassignShift(c.uuid, day);
             if (this.isApaoDayEmpty(c.uuid, day) && this.allowsAutoApaoRest()) {

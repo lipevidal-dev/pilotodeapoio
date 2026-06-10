@@ -1,6 +1,10 @@
 import { normalizeOperationalLabel } from "./operational-labels.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import type { WorkdayBreakdown } from "./real-schedule-types.js";
+import {
+  isParallelShiftCode,
+  listPaoRateioShiftCodesFromWorkspace,
+} from "./pao-rateio-shifts.js";
 
 const USEFUL_CADASTRO = new Set([
   "CURSO",
@@ -58,16 +62,13 @@ export function countWorkdayBreakdown(ws: GenerationWorkspace, uuid: string): Wo
   for (const a of ws.toAssignments()) {
     if (a.employeeUuid !== uuid) continue;
     const code = a.shiftCode.toUpperCase();
-    if (code === "T6") {
-      stats.turnosT6++;
-      stats.total++;
-    } else if (code === "T7") {
-      stats.turnosT7++;
-      stats.total++;
-    } else if (code === "T8") {
-      stats.turnosT8++;
-      stats.total++;
-    }
+    const rateioCodes = new Set(listPaoRateioShiftCodesFromWorkspace(ws));
+    if (!rateioCodes.has(code)) continue;
+    if (isParallelShiftCode(ws, code)) continue;
+    if (code === "T6") stats.turnosT6++;
+    else if (code === "T7") stats.turnosT7++;
+    else if (code === "T8") stats.turnosT8++;
+    stats.total++;
   }
 
   for (const al of ws.allocations) {

@@ -224,10 +224,12 @@ describe("Resumo operacional", () => {
     return buildOperationalSummary(ws);
   }
 
-  it("1. PAO: TURNOS = T6 + T7 + T8", () => {
+  it("1. PAO: turnos incluem paralelos; dias trabalhados = T6 + T7 + T8", () => {
     const op = opSummary(realisticGenerationInput());
     for (const e of op.byEmployee.filter((x) => x.type === "PAO")) {
-      expect(e.turnos).toBe(e.t6 + e.t7 + e.t8);
+      expect(e.turnos).toBeGreaterThanOrEqual(e.t6 + e.t7 + e.t8);
+      expect(e.assignedShiftCount).toBe(e.turnos);
+      expect(e.diasTrabalhados).toBeGreaterThanOrEqual(e.t6 + e.t7 + e.t8);
     }
   });
 
