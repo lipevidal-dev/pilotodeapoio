@@ -2,6 +2,7 @@ import type { Employee, PreAllocation, Role, Shift } from "@prisma/client";
 import type {
   GenerationInput,
   GenerationInputEmployee,
+  PreferredShiftRow,
   ShiftRestrictionRow,
 } from "../../domain/schedule/generation-types.js";
 import { isoDateKey } from "../../domain/rules/date-keys.js";
@@ -26,6 +27,7 @@ export function buildGenerationInput(params: {
   flightDays: Array<{ employeeUuid: string; date: string; description?: string }>;
   crossMonthHistory?: import("../../domain/schedule/cross-month-history.js").CrossMonthHistory;
   shiftRestrictionRows?: ShiftRestrictionRow[];
+  preferredShiftRows?: PreferredShiftRow[];
   noFlightDates?: Array<{ employeeUuid: string; date: string }>;
 }): GenerationInput {
   const sorted = [...params.employees].sort(compareEmployeesBySeniority);
@@ -50,6 +52,7 @@ export function buildGenerationInput(params: {
     flightDays: params.flightDays,
     crossMonthHistory: params.crossMonthHistory,
     shiftRestrictions: buildShiftRestrictionMap(genEmployees, params.shiftRestrictionRows ?? []),
+    preferredShifts: buildPreferredShiftMap(genEmployees, params.preferredShiftRows ?? []),
     noFlightDates: params.noFlightDates ?? [],
   };
 }
@@ -57,6 +60,26 @@ export function buildGenerationInput(params: {
 export function buildShiftRestrictionMap(
   employees: GenerationInputEmployee[],
   rows: ShiftRestrictionRow[],
+): Map<number, Set<string>> | undefined {
+  if (rows.length === 0) return undefined;
+
+  const uuidToDomain = new Map(employees.map((e) => [e.uuid, e.domainId]));
+  const map = new Map<number, Set<string>>();
+
+  for (const row of rows) {
+    const domainId = uuidToDomain.get(row.employeeUuid);
+    if (domainId == null) continue;
+    const codes = map.get(domainId) ?? new Set<string>();
+    codes.add(row.shiftCode.toUpperCase());
+    map.set(domainId, codes);
+  }
+
+  return map.size > 0 ? map : undefined;
+}
+
+export function buildPreferredShiftMap(
+  employees: GenerationInputEmployee[],
+  rows: PreferredShiftRow[],
 ): Map<number, Set<string>> | undefined {
   if (rows.length === 0) return undefined;
 

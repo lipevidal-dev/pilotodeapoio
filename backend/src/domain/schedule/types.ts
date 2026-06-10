@@ -38,6 +38,8 @@ export interface ScheduleContext {
   allocations: ScheduleAllocation[];
   /** employeeId → turnos bloqueados no mês */
   shiftRestrictions?: Map<number, Set<string>>;
+  /** employeeId → turnos preferidos no cadastro */
+  preferredShifts?: Map<number, Set<string>>;
   /** assignments do fim do mês anterior (continuidade 6x1 / 12h) */
   previousMonthAssignments?: ScheduleAssignment[];
   /** Datas reais de folga pedida (requested-day-offs) por employeeId */

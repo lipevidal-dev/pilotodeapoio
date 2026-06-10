@@ -56,6 +56,7 @@ export class GenerateFlightsUseCase {
     const flightDays = await this.calendarRepo.listFlightDaysForMonth(year, month);
     const crossMonthHistory = await this.scheduleRepo.loadCrossMonthHistory(year, month);
     const shiftRestrictionRows = await this.scheduleRepo.listShiftRestrictionsForMonth(year, month);
+    const preferredShiftRows = await this.scheduleRepo.listPreferredShiftsForMonth(year, month);
     const noFlightDates = await this.scheduleRepo.listNoFlightDatesForMonth(year, month);
 
     const lockedFromDb = preAllocationsToLocked(record.preAllocations);
@@ -76,6 +77,7 @@ export class GenerateFlightsUseCase {
       vacationReturnDays,
       crossMonthHistory,
       shiftRestrictionRows,
+      preferredShiftRows,
       noFlightDates,
       approvedDayOff,
       flightDays,

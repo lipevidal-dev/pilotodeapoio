@@ -5,13 +5,9 @@ import { buildContextFromDbParts } from "../infrastructure/mappers/schedule-cont
 import { validateSchedule } from "../domain/rules/engine.js";
 import { listPaoCoverageGaps } from "../domain/rules/coverage.js";
 import { runFinalCoverageGate } from "../domain/rules/coverage-gate.js";
-import { addDays, iterDays } from "../domain/rules/dates.js";
-import { IDEAL_PAO_REST_COUNT, MAX_PAO_REST_COUNT, PAO_REST_TYPES } from "../domain/rules/constants.js";
+import { addDays } from "../domain/rules/dates.js";
 import { ClearGeneratedScheduleUseCase } from "../application/use-cases/clear-generated-schedule.use-case.js";
-import {
-  PublishedScheduleCannotBeClearedError,
-  ScheduleNotGeneratedError,
-} from "../application/errors/schedule.errors.js";
+import { PublishedScheduleCannotBeClearedError } from "../application/errors/schedule.errors.js";
 import { realisticGenerationInput, REALISTIC_TEST_MONTH, REALISTIC_TEST_YEAR } from "./realistic-fixtures.js";
 import type { Employee } from "@prisma/client";
 const engine = new ScheduleGenerationEngine();
@@ -19,15 +15,6 @@ const SLOW_MS = 120_000;
 
 function paoUuid(index: number): string {
   return `real-${index + 1}`;
-}
-
-function folgaIndices(uuid: string, allocations: { employeeUuid: string; date: string; label: string }[], days: string[]): number[] {
-  const restSet = new Set(PAO_REST_TYPES.map((t) => t.toUpperCase()));
-  return allocations
-    .filter((a) => a.employeeUuid === uuid && restSet.has(a.label.toUpperCase()))
-    .map((a) => days.indexOf(a.date))
-    .filter((i) => i >= 0)
-    .sort((a, b) => a - b);
 }
 
 describe("Calibração do motor", () => {
@@ -61,46 +48,38 @@ describe("Calibração do motor", () => {
   );
 
   it(
-    "2. folgas PAO distribuídas (não concentradas no início)",
+    "2. REAL_V1 não preenche folga comum automaticamente",
     () => {
       const input = realisticGenerationInput();
-      const days = iterDays(input.year, input.month);
       const result = engine.generate(input);
       const pao = input.employees.find((e) => e.employee.role === "PAO")!;
-      const indices = folgaIndices(pao.uuid, result.allocations, days);
-      expect(indices.length).toBeGreaterThanOrEqual(IDEAL_PAO_REST_COUNT);
-      expect(indices.length).toBeLessThanOrEqual(MAX_PAO_REST_COUNT);
-      if (indices.length >= 4) {
-        const spread = indices[indices.length - 1] - indices[0];
-        expect(spread).toBeGreaterThan(10);
-      }
+      const common = result.allocations.filter(
+        (a) => a.employeeUuid === pao.uuid && a.label === "FOLGA",
+      ).length;
+      expect(common).toBe(0);
+      const report = result.summary.realMotorReport as { emptyDaysLeftForManualEditing?: number };
+      expect(report.emptyDaysLeftForManualEditing).toBeGreaterThan(0);
     },
     SLOW_MS,
   );
 
-  it("3. 10 ou 11 folgas por PAO (ideal 10, até 11 permitido)", () => {
-    const input = realisticGenerationInput();
-    const result = engine.generate(input);
-    for (const e of input.employees.filter((x) => x.employee.role === "PAO")) {
-      const n = result.allocations.filter(
-        (a) =>
-          a.employeeUuid === e.uuid &&
-          PAO_REST_TYPES.map((t) => t.toUpperCase()).includes(a.label.toUpperCase()),
-      ).length;
-      expect(n).toBeGreaterThanOrEqual(IDEAL_PAO_REST_COUNT);
-      expect(n).toBeLessThanOrEqual(MAX_PAO_REST_COUNT);
-    }
-  });
-
-  it("4. folga social mensal por PAO", () => {
+  it("3. REAL_V1 gera 1 par FS por PAO", () => {
     const input = realisticGenerationInput();
     const result = engine.generate(input);
     for (const e of input.employees.filter((x) => x.employee.role === "PAO")) {
       const fs = result.allocations.filter(
         (a) => a.employeeUuid === e.uuid && a.label === "FOLGA SOCIAL",
-      );
-      expect(fs.length).toBeGreaterThanOrEqual(2);
+      ).length;
+      expect(fs).toBe(2);
     }
+  });
+
+  it("4. REAL_V1 deixa dias vazios para folga manual", () => {
+    const input = realisticGenerationInput();
+    const result = engine.generate(input);
+    const emptyCells = result.allocations.filter((a) => a.label === "FOLGA").length;
+    expect(emptyCells).toBe(0);
+    expect(result.summary.realMotorReport?.emptyDaysLeftForManualEditing).toBeGreaterThan(0);
   });
 
   it("5. FP sábado+domingo conta como folga social", () => {
@@ -119,14 +98,14 @@ describe("Calibração do motor", () => {
   });
 
   it(
-    "6. APAOs ativos recebem carga de turnos",
+    "6. Gerar escala PAO não aloca APAO (motor APAO dedicado)",
     () => {
       const input = realisticGenerationInput();
       const result = engine.generate(input);
       const apaos = input.employees.filter((e) => e.employee.role === "APAO");
       for (const e of apaos) {
         const count = result.assignments.filter((a) => a.employeeUuid === e.uuid).length;
-        expect(count).toBeGreaterThan(0);
+        expect(count).toBe(0);
       }
     },
     SLOW_MS,
@@ -227,6 +206,7 @@ describe("Calibração do motor", () => {
           displayOrder: i + 1,
           mandatoryCoverage: ["T6", "T7", "T8"].includes(s.code),
           requiresT8PairNd: s.code === "T8",
+          coverageType: "REQUIRED" as const,
           createdAt: new Date(),
           updatedAt: new Date(),
         })),
@@ -292,12 +272,13 @@ describe("Limpar geração", () => {
     await expect(useCase.execute("m1")).rejects.toBeInstanceOf(PublishedScheduleCannotBeClearedError);
   });
 
-  it("só permite status GENERATED", async () => {
+  it("permite limpar em status DRAFT", async () => {
+    let cleared = false;
     const useCase = new ClearGeneratedScheduleUseCase({
       findMonthById: async () => ({
         id: "m1",
         year: 2026,
-        month: 6,
+        month: 7,
         status: "DRAFT",
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -306,14 +287,24 @@ describe("Limpar geração", () => {
         ruleViolations: [],
       }),
       clearGeneratedData: async () => {
-        throw new Error("should not run");
+        cleared = true;
+        return {
+          id: "m1",
+          year: 2026,
+          month: 7,
+          status: "DRAFT",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
       },
     } as never);
 
-    await expect(useCase.execute("m1")).rejects.toBeInstanceOf(ScheduleNotGeneratedError);
+    const result = await useCase.execute("m1");
+    expect(cleared).toBe(true);
+    expect(result.status).toBe("DRAFT");
   });
 
-  it("limpa assignments GENERATOR e volta status DRAFT", async () => {
+  it("limpa turnos, folgas e voos — mês volta para DRAFT", async () => {
     let cleared = false;
     const useCase = new ClearGeneratedScheduleUseCase({
       findMonthById: async () => ({

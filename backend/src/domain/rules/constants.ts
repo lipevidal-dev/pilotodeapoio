@@ -36,6 +36,7 @@ export const PAO_REST_TYPES = [
 
 export const MONOFOLGA_REST_TYPES = new Set<string>([
   ...PAO_REST_TYPES,
+  "FANI",
 ]);
 
 export const PROTECTED_PREALLOC_TYPES = new Set([

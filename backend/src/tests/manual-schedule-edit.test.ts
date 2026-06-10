@@ -5,12 +5,14 @@ import {
   buildManualEditValidationContext,
   validateManualSet,
   validateManualMove,
+  validateManualT8BlockSet,
 } from "../domain/schedule/manual-edit-validator.js";
 import { buildContextFromDbParts } from "../infrastructure/mappers/schedule-context.mapper.js";
 import { DEFAULT_SHIFTS } from "../domain/shift/default-shifts.js";
 
 const EMP_A = "11111111-1111-1111-1111-111111111101";
 const EMP_B = "11111111-1111-1111-1111-111111111102";
+const EMP_C = "11111111-1111-1111-1111-111111111103";
 const MONTH_ID = "month-manual-1";
 
 function baseValidationCtx() {
@@ -110,6 +112,176 @@ describe("manual-edit-validator", () => {
     expect(conflicts.some((c) => c.code === "TARGET_OCCUPIED" || c.code === "CANNOT_WORK")).toBe(
       true,
     );
+    const occupied = conflicts.find((c) => c.code === "TARGET_OCCUPIED");
+    expect(occupied?.message).toContain("T7");
+  });
+
+  it("3. não bloqueia mover turno quando outro PAO já cobre o dia (responsabilidade do motor)", () => {
+    const v = baseValidationCtx();
+    v.occupancy.set(`${EMP_A}|2026-07-10`, {
+      shiftCode: "T6",
+      hasFlight: false,
+      hasVacation: false,
+      hasRequestedOff: false,
+    });
+    const conflicts = validateManualMove(
+      v,
+      { employeeId: EMP_A, date: "2026-07-02" },
+      { employeeId: EMP_B, date: "2026-07-10" },
+    );
+    expect(conflicts.some((c) => c.code === "SHIFT_COVERAGE")).toBe(false);
+  });
+
+  it("3c. permite mover turno sobre VOO em preAllocation (célula aparentemente vazia)", () => {
+    const v = baseValidationCtx();
+    v.occupancy.set(`${EMP_A}|2026-07-10`, {
+      preallocLabel: "VOO",
+      hasFlight: false,
+      hasVacation: false,
+      hasRequestedOff: false,
+    });
+    const conflicts = validateManualMove(
+      v,
+      { employeeId: EMP_A, date: "2026-07-02" },
+      { employeeId: EMP_A, date: "2026-07-10" },
+    );
+    expect(conflicts.some((c) => c.code === "CANNOT_WORK" && c.message.includes("VOO"))).toBe(
+      false,
+    );
+    expect(conflicts.some((c) => c.code === "TARGET_OCCUPIED")).toBe(false);
+  });
+
+  it("3d. permite mover VOO manual em preAllocation", () => {
+    const v = baseValidationCtx();
+    v.occupancy.set(`${EMP_A}|2026-07-02`, {
+      preallocLabel: "VOO",
+      hasFlight: false,
+      hasVacation: false,
+      hasRequestedOff: false,
+    });
+    const conflicts = validateManualMove(
+      v,
+      { employeeId: EMP_A, date: "2026-07-02" },
+      { employeeId: EMP_A, date: "2026-07-15" },
+    );
+    expect(conflicts.some((c) => c.code === "EMPTY_SOURCE")).toBe(false);
+    expect(conflicts.some((c) => c.code === "NO_FLIGHT_MONTH")).toBe(false);
+  });
+
+  it("6b. permite alocar dia antes do bloco T8/T8/ND", () => {
+    const v = baseValidationCtx();
+    v.occupancy.set(`${EMP_A}|2026-07-10`, {
+      shiftCode: "T8",
+      hasFlight: false,
+      hasVacation: false,
+      hasRequestedOff: false,
+    });
+    v.occupancy.set(`${EMP_A}|2026-07-11`, {
+      shiftCode: "T8",
+      hasFlight: false,
+      hasVacation: false,
+      hasRequestedOff: false,
+    });
+    v.occupancy.set(`${EMP_A}|2026-07-12`, {
+      preallocLabel: "ND",
+      hasFlight: false,
+      hasVacation: false,
+      hasRequestedOff: false,
+    });
+    const conflicts = validateManualSet(
+      v,
+      { employeeId: EMP_A, date: "2026-07-09" },
+      "T6",
+    );
+    expect(conflicts.some((c) => c.code === "PROTECTED_T8_BLOCK")).toBe(false);
+  });
+
+  it("8. edição manual não bloqueia por limite de 2 estações simultâneas", () => {
+    const v = baseValidationCtx();
+    v.idByUuid.set(EMP_C, 3);
+    v.uuidById.set(3, EMP_C);
+    v.nameByUuid.set(EMP_C, "PAO Gamma");
+    v.scheduleContext.employees.push({
+      id: 3,
+      name: "PAO Gamma",
+      role: "PAO",
+      seniority: 3,
+      active: true,
+    });
+    const occ = {
+      shiftCode: "T6",
+      hasFlight: false,
+      hasVacation: false,
+      hasRequestedOff: false,
+    };
+    v.occupancy.set(`${EMP_A}|2026-07-10`, occ);
+    v.occupancy.set(`${EMP_B}|2026-07-10`, occ);
+    const conflicts = validateManualSet(
+      v,
+      { employeeId: EMP_C, date: "2026-07-10" },
+      "T6",
+    );
+    expect(conflicts.some((c) => c.message.includes("estações simultâneas"))).toBe(false);
+  });
+
+  it("9a. alocar T8 isolado (manual) não exige bloco T8/T8/ND", () => {
+    const v = baseValidationCtx();
+    const conflicts = validateManualSet(v, { employeeId: EMP_A, date: "2026-07-15" }, "T8");
+    expect(conflicts.some((c) => c.code === "T8_BLOCK_INCOMPLETE")).toBe(false);
+    expect(conflicts.some((c) => c.code === "PROTECTED_T8_BLOCK")).toBe(false);
+  });
+
+  it("9. alocar T8_BLOCK cria bloco T8/T8/ND sem PROTECTED_T8_BLOCK", () => {
+    const v = baseValidationCtx();
+    v.occupancy.set(`${EMP_A}|2026-07-10`, {
+      shiftCode: "T8",
+      hasFlight: false,
+      hasVacation: false,
+      hasRequestedOff: false,
+    });
+    v.occupancy.set(`${EMP_A}|2026-07-11`, {
+      shiftCode: "T8",
+      hasFlight: false,
+      hasVacation: false,
+      hasRequestedOff: false,
+    });
+    v.occupancy.set(`${EMP_A}|2026-07-12`, {
+      preallocLabel: "ND",
+      hasFlight: false,
+      hasVacation: false,
+      hasRequestedOff: false,
+    });
+    const conflicts = validateManualT8BlockSet(v, EMP_A, "2026-07-15");
+    expect(conflicts.some((c) => c.code === "PROTECTED_T8_BLOCK")).toBe(false);
+    expect(conflicts.some((c) => c.code === "PROTECTED_ND")).toBe(false);
+  });
+
+  it("9b. mover T8 realoca bloco inteiro no destino", () => {
+    const v = baseValidationCtx();
+    v.occupancy.set(`${EMP_A}|2026-07-10`, {
+      shiftCode: "T8",
+      hasFlight: false,
+      hasVacation: false,
+      hasRequestedOff: false,
+    });
+    v.occupancy.set(`${EMP_A}|2026-07-11`, {
+      shiftCode: "T8",
+      hasFlight: false,
+      hasVacation: false,
+      hasRequestedOff: false,
+    });
+    v.occupancy.set(`${EMP_A}|2026-07-12`, {
+      preallocLabel: "ND",
+      hasFlight: false,
+      hasVacation: false,
+      hasRequestedOff: false,
+    });
+    const conflicts = validateManualMove(
+      v,
+      { employeeId: EMP_A, date: "2026-07-11" },
+      { employeeId: EMP_A, date: "2026-07-20" },
+    );
+    expect(conflicts.some((c) => c.code === "PROTECTED_T8_BLOCK")).toBe(false);
   });
 
   it("7. bloqueia T8 se quebrar bloco T8/T8/ND", () => {
@@ -193,10 +365,12 @@ describe("ManualScheduleEditUseCase", () => {
           displayOrder: i,
           mandatoryCoverage: true,
           requiresT8PairNd: s.code === "T8",
+          coverageType: "REQUIRED",
           createdAt: new Date(),
           updatedAt: new Date(),
         })),
         listShiftRestrictionsForMonth: async () => [{ employeeUuid: EMP_B, shiftCode: "T8" }],
+        listPreferredShiftsForMonth: async () => [],
         listNoFlightDatesForMonth: async () =>
           Array.from({ length: 31 }, (_, i) => ({
             employeeUuid: EMP_B,
@@ -266,6 +440,70 @@ describe("ManualScheduleEditUseCase", () => {
         mode: "set",
       }),
     ).rejects.toBeInstanceOf(ManualEditBlockedError);
+  });
+
+  it("1. manual-move retorna conflito com mensagem específica", async () => {
+    const uc = buildUseCase();
+    try {
+      await uc.moveCell(MONTH_ID, {
+        source: { employeeId: EMP_A, date: "2026-07-02" },
+        target: { employeeId: EMP_B, date: "2026-07-05" },
+        mode: "move",
+      });
+      expect.fail("deveria bloquear");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ManualEditBlockedError);
+      const blocked = err as ManualEditBlockedError;
+      expect(blocked.message.length).toBeGreaterThan(10);
+      expect(blocked.conflicts[0]?.message).toContain("Conflito");
+    }
+  });
+
+  it("2. manual-range retorna conflito com mensagem específica", async () => {
+    const uc = buildUseCase();
+    try {
+      await uc.editRange(MONTH_ID, {
+        employeeId: EMP_B,
+        startDate: "2026-07-10",
+        endDate: "2026-07-10",
+        type: "VOO",
+        mode: "set",
+      });
+      expect.fail("deveria bloquear");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ManualEditBlockedError);
+      expect((err as ManualEditBlockedError).conflicts[0]?.code).toBe("NO_FLIGHT_MONTH");
+    }
+  });
+
+  it("10a. T8 isolado aplica somente um dia", async () => {
+    const apply = vi.fn(async () => ({}));
+    const uc = buildUseCase({ applyAllocationType: apply });
+    const result = await uc.editCell(MONTH_ID, {
+      employeeId: EMP_A,
+      date: "2026-07-20",
+      type: "T8",
+      mode: "set",
+    });
+    expect(result.applied).toBe(1);
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(apply).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-20", "T8");
+  });
+
+  it("10b. T8_BLOCK aplica bloco T8/T8/ND", async () => {
+    const apply = vi.fn(async () => ({}));
+    const clear = vi.fn(async () => undefined);
+    const uc = buildUseCase({ applyAllocationType: apply, clearDay: clear });
+    const result = await uc.editCell(MONTH_ID, {
+      employeeId: EMP_A,
+      date: "2026-07-20",
+      type: "T8_BLOCK",
+      mode: "set",
+    });
+    expect(result.applied).toBe(3);
+    expect(apply).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-20", "T8");
+    expect(apply).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-21", "T8");
+    expect(apply).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-22", "ND");
   });
 
   it("10. não regenera escala — retorna payload atualizado", async () => {

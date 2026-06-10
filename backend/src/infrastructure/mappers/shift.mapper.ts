@@ -18,5 +18,6 @@ export function prismaShiftToDomain(row: PrismaShift): DomainShift {
     minStaff: 1,
     maxStaff: 1,
     active: row.active,
+    coverageType: row.coverageType,
   };
 }

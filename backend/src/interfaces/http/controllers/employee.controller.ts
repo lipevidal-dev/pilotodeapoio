@@ -2,6 +2,11 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { EmployeeHasOperationalHistoryError } from "../../../application/use-cases/employee-delete.js";
 import { employeeUseCase } from "../../../application/use-cases/employee.use-case.js";
 import {
+  EmployeeDuplicatePreferredShiftError,
+  EmployeePreferredShiftNotFoundError,
+  EmployeeShiftPreferenceConflictError,
+} from "../../../application/errors/employee.errors.js";
+import {
   RoleInactiveError,
   RoleNotFoundError,
   UnsupportedMotorRoleError,
@@ -37,6 +42,13 @@ export async function createEmployeeController(req: FastifyRequest, reply: Fasti
     if (err instanceof RoleInactiveError || err instanceof UnsupportedMotorRoleError) {
       return reply.status(400).send({ error: err.message });
     }
+    if (
+      err instanceof EmployeeShiftPreferenceConflictError ||
+      err instanceof EmployeePreferredShiftNotFoundError ||
+      err instanceof EmployeeDuplicatePreferredShiftError
+    ) {
+      return reply.status(400).send({ error: err.message, code: err.code });
+    }
     throw err;
   }
 }
@@ -61,6 +73,13 @@ export async function updateEmployeeController(
     }
     if (err instanceof UnsupportedMotorRoleError) {
       return reply.status(400).send({ error: err.message });
+    }
+    if (
+      err instanceof EmployeeShiftPreferenceConflictError ||
+      err instanceof EmployeePreferredShiftNotFoundError ||
+      err instanceof EmployeeDuplicatePreferredShiftError
+    ) {
+      return reply.status(400).send({ error: err.message, code: err.code });
     }
     throw err;
   }

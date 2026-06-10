@@ -316,6 +316,58 @@ describe("monofolga", () => {
     const issues = validateSchedule(ctx).filter((i) => i.type === "MONOFOLGA");
     expect(issues.length).toBeGreaterThan(0);
   });
+
+  it("APAO não gera alerta de folgas pedidas", () => {
+    const ctx = emptyContext();
+    const apao = MOCK_EMPLOYEES[3]!;
+    for (let d = 10; d <= 14; d++) {
+      ctx.allocations.push({
+        employeeId: apao.id,
+        employeeName: apao.name,
+        allocDate: `2026-06-${String(d).padStart(2, "0")}`,
+        allocType: "FOLGA PEDIDA",
+      });
+    }
+    const issues = validateSchedule(ctx).filter(
+      (i) => i.type === "FOLGAS PEDIDAS" && i.employee === apao.name,
+    );
+    expect(issues.length).toBe(0);
+  });
+
+  it("APAO não gera alerta de monofolga", () => {
+    const ctx = emptyContext();
+    const apao = MOCK_EMPLOYEES[3]!;
+    ctx.allocations.push({
+      employeeId: apao.id,
+      employeeName: apao.name,
+      allocDate: "2026-06-15",
+      allocType: "FOLGA",
+    });
+    const issues = validateSchedule(ctx).filter(
+      (i) => i.type === "MONOFOLGA" && i.employee === apao.name,
+    );
+    expect(issues.length).toBe(0);
+  });
+
+  it("FOLGA PEDIDA + FOLGA adjacente não é monofolga", () => {
+    const ctx = emptyContext();
+    ctx.allocations.push(
+      {
+        employeeId: 1,
+        employeeName: "PAO SILVA",
+        allocDate: "2026-06-14",
+        allocType: "FOLGA PEDIDA",
+      },
+      {
+        employeeId: 1,
+        employeeName: "PAO SILVA",
+        allocDate: "2026-06-15",
+        allocType: "FOLGA",
+      },
+    );
+    const issues = validateSchedule(ctx).filter((i) => i.type === "MONOFOLGA");
+    expect(issues.length).toBe(0);
+  });
 });
 
 describe("férias", () => {

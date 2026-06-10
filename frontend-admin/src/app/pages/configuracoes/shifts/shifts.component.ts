@@ -60,7 +60,13 @@ export class ShiftsComponent implements OnInit {
   formDisplayOrder = 0;
   formMandatoryCoverage = false;
   formRequiresT8PairNd = false;
+  formCoverageType: 'REQUIRED' | 'PARALLEL' = 'REQUIRED';
   filter: ShiftFilter = 'all';
+
+  readonly coverageTypeOptions = [
+    { label: 'Cobertura obrigatória', value: 'REQUIRED' as const },
+    { label: 'Especial/paralelo', value: 'PARALLEL' as const },
+  ];
 
   readonly roleOptions = [
     { label: 'PAO', value: 'PAO' as ShiftRoleType },
@@ -96,6 +102,10 @@ export class ShiftsComponent implements OnInit {
   });
 
   readonly formatDate = formatIsoDate;
+
+  coverageTypeLabel(type: 'REQUIRED' | 'PARALLEL' | undefined): string {
+    return type === 'PARALLEL' ? 'Especial/paralelo' : 'Cobertura obrigatória';
+  }
 
   ngOnInit(): void {
     this.load();
@@ -135,6 +145,7 @@ export class ShiftsComponent implements OnInit {
     this.formDisplayOrder = 0;
     this.formMandatoryCoverage = false;
     this.formRequiresT8PairNd = false;
+    this.formCoverageType = 'REQUIRED';
     this.dialogVisible.set(true);
   }
 
@@ -150,6 +161,7 @@ export class ShiftsComponent implements OnInit {
     this.formDisplayOrder = shift.displayOrder;
     this.formMandatoryCoverage = shift.mandatoryCoverage;
     this.formRequiresT8PairNd = shift.requiresT8PairNd;
+    this.formCoverageType = shift.coverageType ?? 'REQUIRED';
     this.dialogVisible.set(true);
   }
 
@@ -172,8 +184,9 @@ export class ShiftsComponent implements OnInit {
         roleType: this.formRoleType,
         active: this.formActive,
         displayOrder: this.formDisplayOrder,
-        mandatoryCoverage: this.formMandatoryCoverage,
+        mandatoryCoverage: this.formCoverageType === 'REQUIRED' ? this.formMandatoryCoverage : false,
         requiresT8PairNd: this.formRequiresT8PairNd,
+        coverageType: this.formCoverageType,
       };
       this.shiftService.create(payload).subscribe({
         next: () => this.onSaveSuccess('Turno cadastrado.'),
@@ -191,8 +204,9 @@ export class ShiftsComponent implements OnInit {
         roleType: this.formRoleType,
         active: this.formActive,
         displayOrder: this.formDisplayOrder,
-        mandatoryCoverage: this.formMandatoryCoverage,
+        mandatoryCoverage: this.formCoverageType === 'REQUIRED' ? this.formMandatoryCoverage : false,
         requiresT8PairNd: this.formRequiresT8PairNd,
+        coverageType: this.formCoverageType,
       })
       .subscribe({
         next: () => this.onSaveSuccess('Turno atualizado.'),

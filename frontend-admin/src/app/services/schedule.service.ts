@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import type {
   GenerateByStepsResponse,
+  GenerateApaoScheduleResponse,
   GenerateFlightsResponse,
   GenerateScheduleResponse,
   ManualAllocationType,
@@ -40,6 +41,13 @@ export class ScheduleService {
   generateFlights(scheduleMonthId: string): Observable<GenerateFlightsResponse> {
     return this.http.post<GenerateFlightsResponse>(
       `${this.base}/schedules/${scheduleMonthId}/generate-flights`,
+      {},
+    );
+  }
+
+  generateApaoSchedule(scheduleMonthId: string): Observable<GenerateApaoScheduleResponse> {
+    return this.http.post<GenerateApaoScheduleResponse>(
+      `${this.base}/schedules/${scheduleMonthId}/generate-apao`,
       {},
     );
   }

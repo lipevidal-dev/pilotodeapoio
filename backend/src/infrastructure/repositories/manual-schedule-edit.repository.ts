@@ -50,9 +50,13 @@ export class ManualScheduleEditRepository {
     employeeId: string,
     date: string,
     label: string,
+    notes?: string | null,
   ) {
     await prisma.scheduleAssignment.deleteMany({
       where: { scheduleMonthId, employeeId, date: toDbDate(date) },
+    });
+    await prisma.flightAssignment.deleteMany({
+      where: { employeeId, date: toDbDate(date) },
     });
     return prisma.preAllocation.upsert({
       where: {
@@ -67,8 +71,9 @@ export class ManualScheduleEditRepository {
         employeeId,
         date: toDbDate(date),
         label,
+        notes: notes ?? null,
       },
-      update: { label },
+      update: { label, notes: notes ?? null },
       include: { employee: true },
     });
   }
@@ -138,10 +143,13 @@ export class ManualScheduleEditRepository {
     }
     const preLabel = manualTypeToPreallocLabel(type);
     if (preLabel) {
-      return this.upsertPreAllocation(scheduleMonthId, employeeId, date, preLabel);
-    }
-    if (type === "VOO") {
-      return this.upsertFlight(employeeId, date);
+      return this.upsertPreAllocation(
+        scheduleMonthId,
+        employeeId,
+        date,
+        preLabel,
+        "escala-manual",
+      );
     }
     if (type === "T6" || type === "T7" || type === "T8") {
       return this.upsertShiftAssignment(scheduleMonthId, employeeId, date, type);

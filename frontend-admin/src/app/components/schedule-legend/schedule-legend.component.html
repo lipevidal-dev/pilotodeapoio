@@ -1,7 +1,7 @@
 <div class="schedule-legend">
   <span class="legend-title">Legenda</span>
   <div class="legend-items">
-    @for (item of items; track item.label) {
+    @for (item of items; track item.id) {
       <span class="legend-chip" [class]="item.cssClass">{{ item.label }}</span>
     }
   </div>

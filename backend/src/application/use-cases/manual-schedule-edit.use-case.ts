@@ -18,7 +18,14 @@ import {
   buildManualEditValidationContext,
   validateManualMove,
   validateManualSet,
+  validateManualT8BlockSet,
 } from "../../domain/schedule/manual-edit-validator.js";
+import {
+  isDateInScheduleMonth,
+  normalizeT8BlockStarts,
+  resolveT8BlockStart,
+  t8BlockFromStart,
+} from "../../domain/schedule/manual-edit-t8-block.js";
 import type {
   ManualAllocationType,
   ManualEditCellPayload,
@@ -72,7 +79,11 @@ export class ManualScheduleEditUseCase {
     let moveType: ManualAllocationType | null = null;
     if (srcOcc?.shiftCode && ["T6", "T7", "T8"].includes(srcOcc.shiftCode)) {
       moveType = srcOcc.shiftCode as ManualAllocationType;
-    } else if (srcOcc?.hasFlight) {
+    } else if (
+      srcOcc?.hasFlight ||
+      (srcOcc?.preallocLabel &&
+        srcOcc.preallocLabel.toUpperCase().includes("VOO"))
+    ) {
       moveType = "VOO";
     } else if (srcOcc?.preallocLabel) {
       const n = srcOcc.preallocLabel.toUpperCase();
@@ -89,6 +100,39 @@ export class ManualScheduleEditUseCase {
       throw new ManualEditBlockedError([
         { code: "UNMOVABLE", message: "Conflito: alocação de origem não pode ser movida." },
       ]);
+    }
+
+    const t8BlockStart = resolveT8BlockStart(
+      srcOcc?.shiftCode,
+      srcOcc?.preallocLabel,
+      payload.source.date,
+      (day) => vctx.occupancy.get(`${payload.source.employeeId}|${day}`)?.shiftCode,
+    );
+    const isT8BlockMove =
+      t8BlockStart != null &&
+      (moveType === "ND" ||
+        (moveType === "T8" &&
+          vctx.occupancy.get(`${payload.source.employeeId}|${t8BlockFromStart(t8BlockStart).t8Second}`)
+            ?.shiftCode === "T8"));
+
+    if (isT8BlockMove && t8BlockStart) {
+      const sourceBlock = t8BlockFromStart(t8BlockStart);
+      for (const date of [sourceBlock.t8First, sourceBlock.t8Second, sourceBlock.nd]) {
+        const occ = vctx.occupancy.get(`${payload.source.employeeId}|${date}`);
+        if (occ?.shiftCode || occ?.preallocLabel) {
+          await this.editRepo.clearDay(scheduleMonthId, payload.source.employeeId, date, {
+            force: payload.force,
+          });
+        }
+      }
+      await this.applyT8Block(
+        scheduleMonthId,
+        payload.target.employeeId,
+        payload.target.date,
+        month.year,
+        month.month,
+      );
+      return this.buildResult(scheduleMonthId, 3, []);
     }
 
     await this.editRepo.clearDay(scheduleMonthId, payload.source.employeeId, payload.source.date);
@@ -115,6 +159,30 @@ export class ManualScheduleEditUseCase {
     const month = await this.loadEditableMonth(scheduleMonthId);
     const vctx = await this.buildValidation(month);
     const allConflicts: ManualEditConflict[] = [];
+
+    if (payload.mode === "set" && payload.type === "T8_BLOCK") {
+      const starts = normalizeT8BlockStarts(dates);
+      for (const start of starts) {
+        allConflicts.push(
+          ...validateManualT8BlockSet(vctx, payload.employeeId, start, payload.force),
+        );
+      }
+      this.assertNoBlockingConflicts(allConflicts, payload.force);
+
+      let applied = 0;
+      for (const start of starts) {
+        await this.applyT8Block(
+          scheduleMonthId,
+          payload.employeeId,
+          start,
+          month.year,
+          month.month,
+          payload.force,
+        );
+        applied += 3;
+      }
+      return this.buildResult(scheduleMonthId, applied, []);
+    }
 
     for (const date of dates) {
       const ref = { employeeId: payload.employeeId, date };
@@ -145,6 +213,27 @@ export class ManualScheduleEditUseCase {
     return this.buildResult(scheduleMonthId, applied, []);
   }
 
+  private async applyT8Block(
+    scheduleMonthId: string,
+    employeeId: string,
+    startDate: string,
+    year: number,
+    month: number,
+    force?: boolean,
+  ): Promise<void> {
+    const block = t8BlockFromStart(startDate);
+    for (const date of [block.t8First, block.t8Second, block.nd]) {
+      if (isDateInScheduleMonth(date, year, month)) {
+        await this.editRepo.clearDay(scheduleMonthId, employeeId, date, { force });
+      }
+    }
+    await this.editRepo.applyAllocationType(scheduleMonthId, employeeId, block.t8First, "T8");
+    await this.editRepo.applyAllocationType(scheduleMonthId, employeeId, block.t8Second, "T8");
+    if (isDateInScheduleMonth(block.nd, year, month)) {
+      await this.editRepo.applyAllocationType(scheduleMonthId, employeeId, block.nd, "ND");
+    }
+  }
+
   private assertNoBlockingConflicts(conflicts: ManualEditConflict[], force?: boolean): void {
     const blocking = force
       ? conflicts.filter((c) => !c.requiresConfirmation)
@@ -169,6 +258,10 @@ export class ManualScheduleEditUseCase {
       month.year,
       month.month,
     );
+    const preferredShiftRows = await this.scheduleRepo.listPreferredShiftsForMonth(
+      month.year,
+      month.month,
+    );
     const noFlightDates = await this.scheduleRepo.listNoFlightDatesForMonth(month.year, month.month);
     const vacationDays = await this.calendarRepo.listVacationDaysForMonth(month.year, month.month);
     const approvedDayOff = await this.calendarRepo.listApprovedDayOffForMonth(month.year, month.month);
@@ -185,8 +278,14 @@ export class ManualScheduleEditUseCase {
 
     return buildManualEditValidationContext({
       ctx,
-      employees: employees.map((e) => ({ id: e.id, name: e.name, role: e.type })),
+      employees: employees.map((e) => ({
+        id: e.id,
+        name: e.name,
+        role: e.type,
+        seniorityNumber: e.seniorityNumber,
+      })),
       shiftRestrictionRows,
+      preferredShiftRows,
       noFlightDates,
       vacationDays,
       approvedDayOff,

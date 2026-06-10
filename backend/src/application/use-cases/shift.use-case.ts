@@ -36,8 +36,10 @@ export class ShiftUseCase {
     displayOrder?: number;
     mandatoryCoverage?: boolean;
     requiresT8PairNd?: boolean;
+    coverageType?: "REQUIRED" | "PARALLEL";
   }) {
     const durationHours = computeShiftDurationHours(data.startTime, data.endTime);
+    const coverageType = data.coverageType ?? "REQUIRED";
     const row = await this.repo.create({
       code: data.code,
       name: data.name,
@@ -47,8 +49,9 @@ export class ShiftUseCase {
       employeeTypeAllowed: toPrismaRole(data.roleType),
       active: data.active ?? true,
       displayOrder: data.displayOrder ?? 0,
-      mandatoryCoverage: data.mandatoryCoverage ?? false,
+      mandatoryCoverage: coverageType === "PARALLEL" ? false : (data.mandatoryCoverage ?? false),
       requiresT8PairNd: data.requiresT8PairNd ?? false,
+      coverageType,
     });
     return shiftToApi(row);
   }
@@ -65,6 +68,7 @@ export class ShiftUseCase {
       displayOrder?: number;
       mandatoryCoverage?: boolean;
       requiresT8PairNd?: boolean;
+      coverageType?: "REQUIRED" | "PARALLEL";
     },
   ) {
     const current = await this.repo.findById(id);
@@ -73,6 +77,7 @@ export class ShiftUseCase {
     const startTime = data.startTime ?? current.startTime;
     const endTime = data.endTime ?? current.endTime;
     const durationHours = computeShiftDurationHours(startTime, endTime);
+    const coverageType = data.coverageType ?? current.coverageType;
 
     const patch: Parameters<ShiftRepository["update"]>[1] = { durationHours };
     if (data.code !== undefined) patch.code = data.code;
@@ -82,8 +87,12 @@ export class ShiftUseCase {
     if (data.roleType !== undefined) patch.employeeTypeAllowed = toPrismaRole(data.roleType);
     if (data.active !== undefined) patch.active = data.active;
     if (data.displayOrder !== undefined) patch.displayOrder = data.displayOrder;
+    if (data.coverageType !== undefined) patch.coverageType = data.coverageType;
     if (data.mandatoryCoverage !== undefined) patch.mandatoryCoverage = data.mandatoryCoverage;
     if (data.requiresT8PairNd !== undefined) patch.requiresT8PairNd = data.requiresT8PairNd;
+    if (coverageType === "PARALLEL") {
+      patch.mandatoryCoverage = false;
+    }
 
     const row = await this.repo.update(id, patch);
     return shiftToApi(row);

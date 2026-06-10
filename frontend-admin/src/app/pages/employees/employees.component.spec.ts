@@ -40,9 +40,10 @@ describe('EmployeesComponent — restrições 6.3', () => {
       { id: 'role-pao', name: 'PAO', code: 'PAO', description: null, active: true, displayOrder: 1 },
     ]);
     http.expectOne(`${base}/shifts?activeOnly=true`).flush([
-      { id: 's-t6', code: 'T6', name: 'Turno 6', startTime: '06:00', endTime: '12:00', durationHours: 6, employeeTypeAllowed: 'PAO', active: true, displayOrder: 1, mandatoryCoverage: true, requiresT8PairNd: false },
-      { id: 's-t7', code: 'T7', name: 'Turno 7', startTime: '12:00', endTime: '18:00', durationHours: 6, employeeTypeAllowed: 'PAO', active: true, displayOrder: 2, mandatoryCoverage: true, requiresT8PairNd: false },
-      { id: 's-t8', code: 'T8', name: 'Turno 8', startTime: '18:00', endTime: '00:00', durationHours: 6, employeeTypeAllowed: 'PAO', active: true, displayOrder: 3, mandatoryCoverage: true, requiresT8PairNd: true },
+      { id: 's-t6', code: 'T6', name: 'Turno 6', startTime: '06:00', endTime: '12:00', roleType: 'PAO', durationHours: 6, active: true, displayOrder: 1, mandatoryCoverage: true, requiresT8PairNd: false, coverageType: 'REQUIRED' },
+      { id: 's-t7', code: 'T7', name: 'Turno 7', startTime: '12:00', endTime: '18:00', roleType: 'PAO', durationHours: 6, active: true, displayOrder: 2, mandatoryCoverage: true, requiresT8PairNd: false, coverageType: 'REQUIRED' },
+      { id: 's-t8', code: 'T8', name: 'Turno 8', startTime: '18:00', endTime: '00:00', roleType: 'PAO', durationHours: 6, active: true, displayOrder: 3, mandatoryCoverage: true, requiresT8PairNd: true, coverageType: 'REQUIRED' },
+      { id: 's-t9', code: 'T9', name: 'Turno 9', startTime: '10:00', endTime: '18:00', roleType: 'PAO', durationHours: 8, active: true, displayOrder: 4, mandatoryCoverage: false, requiresT8PairNd: false, coverageType: 'PARALLEL' },
     ]);
     http.expectOne(`${base}/employees`).flush([]);
   }
@@ -54,8 +55,8 @@ describe('EmployeesComponent — restrições 6.3', () => {
     const html = fixture.nativeElement as HTMLElement;
     expect(html.textContent).toContain('Não alocar voos');
     expect(html.textContent).toContain('Não alocar turno');
-    expect(html.querySelector('app-operational-calendar')).toBeTruthy();
-    expect(html.querySelector('p-multiSelect')).toBeTruthy();
+    expect(html.textContent).toContain('Alocar em turno específico');
+    expect(html.querySelectorAll('p-multiSelect').length).toBe(2);
   });
 
   it('calendário permite selecionar dias e resume bloqueios', () => {
@@ -83,8 +84,50 @@ describe('EmployeesComponent — restrições 6.3', () => {
     fixture.detectChanges();
     expect(component.formRestrictedShiftIds).toEqual(['s-t6', 's-t8']);
     expect(component.allShiftsRestricted()).toBe(false);
-    component.formRestrictedShiftIds = ['s-t6', 's-t7', 's-t8'];
+    component.formRestrictedShiftIds = ['s-t6', 's-t7', 's-t8', 's-t9'];
     expect(component.allShiftsRestricted()).toBe(true);
+  });
+
+  it('bloqueia conflito restrito + preferido', () => {
+    flushInit();
+    component.openNew();
+    component.formRestrictedShiftIds = ['s-t9'];
+    component.formPreferredShiftIds = ['s-t9'];
+    expect(component.restrictedPreferredConflict()).toBeTrue();
+  });
+
+  it('ao editar carrega preferredShiftIds do GET /employees/:id', () => {
+    flushInit();
+    component.openEdit({
+      id: 'emp-1',
+      name: 'Teste',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'PAO',
+      active: true,
+    });
+    http.expectOne(`${environment.apiBaseUrl}/employees/emp-1`).flush({
+      id: 'emp-1',
+      name: 'Teste',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'PAO',
+      seniorityNumber: 1,
+      seniorityLabel: '1',
+      active: true,
+      birthDate: null,
+      noFlightDates: [],
+      restrictedShiftIds: [],
+      restrictedShifts: [],
+      preferredShiftIds: ['s-t9'],
+      preferredShifts: [{ id: 's-t9', code: 'T9', name: 'Turno 9' }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    fixture.detectChanges();
+    expect(component.formPreferredShiftIds).toEqual(['s-t9']);
   });
 
   it('ao editar carrega restrições do GET /employees/:id', () => {

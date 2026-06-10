@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeEmployeeStatus,
+  evaluateEmployeeOperationalStatus,
   maxConsecutiveWorkDays,
 } from "../domain/schedule/operational-audit.js";
 import { buildOperationalSummary } from "../domain/schedule/operational-summary.js";
@@ -36,6 +37,7 @@ function baseStats(overrides: Partial<EmployeeOperationalSummary> = {}): Employe
     folgasAjusteOperacional: false,
     maxConsec: 4,
     status: "OK",
+    statusReason: null,
     ...overrides,
   };
 }
@@ -74,18 +76,38 @@ describe("Auditoria operacional", () => {
     expect(status).toBe("OK");
   });
 
-  it("5. STATUS ATENÇÃO para 11 folgas", () => {
+  it("5. STATUS OK na faixa saudável com 11 folgas", () => {
     const status = computeEmployeeStatus(
-      baseStats({ folgas: 11, folgasAjusteOperacional: true }),
+      baseStats({ folgas: 11, folgasAjusteOperacional: true, diasTrabalhados: 20 }),
       [],
       { daysInMonth: 30 },
     );
-    expect(status).toBe("ATENÇÃO");
+    expect(status).toBe("OK");
   });
 
   it("6. STATUS CRÍTICO para menos de 10 folgas PAO", () => {
     const status = computeEmployeeStatus(baseStats({ folgas: 9 }), [], { daysInMonth: 30 });
     expect(status).toBe("CRÍTICO");
+  });
+
+  it("6b. STATUS OK para 12 folgas PAO (fora da faixa saudável)", () => {
+    const evaluation = evaluateEmployeeOperationalStatus(
+      baseStats({ folgas: 12, diasTrabalhados: 19, turnos: 19 }),
+      [{ severity: "MÉDIA", type: "FOLGAS PAO", date: "06/2026", employee: "PAO Test", detail: "12 folgas" }],
+      { daysInMonth: 31 },
+    );
+    expect(evaluation.status).toBe("OK");
+    expect(evaluation.statusReason).toBeNull();
+  });
+
+  it("6c. STATUS ATENÇÃO para 13+ folgas PAO", () => {
+    const evaluation = evaluateEmployeeOperationalStatus(
+      baseStats({ folgas: 13, diasTrabalhados: 18, turnos: 18 }),
+      [],
+      { daysInMonth: 31 },
+    );
+    expect(evaluation.status).toBe("ATENÇÃO");
+    expect(evaluation.statusReason).toBe("FOLGAS_PAO_ABOVE_MAX (13)");
   });
 
   it("7. cobertura T6/T7/T8 em percentual", () => {
@@ -99,7 +121,41 @@ describe("Auditoria operacional", () => {
     expect(op.totals.coverageT8).toBeLessThanOrEqual(100);
   });
 
-  it("8. totalizadores batem com soma individual", () => {
+  it("8b. APAO OK ignora FOLGAS PEDIDAS na avaliação de status", () => {
+    const evaluation = evaluateEmployeeOperationalStatus(
+      baseStats({
+        type: "APAO",
+        folgas: 6,
+        diasTrabalhados: 24,
+        disponivel: 0,
+        maxConsec: 6,
+      }),
+      [
+        { severity: "MÉDIA", type: "FOLGAS PEDIDAS", date: "06/2026", employee: "APAO X", detail: "x" },
+        { severity: "MÉDIA", type: "MONOFOLGA", date: "2026-06-10", employee: "APAO X", detail: "y" },
+      ],
+      { daysInMonth: 30 },
+    );
+    expect(evaluation.status).toBe("OK");
+    expect(evaluation.statusReason).toBeNull();
+  });
+
+  it("8. APAO OK com 4+ folgas e mais de 24 dias trabalhados (ignora monofolga)", () => {
+    const status = computeEmployeeStatus(
+      baseStats({
+        type: "APAO",
+        folgas: 5,
+        diasTrabalhados: 25,
+        disponivel: 0,
+        maxConsec: 6,
+      }),
+      [{ severity: "MÉDIA", type: "MONOFOLGA", date: "2026-06-10", employee: "APAO X", detail: "x" }],
+      { daysInMonth: 30 },
+    );
+    expect(status).toBe("OK");
+  });
+
+  it("9. totalizadores batem com soma individual", () => {
     const op = buildOperationalSummary(new GenerationWorkspace(realisticGenerationInput()));
     const sumFolgas = op.byEmployee.reduce((n, e) => n + e.folgas, 0);
     const sumFani = op.byEmployee.reduce((n, e) => n + e.fani, 0);

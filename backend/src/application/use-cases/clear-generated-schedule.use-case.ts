@@ -9,7 +9,7 @@ export interface ClearGeneratedScheduleResult {
   scheduleMonthId: string;
   year: number;
   month: number;
-  status: "DRAFT";
+  status: "GENERATED" | "DRAFT";
 }
 
 export class ClearGeneratedScheduleUseCase {
@@ -25,7 +25,7 @@ export class ClearGeneratedScheduleUseCase {
       throw new PublishedScheduleCannotBeClearedError();
     }
 
-    if (record.status !== "GENERATED") {
+    if (record.status !== "GENERATED" && record.status !== "DRAFT") {
       throw new ScheduleNotGeneratedError(record.status);
     }
 
@@ -34,7 +34,7 @@ export class ClearGeneratedScheduleUseCase {
       scheduleMonthId: updated.id,
       year: updated.year,
       month: updated.month,
-      status: "DRAFT",
+      status: updated.status as "GENERATED",
     };
   }
 }

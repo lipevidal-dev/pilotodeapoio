@@ -11,6 +11,7 @@ export interface ShiftApiRecord {
   displayOrder: number;
   mandatoryCoverage: boolean;
   requiresT8PairNd: boolean;
+  coverageType: "REQUIRED" | "PARALLEL";
   durationHours: number;
   createdAt: string;
   updatedAt: string;
@@ -28,6 +29,7 @@ export function shiftToApi(row: PrismaShift): ShiftApiRecord {
     displayOrder: row.displayOrder,
     mandatoryCoverage: row.mandatoryCoverage,
     requiresT8PairNd: row.requiresT8PairNd,
+    coverageType: row.coverageType,
     durationHours: row.durationHours,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

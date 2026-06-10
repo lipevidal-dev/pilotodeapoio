@@ -13,7 +13,7 @@ export const REGENERATION_CLEAR_LABELS = [
   "VOO",
 ] as const;
 
-/** Labels removidos pelo endpoint de limpar geração (folgas/voos gerados pelo motor). */
+/** Labels removidos pelo endpoint de limpar geração (turnos T6/T7/T8 são apagados à parte). */
 export const CLEAR_GENERATED_LABELS = [
   "FOLGA",
   "FOLGA SOCIAL",

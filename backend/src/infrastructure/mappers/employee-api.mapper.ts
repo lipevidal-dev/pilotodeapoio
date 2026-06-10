@@ -1,4 +1,4 @@
-import type { Employee, EmployeeFlightRestriction, EmployeeShiftRestriction, Role, Shift } from "@prisma/client";
+import type { Employee, EmployeeFlightRestriction, EmployeePreferredShift, EmployeeShiftRestriction, Role, Shift } from "@prisma/client";
 
 import { formatSeniorityLabel } from "../../domain/employee/seniority.js";
 
@@ -17,6 +17,12 @@ export interface RestrictedShiftSummary {
 }
 
 
+
+export interface PreferredShiftSummary {
+  id: string;
+  code: string;
+  name: string;
+}
 
 export interface EmployeeApiRecord {
 
@@ -48,6 +54,10 @@ export interface EmployeeApiRecord {
 
   restrictedShifts: RestrictedShiftSummary[];
 
+  preferredShiftIds: string[];
+
+  preferredShifts: PreferredShiftSummary[];
+
   createdAt: string;
 
   updatedAt: string;
@@ -60,6 +70,8 @@ type ShiftRestrictionWithShift = EmployeeShiftRestriction & { shift: Shift };
 
 
 
+type PreferredShiftWithShift = EmployeePreferredShift & { shift: Shift };
+
 type EmployeeWithRole = Employee & {
 
   role?: Role | null;
@@ -67,6 +79,8 @@ type EmployeeWithRole = Employee & {
   flightRestrictions?: EmployeeFlightRestriction[];
 
   shiftRestrictions?: ShiftRestrictionWithShift[];
+
+  preferredShifts?: PreferredShiftWithShift[];
 
 };
 
@@ -85,6 +99,7 @@ export function employeeToApi(row: EmployeeWithRole): EmployeeApiRecord {
     .sort();
 
   const shiftRows = row.shiftRestrictions ?? [];
+  const preferredRows = row.preferredShifts ?? [];
 
   return {
 
@@ -113,6 +128,18 @@ export function employeeToApi(row: EmployeeWithRole): EmployeeApiRecord {
     restrictedShiftIds: shiftRows.map((r) => r.shiftId),
 
     restrictedShifts: shiftRows.map((r) => ({
+
+      id: r.shift.id,
+
+      code: r.shift.code,
+
+      name: r.shift.name,
+
+    })),
+
+    preferredShiftIds: preferredRows.map((r) => r.shiftId),
+
+    preferredShifts: preferredRows.map((r) => ({
 
       id: r.shift.id,
 

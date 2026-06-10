@@ -18,6 +18,7 @@ export type ScheduleCellKind =
   | 'fa'
   | 'fani'
   | 'fp'
+  | 'fp-weekend'
   | 'ferias'
   | 'voo'
   | 'simulador'
@@ -55,6 +56,8 @@ export interface EmployeeSummaryStats {
   disponivel: number;
   maxConsec: number;
   status: 'OK' | 'ATENÇÃO' | 'CRÍTICO';
+  /** Regra principal que explica OK / ATENÇÃO / CRÍTICO (ex.: FOLGAS_PAO_ABOVE_MAX (12)). */
+  statusReason: string | null;
   voos: number;
   simuladores: number;
   cursos: number;

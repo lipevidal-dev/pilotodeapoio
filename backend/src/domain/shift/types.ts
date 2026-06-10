@@ -1,5 +1,7 @@
 export type ShiftRole = "PAO" | "APAO" | "PAO FCF" | "BOTH";
 
+export type ShiftCoverageType = "REQUIRED" | "PARALLEL";
+
 export interface Shift {
   code: string;
   role: ShiftRole;
@@ -10,6 +12,7 @@ export interface Shift {
   maxStaff: number;
   active?: boolean;
   noWeekends?: boolean;
+  coverageType?: ShiftCoverageType;
 }
 
 export interface ShiftInfo {

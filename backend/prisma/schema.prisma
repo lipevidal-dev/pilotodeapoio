@@ -51,6 +51,11 @@ enum EmployeeTypeAllowed {
   BOTH
 }
 
+enum ShiftCoverageType {
+  REQUIRED
+  PARALLEL
+}
+
 model User {
   id           String   @id @default(uuid())
   name         String
@@ -94,6 +99,7 @@ model Employee {
   ruleViolations      RuleViolation[]
   flightRestrictions  EmployeeFlightRestriction[]
   shiftRestrictions   EmployeeShiftRestriction[]
+  preferredShifts     EmployeePreferredShift[]
 
   @@unique([type, seniorityNumber])
 }
@@ -129,6 +135,21 @@ model EmployeeShiftRestriction {
   @@map("employee_shift_restrictions")
 }
 
+model EmployeePreferredShift {
+  id         String   @id @default(uuid())
+  employeeId String   @map("employee_id")
+  shiftId    String   @map("shift_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shift    Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, shiftId])
+  @@index([employeeId])
+  @@map("employee_preferred_shifts")
+}
+
 model Shift {
   id                  String              @id @default(uuid())
   code                String              @unique
@@ -141,10 +162,12 @@ model Shift {
   displayOrder        Int                 @default(0) @map("display_order")
   mandatoryCoverage   Boolean             @default(false) @map("mandatory_coverage")
   requiresT8PairNd    Boolean             @default(false) @map("requires_t8_pair_nd")
+  coverageType        ShiftCoverageType   @default(REQUIRED) @map("coverage_type")
   createdAt           DateTime            @default(now()) @map("created_at")
   updatedAt           DateTime            @updatedAt @map("updated_at")
 
   employeeShiftRestrictions EmployeeShiftRestriction[]
+  employeePreferredShifts EmployeePreferredShift[]
 }
 
 model ScheduleMonth {

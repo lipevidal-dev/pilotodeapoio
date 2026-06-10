@@ -1,0 +1,334 @@
+$gol-orange: #ff6600;
+$gol-orange-soft: rgba(255, 102, 0, 0.14);
+$bg-base: #f5f5f5;
+$bg-soft: #eaeaea;
+$text-dark: #333333;
+$text-muted: #8a8a8a;
+
+$fade-bg: 0.5s;
+$gol-in: 0.8s;
+$separator-in: 0.45s;
+$escala-in: 0.6s;
+$glow-in: 0.45s;
+
+$gol-start: $fade-bg;
+$separator-start: $gol-start + $gol-in;
+$escala-start: $separator-start + $separator-in;
+$glow-start: $escala-start + $escala-in;
+
+.transition-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: $bg-base;
+  animation: overlay-bg-in $fade-bg ease-out forwards;
+}
+
+.transition-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.transition-bg__texture {
+  position: absolute;
+  inset: 0;
+  background-color: $bg-base;
+  background-image:
+    linear-gradient(180deg, rgba(245, 245, 245, 0.72) 0%, rgba(245, 245, 245, 0.92) 45%, rgba(245, 245, 245, 0.98) 100%),
+    url('../../../assets/brand/transition-aero-texture.png');
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 0.22;
+}
+
+.transition-bg__glow {
+  position: absolute;
+  width: min(42vw, 420px);
+  height: min(42vw, 420px);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 102, 0, 0.16) 0%, rgba(255, 102, 0, 0) 70%);
+  filter: blur(8px);
+}
+
+.transition-bg__glow--left {
+  left: -8%;
+  bottom: -12%;
+}
+
+.transition-bg__glow--right {
+  right: -6%;
+  top: -10%;
+}
+
+.transition-bg__grid {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(218, 218, 218, 0.55) 1px, transparent 1px);
+  background-size: 22px 22px;
+  opacity: 0.18;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.35), transparent 55%);
+}
+
+.transition-stage {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.35rem;
+  width: min(92vw, 520px);
+  padding: 2rem 1.5rem;
+  text-align: center;
+}
+
+.transition-block {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.transition-block--gol {
+  opacity: 0;
+  transform: scale(0.94);
+  animation: gol-reveal $gol-in cubic-bezier(0.22, 1, 0.36, 1) $gol-start forwards;
+  will-change: opacity, transform;
+}
+
+.transition-gol-logo {
+  width: min(58vw, 220px);
+  height: auto;
+  display: block;
+}
+
+.transition-block--separator {
+  opacity: 0;
+  animation: block-fade-in $separator-in ease-out $separator-start forwards;
+}
+
+.transition-separator {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.65rem;
+  width: min(72vw, 360px);
+}
+
+.transition-separator__line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, $gol-orange 20%, $gol-orange 80%, transparent);
+}
+
+.transition-separator__plane {
+  width: 1.15rem;
+  height: 1.15rem;
+  color: $gol-orange;
+  transform: rotate(-90deg);
+  filter: drop-shadow(0 1px 2px rgba(255, 102, 0, 0.25));
+}
+
+.transition-block--escala {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: escala-reveal $escala-in ease-out $escala-start forwards;
+}
+
+.transition-escala-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  text-align: left;
+}
+
+.transition-escala-mark {
+  width: 3.25rem;
+  height: 3.25rem;
+  flex-shrink: 0;
+}
+
+.transition-escala-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-weight: 800;
+  font-size: clamp(1.35rem, 3.2vw, 1.75rem);
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+}
+
+.transition-escala-title__escala {
+  color: $text-dark;
+}
+
+.transition-escala-title__pao {
+  color: $gol-orange;
+}
+
+.transition-escala-subtitle {
+  margin: 0.35rem 0 0;
+  font-size: clamp(0.62rem, 1.6vw, 0.72rem);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: $text-muted;
+}
+
+.transition-loading-message {
+  margin: 0.15rem 0 0;
+  min-height: 1.2rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: $text-muted;
+  opacity: 0;
+  animation: message-in 0.25s ease-out ($escala-start + 0.1s) forwards;
+  transition: opacity 0.25s ease;
+}
+
+.transition-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-top: 0.15rem;
+  opacity: 0;
+  animation: message-in 0.25s ease-out ($escala-start + 0.15s) forwards;
+}
+
+.transition-dots__dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: rgba(255, 102, 0, 0.22);
+  animation: dot-pulse 1.05s ease-in-out infinite;
+
+  &:nth-child(1) {
+    animation-delay: 0s;
+  }
+
+  &:nth-child(2) {
+    animation-delay: 0.35s;
+  }
+
+  &:nth-child(3) {
+    animation-delay: 0.7s;
+  }
+}
+
+.transition-glow-ring {
+  position: absolute;
+  width: min(72vw, 520px);
+  height: min(72vw, 520px);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle, rgba(255, 102, 0, 0.12) 0%, rgba(255, 102, 0, 0) 68%);
+  animation: glow-pulse $glow-in ease-in-out $glow-start forwards;
+}
+
+@keyframes overlay-bg-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes gol-reveal {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes block-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes escala-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes glow-pulse {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes message-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dot-pulse {
+  0%,
+  100% {
+    background: rgba(255, 102, 0, 0.22);
+    transform: scale(1);
+  }
+  50% {
+    background: $gol-orange;
+    transform: scale(1.15);
+  }
+}
+
+@media (max-width: 768px) {
+  .transition-stage {
+    gap: 1.1rem;
+    padding: 1.5rem 1rem;
+  }
+
+  .transition-escala-brand {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .transition-escala-text {
+    text-align: center;
+  }
+
+  .transition-escala-title {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .transition-separator {
+    width: min(84vw, 320px);
+  }
+
+  .transition-gol-logo {
+    width: min(68vw, 200px);
+  }
+}

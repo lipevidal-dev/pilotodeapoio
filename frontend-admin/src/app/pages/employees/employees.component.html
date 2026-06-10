@@ -364,6 +364,48 @@
 
     </section>
 
+
+
+    <section class="restriction-section">
+
+      <h3 class="section-title">Alocar em turno específico</h3>
+
+      <p class="section-hint">Turnos preferidos serão considerados pelo motor (ex.: T9 paralelo).</p>
+
+      <p-multiSelect
+
+        [options]="shiftOptions()"
+
+        [(ngModel)]="formPreferredShiftIds"
+
+        optionLabel="label"
+
+        optionValue="value"
+
+        placeholder="Selecione turnos preferidos"
+
+        [filter]="true"
+
+        display="chip"
+
+        class="w-full"
+
+      />
+
+      @if (restrictedPreferredConflict()) {
+
+        <p-message
+
+          severity="error"
+
+          text="Um turno não pode estar em restrição e preferência ao mesmo tempo."
+
+        />
+
+      }
+
+    </section>
+
   </div>
 
   <ng-template pTemplate="footer">

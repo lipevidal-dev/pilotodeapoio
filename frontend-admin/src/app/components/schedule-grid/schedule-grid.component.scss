@@ -1,3 +1,9 @@
+$col-employee-w: 7.5rem;
+$col-day-w: 2.35rem;
+$sum-narrow-w: 1.85rem;
+$sum-status-w: 5rem;
+$summary-block-w: calc(9 * #{$sum-narrow-w} + #{$sum-status-w});
+
 .summary-toolbar {
   display: flex;
   justify-content: flex-end;
@@ -5,6 +11,10 @@
 }
 
 .schedule-grid-wrap {
+  --col-employee-w: #{$col-employee-w};
+  --col-day-w: #{$col-day-w};
+  --col-summary-w: #{$summary-block-w};
+
   overflow-x: auto;
   overflow-y: visible;
   border: 1px solid #e5e7eb;
@@ -13,12 +23,61 @@
   max-width: 100%;
 }
 
+.schedule-grid-scroller {
+  width: max-content;
+  min-width: 100%;
+}
+
+.coverage-gaps-rail {
+  display: flex;
+  align-items: flex-end;
+  width: max-content;
+  min-width: 100%;
+  min-height: 1rem;
+  margin-bottom: 0.15rem;
+  padding-top: 0.1rem;
+  pointer-events: none;
+}
+
+.coverage-gaps-rail__employee {
+  flex: 0 0 var(--col-employee-w);
+  width: var(--col-employee-w);
+}
+
+.coverage-gaps-rail__day {
+  flex: 0 0 var(--col-day-w);
+  width: var(--col-day-w);
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.coverage-gaps-rail__day--weekend {
+  background: rgba(241, 90, 34, 0.04);
+  border-radius: 3px 3px 0 0;
+}
+
+.coverage-gaps-rail__summary {
+  flex: 0 0 var(--col-summary-w);
+  width: var(--col-summary-w);
+  background: var(--gol-white);
+}
+
+.coverage-gaps-rail__icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  object-fit: contain;
+  pointer-events: auto;
+  background: transparent;
+}
+
 .schedule-grid {
   border-collapse: separate;
   border-spacing: 0;
   width: max-content;
   min-width: 100%;
   font-size: 0.75rem;
+  table-layout: fixed;
 
   th,
   td {
@@ -26,6 +85,7 @@
     vertical-align: middle;
     border-bottom: 1px solid #eef0f2;
     border-right: 1px solid #eef0f2;
+    box-sizing: border-box;
   }
 
   thead th {
@@ -38,17 +98,39 @@
     z-index: 3;
   }
 
-  tr:nth-child(2) th {
-    top: 2.35rem;
-    background: #3d3d3d;
-    font-size: 0.6rem;
-    padding: 0.2rem;
-    font-weight: 600;
-  }
-
   .col-summary-head {
     text-align: center;
     font-size: 0.7rem;
+    vertical-align: top;
+    padding: 0 !important;
+    background: var(--gol-gray-dark) !important;
+  }
+
+  .summary-head-stack {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 100%;
+    background: var(--gol-gray-dark);
+  }
+
+  .summary-head-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+    min-height: 2.35rem;
+    padding: 0.35rem 0.2rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--gol-white);
+    background: var(--gol-gray-dark);
+    border-bottom: 1px solid #2d2d2d;
+  }
+
+  .summary-block-inner--head {
+    flex: 0 0 auto;
+    background: #3d3d3d;
   }
 
   .sticky-col {
@@ -56,8 +138,9 @@
     left: 0;
     z-index: 2;
     background: var(--gol-white);
-    min-width: 7.5rem;
-    max-width: 9rem;
+    width: var(--col-employee-w);
+    min-width: var(--col-employee-w);
+    max-width: var(--col-employee-w);
     box-shadow: 2px 0 4px rgba(0, 0, 0, 0.04);
   }
 
@@ -66,11 +149,79 @@
     background: var(--gol-gray-dark);
   }
 
-  .sticky-sum {
-    background: #f9fafb;
+  // Bloco único de resumo — evita sanfonar colunas ao rolar.
+  .sticky-summary-block {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    width: var(--col-summary-w);
+    min-width: var(--col-summary-w);
+    max-width: var(--col-summary-w);
+    padding: 0 !important;
+    background: var(--gol-white);
+    box-shadow: -2px 0 4px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  thead .sticky-summary-block {
+    z-index: 5;
+    top: 0;
+    background: var(--gol-gray-dark) !important;
+  }
+
+  tbody .sticky-summary-block {
+    background: var(--gol-white) !important;
+  }
+
+  .summary-block-inner {
+    display: flex;
+    align-items: stretch;
+    width: var(--col-summary-w);
+    min-width: var(--col-summary-w);
+    max-width: var(--col-summary-w);
+  }
+
+  .summary-block-head {
+    flex: 0 0 $sum-narrow-w;
+    width: $sum-narrow-w;
+    min-width: $sum-narrow-w;
+    max-width: $sum-narrow-w;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
-    padding: 0.2rem !important;
-    min-width: 1.85rem;
+    font-size: 0.58rem !important;
+    line-height: 1.1;
+    padding: 0.15rem 0.05rem;
+    box-sizing: border-box;
+  }
+
+  .summary-block-head--status {
+    flex: 0 0 $sum-status-w;
+    width: $sum-status-w;
+    min-width: $sum-status-w;
+    max-width: $sum-status-w;
+  }
+
+  .summary-block-cell {
+    flex: 0 0 $sum-narrow-w;
+    width: $sum-narrow-w;
+    min-width: $sum-narrow-w;
+    max-width: $sum-narrow-w;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.2rem 0.05rem;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .summary-block-cell--status {
+    flex: 0 0 $sum-status-w;
+    width: $sum-status-w;
+    min-width: $sum-status-w;
+    max-width: $sum-status-w;
   }
 
   .col-employee {
@@ -82,7 +233,9 @@
   .col-day {
     text-align: center;
     padding: 0.15rem !important;
-    min-width: 2.35rem;
+    width: var(--col-day-w);
+    min-width: var(--col-day-w);
+    max-width: var(--col-day-w);
   }
 
   .col-weekend {
@@ -122,24 +275,35 @@
     background: #fffaf5;
   }
 
-  .data-row:hover .sticky-col {
-    background: #fffaf5;
+  .data-row:hover .sticky-col,
+  .data-row:hover .sticky-summary-block {
+    background: #fffaf5 !important;
   }
 
   .emp-name {
     font-size: 0.78rem;
     color: var(--gol-gray-dark);
   }
-
-  .sum-h {
-    min-width: 1.85rem;
-    font-size: 0.58rem !important;
-  }
 }
 
 .editable-grid .col-day {
-  cursor: crosshair;
+  position: relative;
   user-select: none;
+}
+
+$gol-pointer-cursor: url('/assets/cursors/gol-pointer.png') 3 2, pointer;
+
+.editable-grid .cell-empty-select,
+.editable-grid .cell-filled-drag {
+  cursor: $gol-pointer-cursor;
+
+  &:hover {
+    background: rgba(241, 90, 34, 0.08) !important;
+  }
+}
+
+.editable-grid .cell-filled-drag:active {
+  cursor: $gol-pointer-cursor;
 }
 
 .cell-selected {
@@ -148,24 +312,36 @@
   background: rgba(241, 90, 34, 0.12) !important;
 }
 
+.editable-grid .cell-filled-delete {
+  cursor: $gol-pointer-cursor;
+
+  &:hover {
+    background: rgba(220, 38, 38, 0.06) !important;
+  }
+}
+
+.cell-delete-selected {
+  outline: 2px solid #dc2626;
+  outline-offset: -2px;
+  background: rgba(220, 38, 38, 0.12) !important;
+}
+
 .cell-dragging {
   opacity: 0.45;
 }
 
 .cell-drag-over {
-  outline: 2px dashed #2563eb;
+  outline: 2px dashed var(--gol-orange, #f15a22);
   outline-offset: -2px;
-  background: rgba(37, 99, 235, 0.1) !important;
+  background: rgba(241, 90, 34, 0.14) !important;
 }
 
 .schedule-grid-wrap.compact-layout {
+  --col-employee-w: 6.25rem;
+  --col-day-w: 1.85rem;
+
   .schedule-grid {
     font-size: 0.68rem;
-
-    .sticky-col {
-      min-width: 6.25rem;
-      max-width: 7.25rem;
-    }
 
     .col-employee {
       padding-left: 0.45rem !important;
@@ -173,11 +349,6 @@
 
     .emp-name {
       font-size: 0.72rem;
-    }
-
-    .col-day {
-      min-width: 1.85rem;
-      padding: 0.1rem !important;
     }
 
     .day-num {

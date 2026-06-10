@@ -15,6 +15,7 @@ import {
   buildShiftMapFromContext,
   listApaoWithoutPaoCompanion,
 } from "./coverage.js";
+import { countAvailableApaosOnDay, dayRequiresApaoCoverage } from "./apao-availability.js";
 import { shiftStartEnd } from "./time.js";
 import { validateT8Blocks } from "./t8-planner.js";
 import { isEmployeePlanningActiveMonth, isEmployeeOnVacation } from "./vacation.js";
@@ -119,6 +120,57 @@ export class ApaoRequiresPaoRule implements Rule {
       employee: m.employeeName,
       detail: `APAO no ${m.shiftCode} sem PAO cobrindo a janela horária do turno.`,
     }));
+  }
+}
+
+/** Exige ≥1 APAO disponível em dias com PAO em T6 (escritório). */
+export class ApaoAvailabilityRule implements Rule {
+  readonly name = "ApaoAvailabilityRule";
+  validate(ctx: ScheduleContext): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+    for (const day of iterDays(ctx.year, ctx.month)) {
+      if (!dayRequiresApaoCoverage(ctx, day)) continue;
+      if (countAvailableApaosOnDay(ctx, day) < 1) {
+        issues.push({
+          severity: "ALTA",
+          type: "SEM APAO DISPONÍVEL",
+          date: day,
+          employee: "-",
+          detail:
+            "Todos os APAOs estão folgando/bloqueados neste dia. Deve haver pelo menos 1 APAO disponível.",
+        });
+      }
+    }
+    return issues;
+  }
+}
+
+/** Impede FA (FOLGA AGRUPADA) no mesmo dia para mais de um APAO. */
+export class ApaoFolgaAgrupadaOverlapRule implements Rule {
+  readonly name = "ApaoFolgaAgrupadaOverlapRule";
+  validate(ctx: ScheduleContext): ValidationIssue[] {
+    const roleMap = buildRoleMap(ctx);
+    const byDate = new Map<string, string[]>();
+    for (const a of ctx.allocations) {
+      if (!isInMonth(a.allocDate, ctx.year, ctx.month)) continue;
+      if (a.allocType.toUpperCase() !== "FOLGA AGRUPADA") continue;
+      if (roleMap.get(a.employeeId) !== "APAO") continue;
+      const list = byDate.get(a.allocDate) ?? [];
+      list.push(a.employeeName);
+      byDate.set(a.allocDate, list);
+    }
+    const issues: ValidationIssue[] = [];
+    for (const [date, names] of byDate) {
+      if (names.length <= 1) continue;
+      issues.push({
+        severity: "ALTA",
+        type: "FA APAO DUPLICADA",
+        date,
+        employee: names.join(", "),
+        detail: "FOLGA AGRUPADA no mesmo dia para mais de um APAO — deve haver APAO no escritório.",
+      });
+    }
+    return issues;
   }
 }
 
@@ -288,6 +340,7 @@ export class RequestedOffLimitRule implements Rule {
     const issues: ValidationIssue[] = [];
     for (const emp of ctx.employees) {
       if (emp.role === "PAO FCF") continue;
+      if (emp.role === "APAO") continue;
       const fromRegistry = ctx.requestedOffByEmployeeId?.[emp.id];
       const fpCount =
         fromRegistry != null
@@ -322,6 +375,7 @@ export class MonofolgaRule implements Rule {
     const issues: ValidationIssue[] = [];
     for (const emp of ctx.employees) {
       if (emp.role === "PAO FCF") continue;
+      if (emp.role === "APAO") continue;
       if (!isEmployeePlanningActiveMonth(ctx, emp.id)) continue;
 
       const folgas = ctx.allocations

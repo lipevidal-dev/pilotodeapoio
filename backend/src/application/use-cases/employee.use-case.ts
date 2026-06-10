@@ -24,6 +24,14 @@ import {
 
 } from "./employee-delete.js";
 
+import {
+  EmployeeDuplicatePreferredShiftError,
+  EmployeePreferredShiftNotFoundError,
+  EmployeeShiftPreferenceConflictError,
+} from "../errors/employee.errors.js";
+
+import { ShiftRepository } from "../../infrastructure/repositories/shift.repository.js";
+
 
 
 function toEmployeeType(code: string): EmployeeType {
@@ -46,6 +54,8 @@ type RestrictionFields = {
 
   restrictedShiftIds?: string[];
 
+  preferredShiftIds?: string[];
+
 };
 
 
@@ -57,6 +67,8 @@ export class EmployeeUseCase {
     private readonly repo = new EmployeeRepository(),
 
     private readonly roleRepo = new RoleRepository(),
+
+    private readonly shiftRepo = new ShiftRepository(),
 
   ) {}
 
@@ -75,6 +87,8 @@ export class EmployeeUseCase {
         flightRestrictions: [],
 
         shiftRestrictions: [],
+
+        preferredShifts: [],
 
       }),
 
@@ -166,6 +180,38 @@ export class EmployeeUseCase {
 
 
 
+  private async validateShiftPreferences(
+    restrictedShiftIds: string[] | undefined,
+    preferredShiftIds: string[] | undefined,
+    current?: { restrictedShiftIds: string[]; preferredShiftIds: string[] },
+  ): Promise<void> {
+    const restricted = restrictedShiftIds ?? current?.restrictedShiftIds ?? [];
+    const preferred = preferredShiftIds ?? current?.preferredShiftIds ?? [];
+
+    if (preferred.length !== new Set(preferred).size) {
+      throw new EmployeeDuplicatePreferredShiftError();
+    }
+
+    if (preferred.length > 0) {
+      const shifts = await this.shiftRepo.findAll(false);
+      const validIds = new Set(shifts.map((s) => s.id));
+      for (const shiftId of preferred) {
+        if (!validIds.has(shiftId)) {
+          throw new EmployeePreferredShiftNotFoundError(shiftId);
+        }
+      }
+    }
+
+    const restrictedSet = new Set(restricted);
+    for (const shiftId of preferred) {
+      if (restrictedSet.has(shiftId)) {
+        throw new EmployeeShiftPreferenceConflictError();
+      }
+    }
+  }
+
+
+
   async create(
 
     data: {
@@ -188,6 +234,8 @@ export class EmployeeUseCase {
 
     const resolved = await this.resolveRoleForCreate(data.roleId, data.type);
 
+    await this.validateShiftPreferences(data.restrictedShiftIds, data.preferredShiftIds);
+
     const row = await this.repo.create({
 
       name: data.name,
@@ -205,6 +253,8 @@ export class EmployeeUseCase {
       noFlightDates: data.noFlightDates,
 
       restrictedShiftIds: data.restrictedShiftIds,
+
+      preferredShiftIds: data.preferredShiftIds,
 
     });
 
@@ -242,6 +292,19 @@ export class EmployeeUseCase {
 
 
 
+    const currentDetail = await this.repo.findById(id);
+
+    await this.validateShiftPreferences(
+      data.restrictedShiftIds,
+      data.preferredShiftIds,
+      currentDetail
+        ? {
+            restrictedShiftIds: (currentDetail.shiftRestrictions ?? []).map((r) => r.shiftId),
+            preferredShiftIds: (currentDetail.preferredShifts ?? []).map((r) => r.shiftId),
+          }
+        : undefined,
+    );
+
     const resolved = await this.resolveRoleForUpdate(data.roleId, data.type, false);
 
     const patch: Parameters<EmployeeRepository["update"]>[1] = {};
@@ -257,6 +320,8 @@ export class EmployeeUseCase {
     if (data.noFlightDates !== undefined) patch.noFlightDates = data.noFlightDates;
 
     if (data.restrictedShiftIds !== undefined) patch.restrictedShiftIds = data.restrictedShiftIds;
+
+    if (data.preferredShiftIds !== undefined) patch.preferredShiftIds = data.preferredShiftIds;
 
     if (resolved) {
 

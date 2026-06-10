@@ -14,6 +14,12 @@ export interface RestrictedShiftSummary {
   name: string;
 }
 
+export interface PreferredShiftSummary {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export interface Employee {
   id: string;
   name: string;
@@ -29,6 +35,8 @@ export interface Employee {
   noFlightDates?: string[];
   restrictedShiftIds?: string[];
   restrictedShifts?: RestrictedShiftSummary[];
+  preferredShiftIds?: string[];
+  preferredShifts?: PreferredShiftSummary[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -41,6 +49,7 @@ export interface CreateEmployeePayload {
   active?: boolean;
   noFlightDates?: string[];
   restrictedShiftIds?: string[];
+  preferredShiftIds?: string[];
 }
 
 export interface UpdateEmployeePayload {
@@ -51,6 +60,7 @@ export interface UpdateEmployeePayload {
   active?: boolean;
   noFlightDates?: string[];
   restrictedShiftIds?: string[];
+  preferredShiftIds?: string[];
 }
 
 export interface JobRole {
@@ -97,6 +107,8 @@ export interface EmployeeDeleteError {
 
 export type ShiftRoleType = 'PAO' | 'APAO' | 'BOTH';
 
+export type ShiftCoverageType = 'REQUIRED' | 'PARALLEL';
+
 export interface Shift {
   id: string;
   code: string;
@@ -108,6 +120,7 @@ export interface Shift {
   displayOrder: number;
   mandatoryCoverage: boolean;
   requiresT8PairNd: boolean;
+  coverageType: ShiftCoverageType;
   durationHours: number;
   createdAt?: string;
   updatedAt?: string;
@@ -123,6 +136,7 @@ export interface CreateShiftPayload {
   displayOrder?: number;
   mandatoryCoverage?: boolean;
   requiresT8PairNd?: boolean;
+  coverageType?: ShiftCoverageType;
 }
 
 export interface UpdateShiftPayload {
@@ -135,6 +149,7 @@ export interface UpdateShiftPayload {
   displayOrder?: number;
   mandatoryCoverage?: boolean;
   requiresT8PairNd?: boolean;
+  coverageType?: ShiftCoverageType;
 }
 
 export interface ShiftDeleteError {
@@ -244,6 +259,14 @@ export interface GenerateFlightsResponse {
   summary: GenerationSummary;
 }
 
+export interface GenerateApaoScheduleResponse {
+  scheduleMonthId: string;
+  assignmentsCreated: number;
+  allocationsCreated: number;
+  violations: ScheduleViolation[];
+  summary: GenerationSummary;
+}
+
 export interface PublishScheduleResponse {
   scheduleMonthId: string;
   year: number;
@@ -276,6 +299,8 @@ export type ManualAllocationType =
   | 'T6'
   | 'T7'
   | 'T8'
+  | 'T9'
+  | 'T8_BLOCK'
   | 'ND'
   | 'FOLGA'
   | 'FP'
@@ -512,7 +537,7 @@ export interface BatchDeleteResult {
 export interface ScheduleMonthResponse {
   scheduleMonth: ScheduleMonthRecord;
   employees: Employee[];
-  shifts: unknown[];
+  shifts: Shift[];
   assignments: ScheduleAssignmentRow[];
   preAllocations: PreAllocationRow[];
   operationalCadastros?: OperationalCadastroRow[];

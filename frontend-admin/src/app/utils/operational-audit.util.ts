@@ -7,6 +7,7 @@ import type {
 } from '../models/schedule-grid.models';
 
 export type OperationalStatus = 'OK' | 'ATENÇÃO' | 'CRÍTICO';
+export type ViolationLevel = 'CRITICAL' | 'WARNING' | 'INFO';
 
 export interface AuditViolation {
   severity: string;
@@ -14,6 +15,8 @@ export interface AuditViolation {
   employee: string;
   employeeId?: string | null;
 }
+
+export type PaoCoverageShift = 'T6' | 'T7' | 'T8';
 
 export interface GridAuditTotals {
   totalPaos: number;
@@ -30,10 +33,70 @@ export interface GridAuditTotals {
   coverageT6: number;
   coverageT7: number;
   coverageT8: number;
+  /** Dia do mês → turnos PAO faltando naquele dia. */
+  coverageGapDays: Record<number, PaoCoverageShift[]>;
 }
 
+export interface EmployeeOperationalEvaluation {
+  status: OperationalStatus;
+  statusReason: string | null;
+}
+
+/** Abaixo de 10 folgas (9 ou menos) = CRÍTICO. */
 const MIN_PAO_FOLGAS = 10;
-const MAX_PAO_FOLGAS = 11;
+/** Até 12 folgas = faixa aceitável; 13+ = ATENÇÃO. */
+const PAO_FOLGAS_OK_MAX = 12;
+const MAX_CONSECUTIVE_WORK_DAYS = 6;
+
+const MIN_APAO_FOLGAS_OK = 4;
+const MIN_APAO_WORK_DAYS_OK = 24;
+
+/** Faixa operacional saudável APAO — ignora monofolga e demais ATENÇÃO. */
+function isApaoHealthyBand(stats: EmployeeSummaryStats): boolean {
+  return stats.folgas >= MIN_APAO_FOLGAS_OK && stats.diasTrabalhados >= MIN_APAO_WORK_DAYS_OK;
+}
+
+/** Faixa operacional saudável PAO — status OK mesmo com 11–12 folgas. */
+function isPaoHealthyBand(stats: EmployeeSummaryStats): boolean {
+  return (
+    stats.diasTrabalhados >= 18 &&
+    stats.diasTrabalhados <= 21 &&
+    stats.folgas >= 10 &&
+    stats.folgas <= 12 &&
+    stats.maxConsec < MAX_CONSECUTIVE_WORK_DAYS
+  );
+}
+
+const CRITICAL_RULE_CODES = new Set([
+  'COVERAGE_MISSING_T6',
+  'COVERAGE_MISSING_T7',
+  'COVERAGE_MISSING_T8',
+  'FURO COBERTURA PAO',
+  'COBERTURA PAO INCOMPLETA',
+  'APAO SEM PAO',
+  'SEM APAO DISPONÍVEL',
+  'FA APAO DUPLICADA',
+  'TRABALHO EM FÉRIAS',
+  'TRABALHO EM DIA BLOQUEADO',
+  'MAIS DE 2 SIMULTÂNEOS',
+  'DESCANSO MENOR QUE 12H',
+  'T8 SEM ND',
+  'T8 ISOLADO',
+  'TURNO NÃO PERMITIDO PARA PAO',
+  'TURNO APAO COBERTO POR PAO REGULAR',
+  'ND FORA DE T8/T8',
+  'TURNO EM DIA ND',
+]);
+
+const WARNING_RULE_CODES = new Set([
+  'MAIS DE 6 DIAS',
+  'APAO SEM FOLGA 6x1',
+  'MONOFOLGA',
+  'FOLGAS PEDIDAS',
+  'SEM FOLGA SOCIAL',
+  'FOLGAS PAO',
+  'RESTRIÇÃO VOO MÊS INTEIRO',
+]);
 
 function isWorkDay(cell: ScheduleCellData): boolean {
   switch (cell.kind) {
@@ -55,6 +118,36 @@ function isWorkDay(cell: ScheduleCellData): boolean {
 
 function isFullyFreeDay(cell: ScheduleCellData): boolean {
   return cell.kind === 'empty';
+}
+
+/** Folgas que compõem bloco (não monofolga quando adjacentes). */
+function isMonofolgaRestCell(cell: ScheduleCellData): boolean {
+  return ['folga', 'fp', 'fp-weekend', 'fs', 'fa', 'fani'].includes(cell.kind);
+}
+
+/** Folga isolada: sem folga no dia anterior nem no seguinte. */
+export function hasMonofolgaFromCells(
+  cells: ScheduleCellData[],
+  year: number,
+  month: number,
+): boolean {
+  const restDays: number[] = [];
+  cells.forEach((cell, idx) => {
+    if (isMonofolgaRestCell(cell)) restDays.push(idx + 1);
+  });
+  if (restDays.length === 0) return false;
+
+  const restSet = new Set(restDays);
+  for (const day of restDays) {
+    const prev = new Date(year, month - 1, day - 1);
+    const next = new Date(year, month - 1, day + 1);
+    const prevNum = prev.getMonth() === month - 1 ? prev.getDate() : -1;
+    const nextNum = next.getMonth() === month - 1 ? next.getDate() : -1;
+    if (!restSet.has(prevNum) && !restSet.has(nextNum)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Maior sequência consecutiva de dias trabalhados no mês. */
@@ -93,6 +186,195 @@ function violationsForRow(
   );
 }
 
+function normalizeViolationSeverity(severity: string | undefined): ViolationLevel {
+  const u = (severity ?? '').toUpperCase();
+  if (u === 'CRITICAL' || u === 'CRÍTICA' || u === 'ALTA') return 'CRITICAL';
+  if (u === 'WARNING' || u === 'MÉDIA' || u === 'MEDIA') return 'WARNING';
+  return 'INFO';
+}
+
+/** Alinha com backend violation-level.ts — ruleCode tem prioridade sobre severity legado. */
+export function classifyAuditViolation(violation: AuditViolation): ViolationLevel {
+  const code = violation.ruleCode;
+  if (CRITICAL_RULE_CODES.has(code)) return 'CRITICAL';
+  if (WARNING_RULE_CODES.has(code)) return 'WARNING';
+  return normalizeViolationSeverity(violation.severity);
+}
+
+function formatRuleCode(ruleCode: string): string {
+  return ruleCode.trim().replace(/\s+/g, '_').toUpperCase();
+}
+
+function isMonofolgaViolation(v: AuditViolation): boolean {
+  return formatRuleCode(v.ruleCode) === 'MONOFOLGA';
+}
+
+/** Alertas de escala PAO que não devem afetar o status operacional do APAO. */
+const APAO_IGNORED_WARNING_CODES = new Set([
+  'MONOFOLGA',
+  'FOLGAS_PEDIDAS',
+  'FOLGAS_PAO',
+  'SEM_FOLGA_SOCIAL',
+]);
+
+function isApaoIgnoredWarning(v: AuditViolation): boolean {
+  return APAO_IGNORED_WARNING_CODES.has(formatRuleCode(v.ruleCode));
+}
+
+function isPaoAuditType(employeeType: string): boolean {
+  return employeeType === 'PAO';
+}
+
+function violationReason(violation: AuditViolation): string {
+  const code = formatRuleCode(violation.ruleCode);
+  if (violation.ruleCode === 'MAIS DE 6 DIAS') {
+    const match = /\d+/.exec(violation.ruleCode);
+    void match;
+    return 'MAX_CONSECUTIVE_DAYS';
+  }
+  return code;
+}
+
+function firstViolationByLevel(
+  violations: AuditViolation[],
+  level: ViolationLevel,
+): AuditViolation | undefined {
+  return violations.find((v) => classifyAuditViolation(v) === level);
+}
+
+export function evaluateEmployeeOperationalStatus(
+  stats: EmployeeSummaryStats,
+  employeeType: string,
+  daysInMonth: number,
+  violations: AuditViolation[],
+  employeeId: string,
+  employeeName: string,
+  cells?: ScheduleCellData[],
+  year?: number,
+  month?: number,
+): EmployeeOperationalEvaluation {
+  const empV = violationsForRow(violations, employeeId, employeeName);
+  const criticalViolation = firstViolationByLevel(empV, 'CRITICAL');
+  const warningViolation = firstViolationByLevel(empV, 'WARNING');
+  const hasCritical = criticalViolation != null;
+  const hasMonofolgaViolation = empV.some(isMonofolgaViolation);
+  const hasMonofolgaFromGrid =
+    isPaoAuditType(employeeType) &&
+    cells != null &&
+    year != null &&
+    month != null
+      ? hasMonofolgaFromCells(cells, year, month)
+      : hasMonofolgaViolation;
+  const hasMonofolga = isPaoAuditType(employeeType) && hasMonofolgaFromGrid;
+  const hasFolgasWarning =
+    stats.folgas > PAO_FOLGAS_OK_MAX && empV.some((v) => v.ruleCode === 'FOLGAS PAO');
+  const hasMaisDe6Dias = empV.some((v) => v.ruleCode === 'MAIS DE 6 DIAS');
+
+  if (isPaoAuditType(employeeType)) {
+    if (stats.folgas < MIN_PAO_FOLGAS) {
+      return {
+        status: 'CRÍTICO',
+        statusReason: `FOLGAS_PAO_BELOW_MIN (${stats.folgas})`,
+      };
+    }
+    if (hasCritical) {
+      return {
+        status: 'CRÍTICO',
+        statusReason: violationReason(criticalViolation!),
+      };
+    }
+    if (
+      empV.some((v) =>
+        ['ND FORA DE T8/T8', 'TURNO EM DIA ND', 'TRABALHO EM FÉRIAS'].includes(v.ruleCode),
+      )
+    ) {
+      const hit = empV.find((v) =>
+        ['ND FORA DE T8/T8', 'TURNO EM DIA ND', 'TRABALHO EM FÉRIAS'].includes(v.ruleCode),
+      )!;
+      return {
+        status: 'CRÍTICO',
+        statusReason: formatRuleCode(hit.ruleCode),
+      };
+    }
+    if (isPaoHealthyBand(stats)) {
+      return { status: 'OK', statusReason: null };
+    }
+    if (stats.folgas > PAO_FOLGAS_OK_MAX) {
+      return {
+        status: 'ATENÇÃO',
+        statusReason: `FOLGAS_PAO_ABOVE_MAX (${stats.folgas})`,
+      };
+    }
+    if (hasMonofolga) {
+      return { status: 'ATENÇÃO', statusReason: 'MONOFOLGA' };
+    }
+    if (hasFolgasWarning) {
+      return { status: 'ATENÇÃO', statusReason: 'FOLGAS_PAO' };
+    }
+    if (!stats.folgaSocialOk) {
+      return { status: 'ATENÇÃO', statusReason: 'SEM_FOLGA_SOCIAL' };
+    }
+    if (stats.vooDisp >= Math.ceil(daysInMonth * 0.35)) {
+      return { status: 'ATENÇÃO', statusReason: `VOO_DISP_HIGH (${stats.vooDisp})` };
+    }
+    if (stats.turnos < Math.max(12, daysInMonth - MIN_PAO_FOLGAS - 6)) {
+      return { status: 'ATENÇÃO', statusReason: `TURNOS_BELOW_MIN (${stats.turnos})` };
+    }
+    if (hasMaisDe6Dias || stats.maxConsec > MAX_CONSECUTIVE_WORK_DAYS) {
+      return {
+        status: 'ATENÇÃO',
+        statusReason: `MAX_CONSECUTIVE_DAYS (${stats.maxConsec})`,
+      };
+    }
+    if (warningViolation) {
+      return { status: 'ATENÇÃO', statusReason: violationReason(warningViolation) };
+    }
+    return { status: 'OK', statusReason: null };
+  }
+
+  if (!isPaoAuditType(employeeType)) {
+    const apaoWarnings = empV.filter((v) => !isApaoIgnoredWarning(v));
+    const apaoWarningViolation = firstViolationByLevel(apaoWarnings, 'WARNING');
+
+    if (hasCritical) {
+      return {
+        status: 'CRÍTICO',
+        statusReason: violationReason(criticalViolation!),
+      };
+    }
+    if (stats.vooDisp > 0) {
+      return {
+        status: 'CRÍTICO',
+        statusReason: `VOO_DISP_APAO (${stats.vooDisp})`,
+      };
+    }
+    if (isApaoHealthyBand(stats)) {
+      return { status: 'OK', statusReason: null };
+    }
+    if (stats.maxConsec > MAX_CONSECUTIVE_WORK_DAYS || hasMaisDe6Dias) {
+      return {
+        status: 'ATENÇÃO',
+        statusReason: `MAX_CONSECUTIVE_DAYS (${stats.maxConsec})`,
+      };
+    }
+    if (apaoWarningViolation) {
+      return { status: 'ATENÇÃO', statusReason: violationReason(apaoWarningViolation) };
+    }
+    return { status: 'OK', statusReason: null };
+  }
+
+  if (hasCritical) {
+    return {
+      status: 'CRÍTICO',
+      statusReason: violationReason(criticalViolation!),
+    };
+  }
+  if (warningViolation && !isMonofolgaViolation(warningViolation)) {
+    return { status: 'ATENÇÃO', statusReason: violationReason(warningViolation) };
+  }
+  return { status: 'OK', statusReason: null };
+}
+
 export function computeEmployeeStatus(
   stats: EmployeeSummaryStats,
   employeeType: string,
@@ -100,45 +382,21 @@ export function computeEmployeeStatus(
   violations: AuditViolation[],
   employeeId: string,
   employeeName: string,
+  cells?: ScheduleCellData[],
+  year?: number,
+  month?: number,
 ): OperationalStatus {
-  const empV = violationsForRow(violations, employeeId, employeeName);
-  const hasCritical = empV.some((v) => v.severity === 'CRITICAL');
-  const hasMonofolga = empV.some((v) => v.ruleCode === 'MONOFOLGA');
-  const hasFolgasWarning = empV.some((v) => v.ruleCode === 'FOLGAS PAO');
-
-  if (employeeType === 'PAO') {
-    if (stats.folgas < MIN_PAO_FOLGAS || stats.folgas > MAX_PAO_FOLGAS) return 'CRÍTICO';
-    if (hasCritical) return 'CRÍTICO';
-    if (
-      empV.some((v) =>
-        ['ND FORA DE T8/T8', 'TURNO EM DIA ND', 'TRABALHO EM FÉRIAS'].includes(v.ruleCode),
-      )
-    ) {
-      return 'CRÍTICO';
-    }
-    if (
-      stats.folgas === MAX_PAO_FOLGAS ||
-      hasMonofolga ||
-      hasFolgasWarning ||
-      !stats.folgaSocialOk ||
-      stats.vooDisp >= Math.ceil(daysInMonth * 0.35) ||
-      stats.turnos < Math.max(12, daysInMonth - MIN_PAO_FOLGAS - 6)
-    ) {
-      return 'ATENÇÃO';
-    }
-    return 'OK';
-  }
-
-  if (employeeType === 'APAO') {
-    if (hasCritical) return 'CRÍTICO';
-    if (stats.vooDisp > 0) return 'CRÍTICO';
-    if (stats.maxConsec > 6 || hasMonofolga) return 'ATENÇÃO';
-    return 'OK';
-  }
-
-  if (hasCritical) return 'CRÍTICO';
-  if (hasMonofolga) return 'ATENÇÃO';
-  return 'OK';
+  return evaluateEmployeeOperationalStatus(
+    stats,
+    employeeType,
+    daysInMonth,
+    violations,
+    employeeId,
+    employeeName,
+    cells,
+    year,
+    month,
+  ).status;
 }
 
 export function enrichRowAudit(
@@ -151,13 +409,16 @@ export function enrichRowAudit(
 ): EmployeeRowData {
   const maxConsec = maxConsecutiveWorkDays(row.cells, year, month);
   const vooDisp = row.cells.filter((c) => isFullyFreeDay(c)).length;
-  const status = computeEmployeeStatus(
-    { ...row.summary, maxConsec, vooDisp, status: 'OK' },
+  const evaluation = evaluateEmployeeOperationalStatus(
+    { ...row.summary, maxConsec, vooDisp, status: 'OK', statusReason: null },
     employeeType,
     daysInMonth,
     violations,
     row.employeeId,
     row.name,
+    row.cells,
+    year,
+    month,
   );
   return {
     ...row,
@@ -165,7 +426,8 @@ export function enrichRowAudit(
       ...row.summary,
       vooDisp,
       maxConsec,
-      status,
+      status: evaluation.status,
+      statusReason: evaluation.statusReason,
     },
   };
 }
@@ -178,7 +440,14 @@ export function enrichGridAudit(
   const groups = grid.groups.map((g) => ({
     ...g,
     rows: g.rows.map((row) =>
-      enrichRowAudit(row, g.type, grid.year, grid.month, daysInMonth, violations),
+      enrichRowAudit(
+        row,
+        row.type === 'PAO' ? 'PAO' : 'APAO',
+        grid.year,
+        grid.month,
+        daysInMonth,
+        violations,
+      ),
     ),
   }));
   return { ...grid, groups };
@@ -192,16 +461,11 @@ function dateKeyFromAssignment(dateIso: string): string {
   return `${y}-${m}-${day}`;
 }
 
-export function computeCoveragePercents(
-  year: number,
-  month: number,
-  daysInMonth: number,
+function buildPaoCoverageByDay(
   assignments: ScheduleAssignmentRow[],
   paoIds: Set<string>,
-): { t6: number; t7: number; t8: number } {
-  if (daysInMonth === 0) return { t6: 0, t7: 0, t8: 0 };
+): { t6: Set<number>; t7: Set<number>; t8: Set<number> } {
   const covered = { t6: new Set<number>(), t7: new Set<number>(), t8: new Set<number>() };
-
   for (const a of assignments) {
     if (!paoIds.has(a.employeeId)) continue;
     const key = dateKeyFromAssignment(a.date);
@@ -212,6 +476,38 @@ export function computeCoveragePercents(
     if (code === 'T7') covered.t7.add(day);
     if (code === 'T8') covered.t8.add(day);
   }
+  return covered;
+}
+
+export function computeCoverageGapsByDay(
+  daysInMonth: number,
+  assignments: ScheduleAssignmentRow[],
+  paoIds: Set<string>,
+): Record<number, PaoCoverageShift[]> {
+  if (daysInMonth === 0) return {};
+  const covered = buildPaoCoverageByDay(assignments, paoIds);
+  const gaps: Record<number, PaoCoverageShift[]> = {};
+  for (let day = 1; day <= daysInMonth; day++) {
+    const missing: PaoCoverageShift[] = [];
+    if (!covered.t6.has(day)) missing.push('T6');
+    if (!covered.t7.has(day)) missing.push('T7');
+    if (!covered.t8.has(day)) missing.push('T8');
+    if (missing.length > 0) gaps[day] = missing;
+  }
+  return gaps;
+}
+
+export function computeCoveragePercents(
+  year: number,
+  month: number,
+  daysInMonth: number,
+  assignments: ScheduleAssignmentRow[],
+  paoIds: Set<string>,
+): { t6: number; t7: number; t8: number } {
+  void year;
+  void month;
+  if (daysInMonth === 0) return { t6: 0, t7: 0, t8: 0 };
+  const covered = buildPaoCoverageByDay(assignments, paoIds);
 
   const pct = (n: number) => Math.round((n / daysInMonth) * 100);
   return {
@@ -267,6 +563,11 @@ export function computeGridAuditTotals(
     assignments,
     paoIds,
   );
+  const coverageGapDays = computeCoverageGapsByDay(
+    grid.daysInMonth,
+    assignments,
+    paoIds,
+  );
 
   return {
     totalPaos,
@@ -283,9 +584,17 @@ export function computeGridAuditTotals(
     coverageT6: coverage.t6,
     coverageT7: coverage.t7,
     coverageT8: coverage.t8,
+    coverageGapDays,
   };
 }
 
 export function turnosTooltip(stats: EmployeeSummaryStats): string {
   return `T6: ${stats.t6} | T7: ${stats.t7} | T8: ${stats.t8}`;
+}
+
+export function statusDetailTooltip(stats: EmployeeSummaryStats): string {
+  if (!stats.statusReason) {
+    return stats.status;
+  }
+  return `Status: ${stats.status}\nMotivo: ${stats.statusReason}`;
 }

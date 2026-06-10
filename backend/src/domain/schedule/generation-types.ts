@@ -36,11 +36,18 @@ export interface GenerationInput {
   crossMonthHistory?: CrossMonthHistory;
   /** employeeId (domínio) → turnos bloqueados no mês */
   shiftRestrictions?: Map<number, Set<string>>;
+  /** employeeId (domínio) → turnos preferidos (alocação específica) */
+  preferredShifts?: Map<number, Set<string>>;
   /** Dias em que o funcionário não deve receber voo (não bloqueia turno). */
   noFlightDates?: Array<{ employeeUuid: string; date: string }>;
 }
 
 export interface ShiftRestrictionRow {
+  employeeUuid: string;
+  shiftCode: string;
+}
+
+export interface PreferredShiftRow {
   employeeUuid: string;
   shiftCode: string;
 }

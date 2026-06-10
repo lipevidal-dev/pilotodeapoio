@@ -1,0 +1,72 @@
+<div class="login-page" [class.login-page--transitioning]="showTransition()">
+  @if (!showTransition()) {
+  <div class="login-backdrop"></div>
+
+  <div class="login-shell">
+    <p-card styleClass="login-card gol-card-accent">
+      <div class="login-brand">
+        <img
+          class="login-logo"
+          src="assets/brand/logo-gol-placeholder.svg"
+          alt="GOL Linhas Aéreas"
+        />
+        <h1 class="login-title">Portal Escala PAO</h1>
+        <p class="login-subtitle">Acesso unificado — Administração e Colaboradores</p>
+      </div>
+
+      @if (errorMessage(); as msg) {
+        <p-message severity="error" [text]="msg" styleClass="login-error" />
+      }
+
+      <form class="login-form" (ngSubmit)="submit()">
+        <div class="field">
+          <label for="email">E-mail</label>
+          <input
+            pInputText
+            id="email"
+            type="email"
+            name="email"
+            [(ngModel)]="email"
+            autocomplete="username"
+            placeholder="seu.email@gol.com.br"
+            class="w-full"
+            required
+          />
+        </div>
+
+        <div class="field">
+          <label for="password">Senha</label>
+          <p-password
+            inputId="password"
+            name="password"
+            [(ngModel)]="password"
+            [feedback]="false"
+            [toggleMask]="true"
+            autocomplete="current-password"
+            placeholder="••••••••"
+            styleClass="w-full"
+            inputStyleClass="w-full"
+            required
+          />
+        </div>
+
+        <p-button
+          type="submit"
+          label="Entrar"
+          styleClass="btn-gol-primary login-submit w-full"
+          [loading]="loading()"
+          [disabled]="showTransition()"
+        />
+      </form>
+
+      <p class="login-footnote">
+        Ambiente local — admin: admin&#64;escala.local · colaborador: funcionario&#64;escala.local
+      </p>
+    </p-card>
+  </div>
+  }
+
+  @if (showTransition()) {
+    <app-login-transition (completed)="onTransitionComplete()" />
+  }
+</div>

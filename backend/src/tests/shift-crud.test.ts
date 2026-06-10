@@ -18,6 +18,7 @@ function mockShift(overrides: Partial<PrismaShift> = {}): PrismaShift {
     displayOrder: 1,
     mandatoryCoverage: true,
     requiresT8PairNd: false,
+    coverageType: "REQUIRED",
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     ...overrides,

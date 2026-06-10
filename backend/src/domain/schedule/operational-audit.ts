@@ -1,9 +1,12 @@
 import { addDays } from "../rules/dates.js";
 import {
   IDEAL_PAO_REST_COUNT,
-  MAX_PAO_REST_COUNT,
+  MAX_CONSECUTIVE_WORK_DAYS,
   MIN_PAO_REST_COUNT,
 } from "../rules/constants.js";
+
+/** Até 12 folgas = faixa aceitável no status; 13+ = ATENÇÃO. */
+const PAO_FOLGAS_OK_MAX = 12;
 import { classifyIssue } from "./violation-level.js";
 import type { ValidationIssue } from "./types.js";
 import type { EmployeeOperationalSummary } from "./operational-summary.js";
@@ -11,6 +14,11 @@ import type { GenerationWorkspace } from "./generation-workspace.js";
 import { normalizeOperationalLabel } from "./operational-labels.js";
 
 export type OperationalStatus = "OK" | "ATENÇÃO" | "CRÍTICO";
+
+export interface EmployeeOperationalEvaluation {
+  status: OperationalStatus;
+  statusReason: string | null;
+}
 
 const WORK_ALLOC_LABELS = new Set([
   "ND",
@@ -105,21 +113,61 @@ function violationsForEmployee(
   return violations.filter((v) => v.employee === employeeName);
 }
 
-export function computeEmployeeStatus(
+function formatRuleCode(ruleCode: string): string {
+  return ruleCode.trim().replace(/\s+/g, "_").toUpperCase();
+}
+
+/** Alertas de escala PAO que não devem afetar o status operacional do APAO. */
+const APAO_IGNORED_WARNING_TYPES = new Set([
+  "MONOFOLGA",
+  "FOLGAS_PEDIDAS",
+  "FOLGAS_PAO",
+  "SEM_FOLGA_SOCIAL",
+]);
+
+function isApaoIgnoredWarning(issue: ValidationIssue): boolean {
+  return APAO_IGNORED_WARNING_TYPES.has(formatRuleCode(issue.type));
+}
+
+function firstViolationByLevel(
+  violations: ValidationIssue[],
+  level: ReturnType<typeof classifyIssue>,
+): ValidationIssue | undefined {
+  return violations.find((v) => classifyIssue(v) === level);
+}
+
+/** Faixa operacional saudável PAO — status OK mesmo com 11–12 folgas. */
+function isPaoHealthyBand(stats: EmployeeOperationalSummary): boolean {
+  return (
+    stats.diasTrabalhados >= 18 &&
+    stats.diasTrabalhados <= 21 &&
+    stats.folgas >= 10 &&
+    stats.folgas <= 12 &&
+    stats.maxConsec < MAX_CONSECUTIVE_WORK_DAYS
+  );
+}
+
+export function evaluateEmployeeOperationalStatus(
   stats: EmployeeOperationalSummary,
   violations: ValidationIssue[],
   opts: { daysInMonth: number },
-): OperationalStatus {
+): EmployeeOperationalEvaluation {
   const empViolations = violationsForEmployee(violations, stats.name);
-  const hasCritical = empViolations.some((v) => classifyIssue(v) === "CRITICAL");
+  const criticalViolation = firstViolationByLevel(empViolations, "CRITICAL");
+  const warningViolation = firstViolationByLevel(empViolations, "WARNING");
+  const hasCritical = criticalViolation != null;
   const hasMonofolga = empViolations.some((v) => v.type === "MONOFOLGA");
-  const hasFolgasWarning = empViolations.some((v) => v.type === "FOLGAS PAO");
+  const hasFolgasWarning =
+    stats.folgas > PAO_FOLGAS_OK_MAX && empViolations.some((v) => v.type === "FOLGAS PAO");
+  const hasMaisDe6Dias = empViolations.some((v) => v.type === "MAIS DE 6 DIAS");
 
   if (stats.type === "PAO") {
-    if (stats.folgas < MIN_PAO_REST_COUNT || stats.folgas > MAX_PAO_REST_COUNT) {
-      return "CRÍTICO";
+    if (stats.folgas < MIN_PAO_REST_COUNT) {
+      return { status: "CRÍTICO", statusReason: `FOLGAS_PAO_BELOW_MIN (${stats.folgas})` };
     }
-    if (hasCritical) return "CRÍTICO";
+    if (hasCritical) {
+      return { status: "CRÍTICO", statusReason: formatRuleCode(criticalViolation!.type) };
+    }
     if (
       empViolations.some(
         (v) =>
@@ -128,29 +176,81 @@ export function computeEmployeeStatus(
           ) && classifyIssue(v) === "CRITICAL",
       )
     ) {
-      return "CRÍTICO";
+      const hit = empViolations.find(
+        (v) =>
+          ["ND FORA DE T8/T8", "TURNO EM DIA ND", "TRABALHO EM FÉRIAS", "TRABALHO EM DIA BLOQUEADO"].includes(
+            v.type,
+          ) && classifyIssue(v) === "CRITICAL",
+      )!;
+      return { status: "CRÍTICO", statusReason: formatRuleCode(hit.type) };
     }
-    if (
-      stats.folgasAjusteOperacional ||
-      hasMonofolga ||
-      hasFolgasWarning ||
-      !stats.folgaSocialOk ||
-      stats.disponivel >= Math.ceil(opts.daysInMonth * 0.35) ||
-      stats.turnos < Math.max(12, opts.daysInMonth - IDEAL_PAO_REST_COUNT - 6)
-    ) {
-      return "ATENÇÃO";
+    if (isPaoHealthyBand(stats)) {
+      return { status: "OK", statusReason: null };
     }
-    return "OK";
+    if (stats.folgas > PAO_FOLGAS_OK_MAX) {
+      return { status: "ATENÇÃO", statusReason: `FOLGAS_PAO_ABOVE_MAX (${stats.folgas})` };
+    }
+    if (hasMonofolga) return { status: "ATENÇÃO", statusReason: "MONOFOLGA" };
+    if (hasFolgasWarning) return { status: "ATENÇÃO", statusReason: "FOLGAS_PAO" };
+    if (!stats.folgaSocialOk) return { status: "ATENÇÃO", statusReason: "SEM_FOLGA_SOCIAL" };
+    if (stats.disponivel >= Math.ceil(opts.daysInMonth * 0.35)) {
+      return { status: "ATENÇÃO", statusReason: `VOO_DISP_HIGH (${stats.disponivel})` };
+    }
+    if (stats.turnos < Math.max(12, opts.daysInMonth - IDEAL_PAO_REST_COUNT - 6)) {
+      return { status: "ATENÇÃO", statusReason: `TURNOS_BELOW_MIN (${stats.turnos})` };
+    }
+    if (hasMaisDe6Dias || stats.maxConsec > MAX_CONSECUTIVE_WORK_DAYS) {
+      return { status: "ATENÇÃO", statusReason: `MAX_CONSECUTIVE_DAYS (${stats.maxConsec})` };
+    }
+    if (warningViolation) {
+      return { status: "ATENÇÃO", statusReason: formatRuleCode(warningViolation.type) };
+    }
+    return { status: "OK", statusReason: null };
   }
 
   if (stats.type === "APAO") {
-    if (hasCritical) return "CRÍTICO";
-    if (stats.disponivel > 0) return "CRÍTICO";
-    if (stats.maxConsec > 6 || hasMonofolga) return "ATENÇÃO";
-    return "OK";
+    const apaoWarnings = empViolations.filter(
+      (v) => !isApaoIgnoredWarning(v) && classifyIssue(v) === "WARNING",
+    );
+    const apaoWarningViolation = apaoWarnings[0];
+
+    if (hasCritical) {
+      return { status: "CRÍTICO", statusReason: formatRuleCode(criticalViolation!.type) };
+    }
+    if (stats.disponivel > 0) {
+      return { status: "CRÍTICO", statusReason: `VOO_DISP_APAO (${stats.disponivel})` };
+    }
+    if (stats.folgas >= 4 && stats.diasTrabalhados >= 24) {
+      return { status: "OK", statusReason: null };
+    }
+    if (stats.maxConsec > MAX_CONSECUTIVE_WORK_DAYS || hasMaisDe6Dias) {
+      return { status: "ATENÇÃO", statusReason: `MAX_CONSECUTIVE_DAYS (${stats.maxConsec})` };
+    }
+    if (apaoWarningViolation) {
+      return { status: "ATENÇÃO", statusReason: formatRuleCode(apaoWarningViolation.type) };
+    }
+    return { status: "OK", statusReason: null };
   }
 
-  if (hasCritical) return "CRÍTICO";
-  if (hasMonofolga || stats.folgasAjusteOperacional) return "ATENÇÃO";
-  return "OK";
+  if (hasCritical) {
+    return { status: "CRÍTICO", statusReason: formatRuleCode(criticalViolation!.type) };
+  }
+  if (hasMonofolga) {
+    return { status: "ATENÇÃO", statusReason: "MONOFOLGA" };
+  }
+  if (stats.folgas > PAO_FOLGAS_OK_MAX) {
+    return { status: "ATENÇÃO", statusReason: `FOLGAS_PAO_ABOVE_MAX (${stats.folgas})` };
+  }
+  if (warningViolation) {
+    return { status: "ATENÇÃO", statusReason: formatRuleCode(warningViolation.type) };
+  }
+  return { status: "OK", statusReason: null };
+}
+
+export function computeEmployeeStatus(
+  stats: EmployeeOperationalSummary,
+  violations: ValidationIssue[],
+  opts: { daysInMonth: number },
+): OperationalStatus {
+  return evaluateEmployeeOperationalStatus(stats, violations, opts).status;
 }

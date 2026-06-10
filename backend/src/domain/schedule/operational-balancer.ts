@@ -127,7 +127,9 @@ export class OperationalBalancer {
 
       let progress = false;
       progress = this.fixCritical(ws, actions) || progress;
-      progress = this.fixInsufficientFolgas(ws, summary, actions) || progress;
+      if (!ws.realV1ManualCommonFolga) {
+        progress = this.fixInsufficientFolgas(ws, summary, actions) || progress;
+      }
       progress = this.fixHighMaxConsec(ws, summary, actions, balanceWarnings) || progress;
       progress = this.fixExcessFlights(ws, summary, actions) || progress;
       progress = this.fixWorkdayDistribution(ws, summary, actions) || progress;
@@ -171,7 +173,7 @@ export class OperationalBalancer {
     const threshold = excessFlightThreshold(paos);
     if (ws.listCoverageGaps().length > 0) return true;
     for (const p of paos) {
-      if (p.folgas < MIN_PAO_REST_COUNT) return true;
+      if (!ws.realV1ManualCommonFolga && p.folgas < MIN_PAO_REST_COUNT) return true;
       if (p.maxConsec > MAX_CONSECUTIVE_WORK_DAYS) return true;
       if (p.voos > threshold) return true;
       if (ws.isFullMonthNoFlight(p.employeeUuid) && p.turnos < MIN_SHIFTS_FULL_NO_FLIGHT_MONTH) {
@@ -194,7 +196,7 @@ export class OperationalBalancer {
     if (critical.length > 0) return false;
 
     for (const p of paos) {
-      if (p.folgas < MIN_PAO_REST_COUNT) return false;
+      if (!ws.realV1ManualCommonFolga && p.folgas < MIN_PAO_REST_COUNT) return false;
       if (p.maxConsec > MAX_CONSECUTIVE_WORK_DAYS) return false;
       if (ws.isFullMonthNoFlight(p.employeeUuid) && p.turnos < MIN_SHIFTS_FULL_NO_FLIGHT_MONTH) {
         return false;
@@ -224,6 +226,7 @@ export class OperationalBalancer {
     summary: OperationalSummaryResult,
     actions: BalanceAction[],
   ): boolean {
+    if (ws.realV1ManualCommonFolga) return false;
     let progress = false;
     const paos = [...paoStats(summary)]
       .filter((p) => p.folgas < MIN_PAO_REST_COUNT || ws.countRest(p.employeeUuid) < MIN_PAO_REST_COUNT)
@@ -389,6 +392,7 @@ export class OperationalBalancer {
     summary: OperationalSummaryResult,
     actions: BalanceAction[],
   ): boolean {
+    if (ws.realV1ManualCommonFolga) return false;
     let progress = false;
     const overloaded = paoStats(summary)
       .filter((p) => p.turnos > HIGH_WORKDAY_THRESHOLD || p.diasTrabalhados > HIGH_WORKDAY_THRESHOLD + 2)
@@ -462,7 +466,7 @@ export class OperationalBalancer {
   ): void {
     const summary = buildOperationalSummary(ws, [...violations, ...warnings]);
     for (const emp of paoStats(summary)) {
-      if (emp.folgas < MIN_PAO_REST_COUNT) {
+      if (!ws.realV1ManualCommonFolga && emp.folgas < MIN_PAO_REST_COUNT) {
         const exists = warnings.some((w) => w.employee === emp.name && w.type === "FOLGAS PAO");
         if (!exists) {
           warnings.push({

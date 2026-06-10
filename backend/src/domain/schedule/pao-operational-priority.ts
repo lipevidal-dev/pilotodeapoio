@@ -2,7 +2,7 @@ import { MIN_SHIFTS_FULL_NO_FLIGHT_MONTH } from "../employee/restrictions.js";
 import { VACATION_TYPES } from "../rules/constants.js";
 import type { GenerationInputEmployee } from "./generation-types.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
-import { countOperationalShifts } from "./pao-operational-shifts.js";
+import { countAllocatedTurns } from "./real-schedule-turn-rateio.js";
 
 /** 0 = mês inteiro sem voo; 1 = férias no mês; 2 = demais PAOs. */
 export type PaoPriorityTier = 0 | 1 | 2;
@@ -35,7 +35,7 @@ export function isVacationDay(ws: GenerationWorkspace, uuid: string, day: string
 
 function tierSortKey(ws: GenerationWorkspace, uuid: string, tier: PaoPriorityTier): number {
   if (tier === 0) {
-    const deficit = MIN_SHIFTS_FULL_NO_FLIGHT_MONTH - countOperationalShifts(ws, uuid);
+    const deficit = MIN_SHIFTS_FULL_NO_FLIGHT_MONTH - countAllocatedTurns(ws, uuid);
     return deficit > 0 ? deficit : 0;
   }
   if (tier === 1) {

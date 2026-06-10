@@ -1,5 +1,6 @@
 import type { ShiftMap } from "../shift/types.js";
 import { buildShiftMap } from "../shift/default-shifts.js";
+import { listParallelShiftCodes } from "../shift/coverage-type.js";
 import { canWork } from "../rules/eligibility.js";
 import { consecutiveWorkCount } from "../rules/consecutive.js";
 import { has12hRest } from "../rules/time.js";
@@ -34,7 +35,7 @@ import {
   correctMonoFolgasPedidas,
   type MonoFolgaAuditResult,
 } from "./mono-folga-pedida.js";
-import { countOperationalShifts } from "./pao-operational-shifts.js";
+import { countAllocatedTurns } from "./real-schedule-turn-rateio.js";
 import { sortPaoByOperationalPriority } from "./pao-operational-priority.js";
 import {
   maxConsecutiveWorkDays,
@@ -69,6 +70,8 @@ export class GenerationWorkspace {
     shiftMap: ShiftMap;
     roleByEmployeeId: Map<number, string>;
     shiftRestrictions?: Map<number, Set<string>>;
+    preferredShifts?: Map<number, Set<string>>;
+    parallelShiftCodes?: Set<string>;
   };
 
   private coverageGapsCache: Array<{ date: string; shiftCode: string }> | null = null;
@@ -78,6 +81,15 @@ export class GenerationWorkspace {
   readonly noFlightWarnings: ValidationIssue[] = [];
   readonly monoFolgaWarnings: ValidationIssue[] = [];
   monoFolgaAudit: MonoFolgaAuditResult | null = null;
+
+  /**
+   * REAL_V1: folga comum (FOLGA) não é auto-alocada — apenas FS PAO e FA APAO.
+   * Demais motores permanecem com comportamento legado.
+   */
+  realV1ManualCommonFolga = false;
+
+  /** Motor dedicado APAO (Gerar escala APAO) — habilita FA + 6x1 sem afetar PAO REAL_V1. */
+  apaoMotorEnabled = false;
 
   constructor(readonly input: GenerationInput) {
     this.shiftMap =
@@ -110,6 +122,8 @@ export class GenerationWorkspace {
       shiftMap: this.shiftMap,
       roleByEmployeeId: this.roleByDomain,
       shiftRestrictions: input.shiftRestrictions,
+      preferredShifts: input.preferredShifts,
+      parallelShiftCodes: new Set(listParallelShiftCodes(input.shifts)),
     };
     for (const row of input.noFlightDates ?? []) {
       const set = this.noFlightByUuid.get(row.employeeUuid) ?? new Set<string>();
@@ -130,7 +144,7 @@ export class GenerationWorkspace {
   }
 
   countWorkDays(uuid: string): number {
-    return countOperationalShifts(this, uuid);
+    return countAllocatedTurns(this, uuid);
   }
 
   /** Turnos elegíveis para o PAO (exclui restrições permanentes como T8). */
@@ -155,7 +169,7 @@ export class GenerationWorkspace {
     );
 
     for (const c of prioritized) {
-      let count = countOperationalShifts(this, c.uuid);
+      let count = countAllocatedTurns(this, c.uuid);
       if (count >= MIN_SHIFTS_FULL_NO_FLIGHT_MONTH) continue;
 
       const shiftsForEmployee = this.allowedShiftsForEmployee(c.uuid, allowedShifts);
@@ -181,7 +195,7 @@ export class GenerationWorkspace {
         }
         for (const code of this.shiftOrderRespectingBlocks(c.uuid, day, shiftsForEmployee)) {
           if (this.tryAssignShift(c.uuid, day, code)) {
-            count = countOperationalShifts(this, c.uuid);
+            count = countAllocatedTurns(this, c.uuid);
             break;
           }
         }
@@ -334,6 +348,14 @@ export class GenerationWorkspace {
     return [...this.planned.entries()].some(
       ([k, sh]) =>
         k.endsWith(`|${day}`) && sh === code && this.roleByDomain.get(Number(k.split("|")[0])) === "PAO",
+    );
+  }
+
+  /** Turno paralelo já alocado no dia (ex.: T9 — não interfere em T6/T7/T8). */
+  hasParallelShiftOnDay(day: string, code: string): boolean {
+    const normalized = code.toUpperCase();
+    return [...this.planned.entries()].some(
+      ([k, sh]) => k.endsWith(`|${day}`) && sh.toUpperCase() === normalized,
     );
   }
 
@@ -605,6 +627,8 @@ export class GenerationWorkspace {
         }
       }
 
+      if (!this.allowsAutoFolgaSocial()) continue;
+
       if (this.hasFolgaSocialIncludingHistory(c.uuid)) continue;
 
       const weekends = this.days.filter((d) => weekday(d) === 6 && this.days.includes(addDays(d, 1)));
@@ -633,41 +657,118 @@ export class GenerationWorkspace {
     }
   }
 
-  /** Distribui folgas restantes de forma espaçada no mês. */
-  distributePaoFolgasSpread(): void {
-    for (const c of this.paoEmps) {
-      let safety = 0;
-      while (this.countRest(c.uuid) < IDEAL_PAO_REST_COUNT && safety++ < IDEAL_PAO_REST_COUNT + 8) {
-        const candidates = this.freeDaysForPao(c.uuid);
-        if (candidates.length === 0) break;
-        const picked = this.pickSpreadFolgaDay(c.uuid, candidates);
-        this.lockDay(c.uuid, picked, "FOLGA");
+  allowsCommonFolgaAutoAllocation(): boolean {
+    return !this.realV1ManualCommonFolga;
+  }
+
+  /** REAL_V1: motor aloca 1 par FS (sáb+dom) por PAO; FP no mesmo fim de semana promove para FS. */
+  allowsAutoFolgaSocial(): boolean {
+    return true;
+  }
+
+  /** REAL_V1: folgas agrupadas (APAO) e voos são manuais — motor só turnos (+ ND + FS). */
+  allowsAutoFolgaSocialAndApaoRest(): boolean {
+    return !this.realV1ManualCommonFolga;
+  }
+
+  /** Geração APAO dedicada ou fluxo legado completo. */
+  allowsAutoApaoRest(): boolean {
+    return this.apaoMotorEnabled || !this.realV1ManualCommonFolga;
+  }
+
+  private hasFolgaAgrupadaIncludingHistory(uuid: string): boolean {
+    if (this.allocations.some((a) => a.employeeUuid === uuid && a.label === "FOLGA AGRUPADA")) {
+      return true;
+    }
+    const did = this.uuidToDomain.get(uuid);
+    if (!did) return false;
+    for (const [key, label] of this.historyBlocked) {
+      if (key.startsWith(`${did}|`) && label === "FOLGA AGRUPADA") return true;
+    }
+    return false;
+  }
+
+  /** Outro APAO já possui FA neste dia — não alocar FA duplicada. */
+  private folgaAgrupadaTakenOnDate(day: string, exceptUuid?: string): boolean {
+    return this.allocations.some(
+      (a) =>
+        a.date === day &&
+        a.label === "FOLGA AGRUPADA" &&
+        (exceptUuid == null || a.employeeUuid !== exceptUuid),
+    );
+  }
+
+  /** FP sáb+dom promove para FA; reserva 1 par FA (sáb+dom ou dom+seg) por APAO. */
+  planApaoFolgaAgrupada(): void {
+    if (!this.allowsAutoApaoRest()) return;
+
+    for (const c of this.apaoEmps) {
+      for (const day of this.days) {
+        if (weekday(day) !== 6) continue;
+        const dom = addDays(day, 1);
+        if (!this.days.includes(dom)) continue;
+        const satFp = this.allocations.find(
+          (a) => a.employeeUuid === c.uuid && a.date === day && a.label === "FOLGA PEDIDA",
+        );
+        const domFp = this.allocations.find(
+          (a) => a.employeeUuid === c.uuid && a.date === dom && a.label === "FOLGA PEDIDA",
+        );
+        if (satFp && domFp) {
+          if (this.folgaAgrupadaTakenOnDate(day) || this.folgaAgrupadaTakenOnDate(dom)) {
+            continue;
+          }
+          satFp.label = "FOLGA AGRUPADA";
+          domFp.label = "FOLGA AGRUPADA";
+          const did = this.uuidToDomain.get(c.uuid)!;
+          this.blocked.set(assignmentKey(did, day), "FOLGA AGRUPADA");
+          this.blocked.set(assignmentKey(did, dom), "FOLGA AGRUPADA");
+        }
+      }
+
+      if (this.hasFolgaAgrupadaIncludingHistory(c.uuid)) continue;
+
+      const satWeekends = this.days.filter((d) => weekday(d) === 6 && this.days.includes(addDays(d, 1)));
+      for (const sat of [...satWeekends].reverse()) {
+        const dom = addDays(sat, 1);
+        const did = this.uuidToDomain.get(c.uuid)!;
+        if (this.folgaAgrupadaTakenOnDate(sat) || this.folgaAgrupadaTakenOnDate(dom)) {
+          continue;
+        }
+        if (this.blocked.has(assignmentKey(did, sat)) || this.blocked.has(assignmentKey(did, dom))) {
+          continue;
+        }
+        if (this.planned.has(assignmentKey(did, sat)) || this.planned.has(assignmentKey(did, dom))) {
+          continue;
+        }
+        this.lockDay(c.uuid, sat, "FOLGA AGRUPADA");
+        this.lockDay(c.uuid, dom, "FOLGA AGRUPADA");
+        break;
+      }
+
+      if (this.hasFolgaAgrupadaIncludingHistory(c.uuid)) continue;
+
+      const sundays = this.days.filter((d) => weekday(d) === 0 && this.days.includes(addDays(d, 1)));
+      for (const sun of [...sundays].reverse()) {
+        const mon = addDays(sun, 1);
+        const did = this.uuidToDomain.get(c.uuid)!;
+        if (this.folgaAgrupadaTakenOnDate(sun) || this.folgaAgrupadaTakenOnDate(mon)) {
+          continue;
+        }
+        if (this.blocked.has(assignmentKey(did, sun)) || this.blocked.has(assignmentKey(did, mon))) {
+          continue;
+        }
+        if (this.planned.has(assignmentKey(did, sun)) || this.planned.has(assignmentKey(did, mon))) {
+          continue;
+        }
+        this.lockDay(c.uuid, sun, "FOLGA AGRUPADA");
+        this.lockDay(c.uuid, mon, "FOLGA AGRUPADA");
+        break;
       }
     }
   }
 
-  /** Folgas somente em dias sem turno planejado (após cobertura). */
-  allocatePaoRestDaysAfterCoverage(): void {
-    for (const c of this.paoEmps) {
-      let safety = 0;
-      while (this.countRest(c.uuid) < IDEAL_PAO_REST_COUNT && safety++ < IDEAL_PAO_REST_COUNT + 5) {
-        const candidates = this.freeDaysForPao(c.uuid);
-        if (candidates.length === 0) break;
-        const picked = this.pickSpreadFolgaDay(c.uuid, candidates);
-        this.lockDay(c.uuid, picked, "FOLGA");
-      }
-
-      while (this.countRest(c.uuid) > MAX_PAO_REST_COUNT) {
-        const folga = this.allocations.filter((a) => a.employeeUuid === c.uuid && a.label === "FOLGA");
-        if (folga.length === 0) break;
-        const rem = folga[folga.length - 1];
-        const did = this.uuidToDomain.get(c.uuid)!;
-        this.blocked.delete(assignmentKey(did, rem.date));
-        this.allocations.splice(this.allocations.indexOf(rem), 1);
-        this.coverageGapsCache = null;
-      }
-    }
-
+  /** Promove pares sáb+dom de folga para FS quando aplicável. */
+  promotePaoWeekendPairsToFolgaSocial(): void {
     for (const c of this.paoEmps) {
       for (const day of this.days) {
         if (weekday(day) !== 6) continue;
@@ -689,6 +790,47 @@ export class GenerationWorkspace {
         }
       }
     }
+  }
+
+  /** Distribui folgas restantes de forma espaçada no mês. */
+  distributePaoFolgasSpread(): void {
+    if (!this.allowsCommonFolgaAutoAllocation()) return;
+    for (const c of this.paoEmps) {
+      let safety = 0;
+      while (this.countRest(c.uuid) < IDEAL_PAO_REST_COUNT && safety++ < IDEAL_PAO_REST_COUNT + 8) {
+        const candidates = this.freeDaysForPao(c.uuid);
+        if (candidates.length === 0) break;
+        const picked = this.pickSpreadFolgaDay(c.uuid, candidates);
+        this.lockDay(c.uuid, picked, "FOLGA");
+      }
+    }
+  }
+
+  /** Folgas somente em dias sem turno planejado (após cobertura). */
+  allocatePaoRestDaysAfterCoverage(): void {
+    if (this.allowsCommonFolgaAutoAllocation()) {
+      for (const c of this.paoEmps) {
+        let safety = 0;
+        while (this.countRest(c.uuid) < IDEAL_PAO_REST_COUNT && safety++ < IDEAL_PAO_REST_COUNT + 5) {
+          const candidates = this.freeDaysForPao(c.uuid);
+          if (candidates.length === 0) break;
+          const picked = this.pickSpreadFolgaDay(c.uuid, candidates);
+          this.lockDay(c.uuid, picked, "FOLGA");
+        }
+
+        while (this.countRest(c.uuid) > MAX_PAO_REST_COUNT) {
+          const folga = this.allocations.filter((a) => a.employeeUuid === c.uuid && a.label === "FOLGA");
+          if (folga.length === 0) break;
+          const rem = folga[folga.length - 1];
+          const did = this.uuidToDomain.get(c.uuid)!;
+          this.blocked.delete(assignmentKey(did, rem.date));
+          this.allocations.splice(this.allocations.indexOf(rem), 1);
+          this.coverageGapsCache = null;
+        }
+      }
+    }
+
+    this.promotePaoWeekendPairsToFolgaSocial();
   }
 
   /** Completa pares T8/T8 + ND sem remover cobertura existente. */
@@ -1228,32 +1370,35 @@ export class GenerationWorkspace {
         this.allocations.splice(this.allocations.indexOf(rem), 1);
       }
 
-      let safety = 0;
-      while (this.countRest(c.uuid) < IDEAL_PAO_REST_COUNT && safety++ < 30) {
-        const did = c.domainId;
-        const workDays = this.days.filter((d) => {
-          const code = this.planned.get(assignmentKey(did, d));
-          return code === "T6" || code === "T7";
-        });
-        let freed = false;
-        const spreadWorkDays = [...workDays].sort(
-          (a, b) => this.days.indexOf(b) - this.days.indexOf(a),
-        );
-        for (const d of spreadWorkDays) {
-          const code = this.planned.get(assignmentKey(did, d))!;
-          if (!this.canRemoveAssignment(c.uuid, d, code)) continue;
-          this.unassignShift(c.uuid, d);
-          this.lockDay(c.uuid, d, "FOLGA");
-          freed = true;
-          break;
+      if (this.allowsCommonFolgaAutoAllocation()) {
+        let safety = 0;
+        while (this.countRest(c.uuid) < IDEAL_PAO_REST_COUNT && safety++ < 30) {
+          const did = c.domainId;
+          const workDays = this.days.filter((d) => {
+            const code = this.planned.get(assignmentKey(did, d));
+            return code === "T6" || code === "T7";
+          });
+          let freed = false;
+          const spreadWorkDays = [...workDays].sort(
+            (a, b) => this.days.indexOf(b) - this.days.indexOf(a),
+          );
+          for (const d of spreadWorkDays) {
+            const code = this.planned.get(assignmentKey(did, d))!;
+            if (!this.canRemoveAssignment(c.uuid, d, code)) continue;
+            this.unassignShift(c.uuid, d);
+            this.lockDay(c.uuid, d, "FOLGA");
+            freed = true;
+            break;
+          }
+          if (!freed) break;
         }
-        if (!freed) break;
       }
     }
     this.coverageGapsCache = null;
   }
 
   ensureExactTenFolgasPerPao(): void {
+    if (!this.allowsCommonFolgaAutoAllocation()) return;
     for (const c of this.paoEmps) {
       let safety = 0;
       while (this.countRest(c.uuid) < IDEAL_PAO_REST_COUNT && safety++ < 40) {
@@ -1407,6 +1552,7 @@ export class GenerationWorkspace {
 
   /** Folga obrigatória APAO após 6 dias trabalhados (6x1). */
   allocateApaoRestDays(): void {
+    if (!this.allowsAutoApaoRest()) return;
     for (const c of this.apaoEmps) {
       let workStreak = this.consecutiveDaysBeforeMonth(c.uuid);
       for (const day of this.days) {
@@ -1446,7 +1592,12 @@ export class GenerationWorkspace {
     if (!this.isApaoDayEmpty(uuid, day)) return false;
     if (weekday(day) === 6) {
       const dom = addDays(day, 1);
-      if (this.days.includes(dom) && this.isApaoDayEmpty(uuid, dom)) {
+      if (
+        this.days.includes(dom) &&
+        this.isApaoDayEmpty(uuid, dom) &&
+        !this.folgaAgrupadaTakenOnDate(day) &&
+        !this.folgaAgrupadaTakenOnDate(dom)
+      ) {
         this.lockDay(uuid, day, "FOLGA AGRUPADA");
         this.lockDay(uuid, dom, "FOLGA AGRUPADA");
         return true;
@@ -1454,18 +1605,29 @@ export class GenerationWorkspace {
     }
     if (weekday(day) === 0) {
       const sat = addDays(day, -1);
-      if (this.days.includes(sat) && this.isApaoDayEmpty(uuid, sat)) {
+      if (
+        this.days.includes(sat) &&
+        this.isApaoDayEmpty(uuid, sat) &&
+        !this.folgaAgrupadaTakenOnDate(sat) &&
+        !this.folgaAgrupadaTakenOnDate(day)
+      ) {
         this.lockDay(uuid, sat, "FOLGA AGRUPADA");
         this.lockDay(uuid, day, "FOLGA AGRUPADA");
         return true;
       }
       const mon = addDays(day, 1);
-      if (this.days.includes(mon) && this.isApaoDayEmpty(uuid, mon)) {
+      if (
+        this.days.includes(mon) &&
+        this.isApaoDayEmpty(uuid, mon) &&
+        !this.folgaAgrupadaTakenOnDate(day) &&
+        !this.folgaAgrupadaTakenOnDate(mon)
+      ) {
         this.lockDay(uuid, day, "FOLGA AGRUPADA");
         this.lockDay(uuid, mon, "FOLGA AGRUPADA");
         return true;
       }
     }
+    if (!this.allowsCommonFolgaAutoAllocation()) return false;
     this.lockDay(uuid, day, "FOLGA");
     return true;
   }
@@ -1663,6 +1825,7 @@ export class GenerationWorkspace {
   }
 
   private tryAssignNextFolga(uuid: string): boolean {
+    if (!this.allowsCommonFolgaAutoAllocation()) return false;
     const empty = this.emptyDaysForPao(uuid);
     const picked = this.pickFolgaBlockDay(uuid, empty);
     if (picked && this.tryAssignFolgaOnDay(uuid, picked)) return true;
@@ -1682,12 +1845,14 @@ export class GenerationWorkspace {
       this.lockDay(uuid, dom, "FOLGA SOCIAL");
       return true;
     }
+    if (!this.allowsCommonFolgaAutoAllocation()) return false;
     this.lockDay(uuid, day, "FOLGA");
     return true;
   }
 
   /** Aloca folgas faltantes em dias disponíveis; não preenche disponível com turno. */
   fillUnclassifiedPaoDays(): void {
+    if (!this.allowsCommonFolgaAutoAllocation()) return;
     for (const c of this.paoEmps) {
       while (this.needsMoreFolgas(c.uuid) && this.canAddFolga(c.uuid)) {
         if (!this.tryAssignNextFolga(c.uuid)) break;
@@ -1726,17 +1891,21 @@ export class GenerationWorkspace {
         }
       }
 
-      for (const c of this.paoEmps) {
-        while (this.needsMoreFolgas(c.uuid) && this.canAddFolga(c.uuid)) {
-          if (!this.tryAssignNextFolga(c.uuid)) break;
-          progress = true;
+      if (this.allowsCommonFolgaAutoAllocation()) {
+        for (const c of this.paoEmps) {
+          while (this.needsMoreFolgas(c.uuid) && this.canAddFolga(c.uuid)) {
+            if (!this.tryAssignNextFolga(c.uuid)) break;
+            progress = true;
+          }
         }
       }
     }
 
-    for (const c of this.paoEmps) {
-      if (this.needsMoreFolgas(c.uuid) && this.canAddFolga(c.uuid)) {
-        this.tryAssignNextFolga(c.uuid);
+    if (this.allowsCommonFolgaAutoAllocation()) {
+      for (const c of this.paoEmps) {
+        if (this.needsMoreFolgas(c.uuid) && this.canAddFolga(c.uuid)) {
+          this.tryAssignNextFolga(c.uuid);
+        }
       }
     }
 
@@ -1755,7 +1924,8 @@ export class GenerationWorkspace {
           }
         }
         if (this.isApaoDayEmpty(c.uuid, day)) {
-          if (!this.tryAssignApaoFolga(c.uuid, day)) {
+          if (!this.allowsAutoApaoRest()) continue;
+          if (!this.tryAssignApaoFolga(c.uuid, day) && this.allowsCommonFolgaAutoAllocation()) {
             this.lockDay(c.uuid, day, "FOLGA");
           }
         }
@@ -1773,8 +1943,10 @@ export class GenerationWorkspace {
           const before = consecutiveWorkCount(did, day, this.mergedPlannedForContinuity());
           if (before >= 6) {
             this.unassignShift(c.uuid, day);
-            if (this.isApaoDayEmpty(c.uuid, day)) {
-              this.tryAssignApaoFolga(c.uuid, day) || this.lockDay(c.uuid, day, "FOLGA");
+            if (this.isApaoDayEmpty(c.uuid, day) && this.allowsAutoApaoRest()) {
+              if (!this.tryAssignApaoFolga(c.uuid, day) && this.allowsCommonFolgaAutoAllocation()) {
+                this.lockDay(c.uuid, day, "FOLGA");
+              }
             }
           }
         }
@@ -1918,6 +2090,7 @@ export class GenerationWorkspace {
 
   /** Insere folga usando estratégias do motor (bloco ou liberar turno). */
   tryBalanceInsertFolga(uuid: string): boolean {
+    if (!this.allowsCommonFolgaAutoAllocation()) return false;
     if (this.countRest(uuid) >= MIN_PAO_REST_COUNT) return false;
     const empty = this.emptyDaysForPao(uuid);
     const picked = this.pickFolgaBlockDay(uuid, empty);
@@ -1944,7 +2117,9 @@ export class GenerationWorkspace {
       return true;
     }
     if (this.tryRemoveShiftPreservingCoverage(uuid, middleDay)) {
-      if (this.canAddFolga(uuid)) this.lockDay(uuid, middleDay, "FOLGA");
+      if (this.canAddFolga(uuid) && this.allowsCommonFolgaAutoAllocation()) {
+        this.lockDay(uuid, middleDay, "FOLGA");
+      }
       return true;
     }
     return false;

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { apaoScheduleEngine } from "../domain/schedule/apao-schedule-engine.js";
+import { realScheduleEngine } from "../domain/schedule/real-schedule-engine.js";
 import { ScheduleGenerationEngine } from "../domain/schedule/schedule-generation-engine.js";
 import { generationToScheduleContext } from "../domain/schedule/generation-context.js";
 import { validateSchedule } from "../domain/rules/engine.js";
 import { buildOperationalSummary } from "../domain/schedule/operational-summary.js";
 import { addDays, iterDays } from "../domain/rules/dates.js";
-import { IDEAL_PAO_REST_COUNT, MAX_PAO_REST_COUNT } from "../domain/rules/constants.js";
 import { realisticGenerationInput } from "./realistic-fixtures.js";
 import type { GenerationInput } from "../domain/schedule/generation-types.js";
 import { GenerationWorkspace } from "../domain/schedule/generation-workspace.js";
@@ -194,9 +195,17 @@ describe("APAO — regime 6x1", () => {
     "6. não existe alternância artificial dia sim/dia não",
     () => {
       const input = realisticGenerationInput();
-      const result = engine.generate(input);
+      const pao = realScheduleEngine.generate(input);
+      const ws = new GenerationWorkspace(input);
+      ws.applyHardBlocks();
+      ws.seedAssignments(pao.assignments);
+      for (const a of pao.allocations) {
+        ws.lockDay(a.employeeUuid, a.date, a.label);
+      }
+      apaoScheduleEngine.execute(ws);
+      const assignments = ws.toAssignments();
       const apaos = input.employees.filter((e) => e.employee.role === "APAO").map((e) => e.uuid);
-      const longest = longestRunSameApao(result.assignments, apaos);
+      const longest = longestRunSameApao(assignments, apaos);
       expect(longest).toBeGreaterThanOrEqual(3);
     },
     SLOW_MS,
@@ -315,23 +324,18 @@ describe("Resumo operacional", () => {
     expect(pao.ferias).toBeGreaterThanOrEqual(1);
   });
 
-  it("10. PAO mantém exatamente 10 folgas", () => {
+  it("10. REAL_V1 gera FS automática sem folga comum", () => {
     const input = realisticGenerationInput();
     const result = engine.generate(input);
-    const restLabels = new Set([
-      "FOLGA",
-      "FOLGA SOCIAL",
-      "FOLGA PEDIDA",
-      "FOLGA ESCOLHIDA",
-      "FOLGA AGRUPADA",
-      "FOLGA ANIVERSÁRIO",
-    ]);
     for (const e of input.employees.filter((x) => x.employee.role === "PAO")) {
-      const n = result.allocations.filter(
-        (a) => a.employeeUuid === e.uuid && restLabels.has(a.label.toUpperCase()),
+      const common = result.allocations.filter(
+        (a) => a.employeeUuid === e.uuid && a.label === "FOLGA",
       ).length;
-      expect(n).toBeGreaterThanOrEqual(IDEAL_PAO_REST_COUNT);
-      expect(n).toBeLessThanOrEqual(MAX_PAO_REST_COUNT);
+      expect(common).toBe(0);
+      const fs = result.allocations.filter(
+        (a) => a.employeeUuid === e.uuid && a.label === "FOLGA SOCIAL",
+      ).length;
+      expect(fs).toBe(2);
     }
   });
 });

@@ -1,4 +1,3 @@
-import { MIN_SHIFTS_FULL_NO_FLIGHT_MONTH } from "../employee/restrictions.js";
 import { classifyPlanningGroup } from "./demand-planning-capacity.js";
 import type { IndividualTarget } from "./demand-planning-types.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
@@ -7,6 +6,11 @@ import {
   MONTHLY_WORKDAY_TARGET,
   type RequiredShiftsResult,
 } from "./real-schedule-types.js";
+import {
+  computeTurnRateio,
+  countAllocatedTurns,
+  type TurnRateioEntry,
+} from "./real-schedule-turn-rateio.js";
 import { countWorkdayBreakdown } from "./real-schedule-workdays.js";
 import { vacationPatternWorkTarget } from "./real-schedule-vacation-pattern.js";
 import { isVacationDay, vacationDaysForPao } from "./pao-operational-priority.js";
@@ -28,22 +32,30 @@ export function workTargetForGroup(
   return MONTHLY_WORKDAY_TARGET;
 }
 
-/** TURNOS_NECESSÁRIOS = meta − voos − cadastros úteis − T8 já alocado. */
+/** Alvo de turnos T6/T7 a materializar após rateio por turnos alocados. */
 export function calculateRequiredT6T7Shifts(
   ws: GenerationWorkspace,
   uuid: string,
 ): RequiredShiftsResult {
-  const emp = ws.paoEmps.find((p) => p.uuid === uuid)!;
-  const group = classifyPlanningGroup(ws, uuid);
-  const workTarget = workTargetForGroup(ws, uuid, group);
+  const rateio = computeTurnRateio(ws);
+  const entry = rateio.entries.find((e) => e.employeeUuid === uuid);
   const breakdown = countWorkdayBreakdown(ws, uuid);
-  const consumed =
-    breakdown.voos +
-    breakdown.cursos +
-    breakdown.simuladores +
-    breakdown.cma +
-    breakdown.outros +
-    breakdown.turnosT8;
+
+  if (!entry) {
+    const emp = ws.paoEmps.find((p) => p.uuid === uuid)!;
+    return {
+      employeeUuid: uuid,
+      name: emp.employee.name,
+      group: "NORMAL",
+      workTarget: MONTHLY_WORKDAY_TARGET,
+      turnTarget: 0,
+      usefulOperationalDays: 0,
+      allocatedTurns: countAllocatedTurns(ws, uuid),
+      turnDeviation: 0,
+      requiredT6T7: 0,
+      breakdown,
+    };
+  }
 
   const vacationDays = vacationDaysForPao(ws, uuid).length;
   const maxAdditionalT6T7 = Math.max(
@@ -52,27 +64,28 @@ export function calculateRequiredT6T7Shifts(
       MIN_MONTHLY_FOLGAS -
       vacationDays -
       breakdown.turnosT8 -
-      breakdown.voos -
-      breakdown.cursos -
-      breakdown.simuladores -
-      breakdown.cma -
-      breakdown.outros -
       breakdown.turnosT6 -
-      breakdown.turnosT7,
+      breakdown.turnosT7 -
+      entry.usefulOperationalDays,
   );
 
-  let requiredT6T7 = Math.min(workTarget - consumed, maxAdditionalT6T7);
+  let requiredT6T7 = Math.min(entry.requiredT6T7, maxAdditionalT6T7);
   let note: string | undefined;
-  if (workTarget - consumed < 0) {
-    note = `Meta flexível: déficit negativo (${requiredT6T7}) — usando 0 turnos T6/T7 adicionais.`;
+  if (entry.requiredT6T7 < 0) {
+    note = `Meta flexível: déficit negativo — usando 0 turnos T6/T7 adicionais.`;
     requiredT6T7 = 0;
   }
 
   return {
     employeeUuid: uuid,
-    name: emp.employee.name,
-    group,
-    workTarget,
+    name: entry.name,
+    group: entry.group,
+    workTarget: workTargetForGroup(ws, uuid, entry.group),
+    turnTarget: entry.turnTarget,
+    usefulOperationalDays: entry.usefulOperationalDays,
+    allocatedTurns: entry.allocatedTurns,
+    turnDeviation: entry.turnDeviation,
+    reasonForDeviation: entry.reasonForDeviation,
     requiredT6T7,
     breakdown,
     note,
@@ -82,66 +95,25 @@ export function calculateRequiredT6T7Shifts(
 export function computeRealMotorTargets(ws: GenerationWorkspace): {
   required: RequiredShiftsResult[];
   targets: IndividualTarget[];
+  turnRateio: TurnRateioEntry[];
+  turnosRateio: number;
+  metaTurnosNormal: number;
   warnings: ValidationIssue[];
 } {
-  const warnings: ValidationIssue[] = [];
-  const sorted = [...ws.paoEmps].sort(
-    (a, b) => a.employee.seniority - b.employee.seniority,
-  );
-  const required: RequiredShiftsResult[] = [];
-  const targets: IndividualTarget[] = [];
-
-  for (const emp of sorted) {
-    const rs = calculateRequiredT6T7Shifts(ws, emp.uuid);
-    required.push(rs);
-    if (rs.note) {
-      warnings.push({
-        severity: "MÉDIA",
-        level: "WARNING",
-        type: "META TURNOS",
-        date: "",
-        employee: rs.name,
-        detail: rs.note,
-      });
-    }
-    if (rs.group === "FULL_NO_FLIGHT" && rs.requiredT6T7 + rs.breakdown.turnosT6 + rs.breakdown.turnosT7 < MIN_SHIFTS_FULL_NO_FLIGHT_MONTH) {
-      const turnosMeta = rs.requiredT6T7 + rs.breakdown.turnosT6 + rs.breakdown.turnosT7;
-      if (turnosMeta < MIN_SHIFTS_FULL_NO_FLIGHT_MONTH) {
-        warnings.push({
-          severity: "MÉDIA",
-          level: "WARNING",
-          type: "RESTRIÇÃO VOO MÊS INTEIRO",
-          date: "",
-          employee: rs.name,
-          detail: `Motor real: meta ${turnosMeta}/${MIN_SHIFTS_FULL_NO_FLIGHT_MONTH} turnos para mês sem voo.`,
-        });
-      }
-    }
-    targets.push({
-      employeeUuid: emp.uuid,
-      name: emp.employee.name,
-      group: rs.group,
-      seniority: emp.employee.seniority,
-      target: rs.requiredT6T7,
-      capacity: rs.requiredT6T7,
-    });
-  }
+  const rateio = computeTurnRateio(ws);
+  const required = rateio.entries.map((entry) => {
+    const rs = calculateRequiredT6T7Shifts(ws, entry.employeeUuid);
+    return rs;
+  });
 
   return {
     required,
-    targets: targets.sort(
-      (a, b) =>
-        groupOrder(a.group) - groupOrder(b.group) ||
-        a.seniority - b.seniority,
-    ),
-    warnings,
+    targets: rateio.targets,
+    turnRateio: rateio.entries,
+    turnosRateio: rateio.turnosRateio,
+    metaTurnosNormal: rateio.metaTurnosNormal,
+    warnings: rateio.warnings,
   };
-}
-
-function groupOrder(group: IndividualTarget["group"]): number {
-  if (group === "FULL_NO_FLIGHT") return 0;
-  if (group === "VACATION") return 1;
-  return 2;
 }
 
 /** Dias disponíveis (fora de férias) para PAO com férias quinzenais. */

@@ -1,0 +1,64 @@
+<p-dialog
+  [visible]="dialogVisible()"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [closable]="true"
+  [closeOnEscape]="true"
+  [dismissableMask]="true"
+  [showHeader]="false"
+  [style]="{ width: '28rem' }"
+  styleClass="delete-dialog"
+  (onHide)="onDialogHide()"
+>
+  <div class="delete-card">
+    <header class="delete-header">
+      <div class="delete-header-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <path
+            d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+            fill="currentColor"
+          />
+        </svg>
+      </div>
+      <div class="delete-header-text">
+        <h2 class="delete-title">Confirmar exclusão</h2>
+        <p class="delete-subtitle">{{ subtitle() }}</p>
+      </div>
+      <button type="button" class="delete-close" aria-label="Fechar" (click)="cancel()">
+        <i class="pi pi-times"></i>
+      </button>
+    </header>
+
+    <div class="delete-body">
+      <p class="delete-message">
+        As alocações selecionadas serão removidas da escala. Esta ação não pode ser desfeita automaticamente.
+      </p>
+      <p class="delete-cells">{{ cellSummary() }}</p>
+      @if (hasProtectedCells()) {
+        <p class="delete-warning">
+          Alguns dias contêm FP, ND ou T8 — itens protegidos que podem exigir confirmação adicional.
+        </p>
+        <label class="delete-force">
+          <p-checkbox
+            [binary]="true"
+            [ngModel]="forceDelete()"
+            (ngModelChange)="forceDelete.set($event)"
+            inputId="delete-force-checkbox"
+          />
+          <span>Forçar exclusão de itens protegidos</span>
+        </label>
+      }
+    </div>
+
+    <footer class="delete-footer">
+      <p-button label="Cancelar" severity="secondary" [outlined]="true" (onClick)="cancel()" />
+      <p-button
+        label="Excluir"
+        icon="pi pi-trash"
+        severity="danger"
+        (onClick)="confirm()"
+      />
+    </footer>
+  </div>
+</p-dialog>

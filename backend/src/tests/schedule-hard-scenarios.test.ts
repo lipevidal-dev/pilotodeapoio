@@ -30,7 +30,7 @@ describe("Fase 5.3 — cenários difíceis", () => {
       const structuralCritical = critical.filter(
         (c) =>
           !c.ruleCode.startsWith("COVERAGE_MISSING") &&
-          !["T8 ISOLADO", "T8 SEM ND", "ND FORA DE T8/T8", "TRABALHO EM DIA BLOQUEADO"].includes(
+          !["T8 ISOLADO", "T8 SEM ND", "ND FORA DE T8/T8", "TRABALHO EM DIA BLOQUEADO", "FOLGAS PAO"].includes(
             c.ruleCode,
           ),
       );

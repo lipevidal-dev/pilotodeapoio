@@ -14,7 +14,7 @@ export async function createHttpServer() {
 
   await app.register(cors, {
     origin: origins,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });
 
   await registerRoutes(app);

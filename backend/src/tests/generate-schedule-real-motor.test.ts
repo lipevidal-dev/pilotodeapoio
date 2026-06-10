@@ -21,6 +21,7 @@ function mockRepos() {
       listRoles: async () => [],
       loadCrossMonthHistory: async () => ({}),
       listShiftRestrictionsForMonth: async () => [],
+      listPreferredShiftsForMonth: async () => [],
       listNoFlightDatesForMonth: async () => [],
       upsertGeneratedMonth: async () => ({ id: "month-1" }),
       clearForRegeneration: async () => {},

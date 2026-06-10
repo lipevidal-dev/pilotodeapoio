@@ -2,7 +2,7 @@ import { Component, input } from '@angular/core';
 import { TooltipModule } from 'primeng/tooltip';
 
 import type { EmployeeSummaryStats } from '../../models/schedule-grid.models';
-import { turnosTooltip } from '../../utils/operational-audit.util';
+import { statusDetailTooltip, turnosTooltip } from '../../utils/operational-audit.util';
 
 export type SummaryField =
   | 'turnos'
@@ -29,6 +29,10 @@ export class EmployeeSummaryComponent {
 
   turnosDetail(): string {
     return turnosTooltip(this.summary());
+  }
+
+  statusDetail(): string {
+    return statusDetailTooltip(this.summary());
   }
 
   displayValue(): string | number {

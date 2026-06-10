@@ -2,6 +2,8 @@ import type { ScheduleContext, ValidationIssue } from "../schedule/types.js";
 import type { Rule } from "./base-rule.js";
 import {
   Apao6x1Rule,
+  ApaoAvailabilityRule,
+  ApaoFolgaAgrupadaOverlapRule,
   ApaoRequiresPaoRule,
   BlockedDayWorkRule,
   ConsecutiveDaysRule,
@@ -25,6 +27,8 @@ const DEFAULT_RULES: Rule[] = [
   new Rest12hRule(),
   new SimultaneousStationsRule(),
   new ApaoRequiresPaoRule(),
+  new ApaoAvailabilityRule(),
+  new ApaoFolgaAgrupadaOverlapRule(),
   new T8PairingRule(),
   new NdOnlyAfterT8BlockRule(),
   new ConsecutiveDaysRule(),

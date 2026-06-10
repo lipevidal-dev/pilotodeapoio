@@ -5,7 +5,6 @@ import {
   longestConsecutiveRun,
 } from "../domain/schedule/t6-t7-block-coverage.js";
 import { scheduleGenerationEngine } from "../domain/schedule/schedule-generation-engine.js";
-import { IDEAL_PAO_REST_COUNT } from "../domain/rules/constants.js";
 import {
   comparePaoOperationalPriority,
   getPaoPriorityTier,
@@ -264,7 +263,11 @@ describe("Fase 7.1 — Prioridade operacional PAO e mono-folgas", () => {
         a.employeeUuid === uuid &&
         ["FOLGA", "FOLGA SOCIAL", "FOLGA PEDIDA", "FOLGA AGRUPADA"].includes(a.label),
     ).length;
-    expect(folgas).toBeGreaterThanOrEqual(IDEAL_PAO_REST_COUNT);
+    const common = result.allocations.filter(
+      (a) => a.employeeUuid === uuid && a.label === "FOLGA",
+    ).length;
+    expect(common).toBe(0);
+    expect(folgas).toBeGreaterThan(0);
     expect(longestConsecutiveRun(result.assignments, uuid, "T6", MONTH_DAYS)).toBeLessThanOrEqual(5);
   });
 

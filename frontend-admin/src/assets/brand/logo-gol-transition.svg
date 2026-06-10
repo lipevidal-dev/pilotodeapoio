@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 72" width="220" height="72" role="img" aria-label="GOL Linhas Aéreas">
+  <g fill="#FF6600" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="52">
+    <text x="0" y="48">G</text>
+    <text x="148" y="48">L</text>
+  </g>
+  <g transform="translate(52 8)">
+    <circle cx="36" cy="28" r="22" fill="none" stroke="#FF6600" stroke-width="9"/>
+    <circle cx="52" cy="28" r="22" fill="none" stroke="#DADADA" stroke-width="9"/>
+  </g>
+  <text x="0" y="68" fill="#FF6600" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="500" letter-spacing="0.02em">Linhas aéreas inteligentes</text>
+</svg>

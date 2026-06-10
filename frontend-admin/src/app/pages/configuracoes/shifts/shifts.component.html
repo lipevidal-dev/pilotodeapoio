@@ -42,6 +42,7 @@
         <th>Cargo</th>
         <th>Status</th>
         <th>Cobertura</th>
+        <th>Tipo</th>
         <th>T8/T8/ND</th>
         <th>Ordem</th>
         <th class="actions-header">Ações</th>
@@ -66,6 +67,7 @@
           />
         </td>
         <td>{{ shift.mandatoryCoverage ? 'Sim' : 'Não' }}</td>
+        <td>{{ coverageTypeLabel(shift.coverageType) }}</td>
         <td>{{ shift.requiresT8PairNd ? 'Sim' : 'Não' }}</td>
         <td>{{ shift.displayOrder }}</td>
         <td class="actions-cell">
@@ -82,7 +84,7 @@
     </ng-template>
     <ng-template pTemplate="emptymessage">
       <tr>
-        <td colspan="10">Nenhum turno encontrado para o filtro selecionado.</td>
+        <td colspan="11">Nenhum turno encontrado para o filtro selecionado.</td>
       </tr>
     </ng-template>
   </p-table>
@@ -132,7 +134,17 @@
       <p-checkbox [(ngModel)]="formActive" [binary]="true" inputId="formShiftActive" />
       <label for="formShiftActive">Ativo</label>
     </div>
-    <div class="flex align-items-center gap-2">
+    <div>
+      <label class="field-label">Tipo de uso</label>
+      <p-select
+        [options]="coverageTypeOptions"
+        [(ngModel)]="formCoverageType"
+        optionLabel="label"
+        optionValue="value"
+        class="w-full"
+      />
+    </div>
+    <div class="flex align-items-center gap-2" *ngIf="formCoverageType === 'REQUIRED'">
       <p-checkbox [(ngModel)]="formMandatoryCoverage" [binary]="true" inputId="formMandatory" />
       <label for="formMandatory">Cobertura obrigatória</label>
     </div>

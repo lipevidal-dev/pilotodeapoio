@@ -89,6 +89,7 @@ describe("T8/T8/ND — persistência integrada", () => {
       displayOrder: i + 1,
       mandatoryCoverage: ["T6", "T7", "T8"].includes(s.code),
       requiresT8PairNd: s.code === "T8",
+      coverageType: "REQUIRED" as const,
       createdAt: new Date(),
       updatedAt: new Date(),
     }));
@@ -101,6 +102,7 @@ describe("T8/T8/ND — persistência integrada", () => {
         listRoles: async () => [],
         loadCrossMonthHistory: async () => ({ assignments: [], allocations: [] }),
         listShiftRestrictionsForMonth: async () => [],
+        listPreferredShiftsForMonth: async () => [],
         listNoFlightDatesForMonth: async () => [],
         upsertGeneratedMonth: async () => ({
           id: "month-nd-1",
@@ -202,6 +204,7 @@ describe("T8/T8/ND — persistência integrada", () => {
       displayOrder: i + 1,
       mandatoryCoverage: ["T6", "T7", "T8"].includes(s.code),
       requiresT8PairNd: s.code === "T8",
+      coverageType: "REQUIRED" as const,
       createdAt: new Date(),
       updatedAt: new Date(),
     }));
@@ -216,6 +219,7 @@ describe("T8/T8/ND — persistência integrada", () => {
         listShiftRestrictionsForMonth: async () => [
           { employeeUuid: uuid, shiftCode: "T8" },
         ],
+        listPreferredShiftsForMonth: async () => [],
         listNoFlightDatesForMonth: async () =>
           days.map((date) => ({ employeeUuid: uuid, date })),
         upsertGeneratedMonth: async () => ({ id: "month-2" }),

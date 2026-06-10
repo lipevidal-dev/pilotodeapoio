@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { Subscription, concatMap, from, last } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -20,6 +20,7 @@ import { ScheduleWorkspaceService } from '../../services/schedule-workspace.serv
 import { ScheduleExportService } from '../../services/schedule-export.service';
 import {
   ScheduleGridComponent,
+  type GridDeletionSelectionComplete,
   type GridMoveRequest,
   type GridSelectionComplete,
 } from '../../components/schedule-grid/schedule-grid.component';
@@ -28,8 +29,13 @@ import {
   type AllocationPopupContext,
   type ManualAllocationOption,
 } from '../../components/schedule-allocation-popup/schedule-allocation-popup.component';
+import {
+  ScheduleDeleteConfirmPopupComponent,
+  type DeletePopupContext,
+} from '../../components/schedule-delete-confirm-popup/schedule-delete-confirm-popup.component';
 import { ScheduleLegendComponent } from '../../components/schedule-legend/schedule-legend.component';
-import { isoDateFromGrid } from '../../utils/schedule-grid-selection.util';
+import { extractManualEditConflictMessage } from '../../utils/manual-edit-error.util';
+import { groupContiguousDays, isoDateFromGrid } from '../../utils/schedule-grid-selection.util';
 import { sortEmployeesBySeniority } from '../../utils/employee-sort.util';
 import { buildScheduleGrid } from '../../utils/schedule-cell.mapper';
 import { applyAuditPreviewToSchedule } from '../../utils/step-audit-grid.util';
@@ -85,6 +91,7 @@ const DEFAULT_STEP_OPTIONS = (): StepGenerationOptions => ({
     DialogModule,
     ScheduleGridComponent,
     ScheduleAllocationPopupComponent,
+    ScheduleDeleteConfirmPopupComponent,
     ScheduleLegendComponent,
   ],
   templateUrl: './schedule.component.html',
@@ -109,6 +116,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   readonly stepOptions = signal<StepGenerationOptions>(DEFAULT_STEP_OPTIONS());
   readonly stepAuditResult = signal<GenerateByStepsResponse | null>(null);
   readonly generatingFlights = signal(false);
+  readonly generatingApao = signal(false);
   readonly publishing = signal(false);
   readonly clearing = signal(false);
   readonly loadingView = signal(false);
@@ -118,11 +126,16 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   readonly manualEditing = signal(false);
   readonly allocationPopupVisible = signal(false);
   readonly allocationContext = signal<AllocationPopupContext | null>(null);
+  readonly deletePopupVisible = signal(false);
+  readonly deleteContext = signal<DeletePopupContext | null>(null);
   private pendingSelection: GridSelectionComplete | null = null;
+  private pendingDeleteSelection: GridDeletionSelectionComplete | null = null;
 
   readonly filterType = signal<'ALL' | EmployeeType>('ALL');
   readonly filterEmployeeId = signal<string | null>(null);
   readonly singleEmployeeOnly = signal(false);
+  /** IDs de painéis/subseções recolhidos pelo usuário após a geração. */
+  private readonly collapsedSections = signal<Set<string>>(new Set());
 
   readonly generation = computed(() => this.workspace.lastGeneration());
   readonly scheduleMonthId = computed(() => this.workspace.scheduleMonthId());
@@ -149,30 +162,30 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     return steps.apaoAllocate && !hasPaoCoverage;
   });
 
-  /** Violações da última geração ou persistidas no mês (após recarregar). */
+  /** Violações do mês (atualizadas após edição manual ou recarregar). */
   readonly violationList = computed((): ScheduleViolation[] => {
     const audit = this.stepAuditResult();
     if (audit?.report.violations?.length) {
       return audit.report.violations;
     }
+    const data = this.scheduleData();
+    if (data?.ruleViolations?.length) {
+      const nameById = new Map(data.employees.map((e) => [e.id, e.name]));
+      return data.ruleViolations.map((v) => ({
+        severity: v.severity,
+        ruleCode: v.ruleCode,
+        message: v.message,
+        date: v.date ?? '',
+        employee: v.employeeId ? (nameById.get(v.employeeId) ?? v.employeeId) : '—',
+        detail: v.message,
+        employeeId: v.employeeId,
+      }));
+    }
     const gen = this.generation();
     if (gen?.violations?.length) {
       return gen.violations;
     }
-    const data = this.scheduleData();
-    if (!data?.ruleViolations?.length) {
-      return [];
-    }
-    const nameById = new Map(data.employees.map((e) => [e.id, e.name]));
-    return data.ruleViolations.map((v) => ({
-      severity: v.severity,
-      ruleCode: v.ruleCode,
-      message: v.message,
-      date: v.date ?? '',
-      employee: v.employeeId ? (nameById.get(v.employeeId) ?? v.employeeId) : '—',
-      detail: v.message,
-      employeeId: v.employeeId,
-    }));
+    return [];
   });
 
   readonly criticalViolations = computed(() =>
@@ -335,6 +348,28 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     });
   }
 
+  generateApao(): void {
+    const id = this.scheduleMonthId() ?? this.scheduleData()?.scheduleMonth.id;
+    if (!id) return;
+    this.generatingApao.set(true);
+    this.scheduleService.generateApaoSchedule(id).subscribe({
+      next: (result) => {
+        this.generatingApao.set(false);
+        this.messages.add({
+          severity: 'success',
+          summary: 'Escala APAO',
+          detail: `${result.assignmentsCreated ?? 0} turno(s) APAO; ${result.allocationsCreated ?? 0} folga(s) geradas.`,
+        });
+        this.loadScheduleView();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.generatingApao.set(false);
+        const msg = err.error?.error ?? err.message ?? 'Erro ao gerar escala APAO';
+        this.messages.add({ severity: 'error', summary: 'Gerar Escala APAO', detail: msg });
+      },
+    });
+  }
+
   generateFlights(): void {
     const id = this.scheduleMonthId() ?? this.scheduleData()?.scheduleMonth.id;
     if (!id) return;
@@ -362,7 +397,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     if (!id) return;
     if (
       !window.confirm(
-        'Limpar todos os dados gerados automaticamente? Cadastros operacionais (férias, FP, voos, pré-alocações) serão mantidos.',
+        'Remover toda a geração deste mês (turnos, folgas sociais, folgas comuns, voos)? Férias e folgas pedidas (FP) não são alteradas.',
       )
     ) {
       return;
@@ -375,7 +410,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
         this.messages.add({
           severity: 'success',
           summary: 'Geração limpa',
-          detail: 'A escala voltou ao estado pré-geração.',
+          detail: 'Turnos, folgas e voos removidos. Mês voltou para rascunho.',
         });
         this.loadScheduleView();
       },
@@ -427,6 +462,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
       employeeName: selection.employeeName,
       startDay: selection.startDay,
       endDay: selection.endDay,
+      selectedDays: selection.days,
     });
     this.allocationPopupVisible.set(true);
   }
@@ -438,26 +474,99 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     this.scheduleGrid?.clearSelection();
   }
 
+  onDeletionSelectionCompleted(selection: GridDeletionSelectionComplete): void {
+    this.pendingDeleteSelection = selection;
+    this.deleteContext.set({
+      employeeName: selection.employeeName,
+      startDay: selection.startDay,
+      endDay: selection.endDay,
+      days: selection.days,
+      cells: selection.cells,
+    });
+    this.deletePopupVisible.set(true);
+  }
+
+  closeDeletePopup(): void {
+    this.deletePopupVisible.set(false);
+    this.deleteContext.set(null);
+    this.pendingDeleteSelection = null;
+    this.scheduleGrid?.clearSelection();
+  }
+
+  onDeleteConfirmed(opts: { force: boolean }): void {
+    const selection = this.pendingDeleteSelection;
+    const monthId = this.scheduleMonthId() ?? this.scheduleData()?.scheduleMonth.id;
+    if (!selection || !monthId) return;
+
+    const ranges = groupContiguousDays(selection.days);
+    const year = this.yearSig();
+    const month = this.monthSig();
+
+    this.manualEditing.set(true);
+    this.deletePopupVisible.set(false);
+
+    from(ranges)
+      .pipe(
+        concatMap((range) =>
+          this.scheduleService.manualEditRange(monthId, {
+            employeeId: selection.employeeId,
+            startDate: isoDateFromGrid(year, month, range.startDay),
+            endDate: isoDateFromGrid(year, month, range.endDay),
+            type: 'CLEAR',
+            mode: 'clear',
+            force: opts.force || undefined,
+          }),
+        ),
+        last(),
+      )
+      .subscribe({
+        next: (res) =>
+          this.handleManualEditSuccess(
+            res,
+            ranges.length > 1
+              ? `${ranges.length} períodos excluídos com sucesso.`
+              : 'Alocação excluída com sucesso.',
+          ),
+        error: (err: HttpErrorResponse) => this.handleManualEditError(err),
+      });
+  }
+
   onAllocationOption(option: ManualAllocationOption): void {
     const selection = this.pendingSelection;
     const monthId = this.scheduleMonthId() ?? this.scheduleData()?.scheduleMonth.id;
     if (!selection || !monthId) return;
 
-    const startDate = isoDateFromGrid(this.yearSig(), this.monthSig(), selection.startDay);
-    const endDate = isoDateFromGrid(this.yearSig(), this.monthSig(), selection.endDay);
+    const ranges = selection.days?.length
+      ? groupContiguousDays(selection.days)
+      : [{ startDay: selection.startDay, endDay: selection.endDay }];
+    const year = this.yearSig();
+    const month = this.monthSig();
+    const mode = option === 'CLEAR' ? 'clear' : 'set';
+
     this.manualEditing.set(true);
     this.allocationPopupVisible.set(false);
 
-    this.scheduleService
-      .manualEditRange(monthId, {
-        employeeId: selection.employeeId,
-        startDate,
-        endDate,
-        type: option,
-        mode: option === 'CLEAR' ? 'clear' : 'set',
-      })
+    from(ranges)
+      .pipe(
+        concatMap((range) =>
+          this.scheduleService.manualEditRange(monthId, {
+            employeeId: selection.employeeId,
+            startDate: isoDateFromGrid(year, month, range.startDay),
+            endDate: isoDateFromGrid(year, month, range.endDay),
+            type: option,
+            mode,
+          }),
+        ),
+        last(),
+      )
       .subscribe({
-        next: (res) => this.handleManualEditSuccess(res, 'Período atualizado com sucesso.'),
+        next: (res) =>
+          this.handleManualEditSuccess(
+            res,
+            ranges.length > 1
+              ? `${ranges.length} períodos atualizados com sucesso.`
+              : 'Período atualizado com sucesso.',
+          ),
         error: (err: HttpErrorResponse) => this.handleManualEditError(err),
       });
   }
@@ -488,7 +597,18 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     this.manualEditing.set(false);
     this.scheduleGrid?.clearSelection();
     this.pendingSelection = null;
+    this.pendingDeleteSelection = null;
     this.allocationContext.set(null);
+    this.deleteContext.set(null);
+    const ruleViolations = res.validation.violations.map((v, idx) => ({
+      id: `manual-${idx}`,
+      severity: v.severity,
+      ruleCode: v.ruleCode,
+      message: v.message,
+      date: v.date ?? null,
+      employeeId: res.employees.find((e) => e.name === v.employee)?.id ?? null,
+    }));
+    this.workspace.lastGeneration.set(null);
     this.scheduleData.set({
       scheduleMonth: res.scheduleMonth,
       employees: res.employees,
@@ -496,7 +616,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
       assignments: res.assignments,
       preAllocations: res.preAllocations,
       operationalCadastros: res.operationalCadastros,
-      ruleViolations: this.scheduleData()?.ruleViolations ?? [],
+      ruleViolations,
       validation: res.validation,
     });
     this.messages.add({ severity: 'success', summary: 'Escala', detail, life: 4000 });
@@ -504,13 +624,16 @@ export class ScheduleComponent implements OnInit, OnDestroy {
 
   private handleManualEditError(err: HttpErrorResponse): void {
     this.manualEditing.set(false);
-    const conflicts = err.error?.conflicts as Array<{ message: string }> | undefined;
-    const detail =
-      conflicts?.[0]?.message ??
-      err.error?.message ??
-      err.error?.error ??
-      'Não foi possível aplicar a alteração.';
+    const detail = extractManualEditConflictMessage(err);
+    const conflicts = (err.error as { conflicts?: Array<{ code?: string; message?: string }> } | null)
+      ?.conflicts;
+    if (conflicts?.length) {
+      console.warn('[manual-edit] conflitos:', conflicts);
+    }
     this.messages.add({ severity: 'error', summary: 'Conflito', detail, life: 6000 });
+    if (this.pendingDeleteSelection) {
+      this.deletePopupVisible.set(true);
+    }
   }
 
   loadScheduleView(): void {
@@ -611,6 +734,26 @@ export class ScheduleComponent implements OnInit, OnDestroy {
 
   violationEmployee(v: ScheduleViolation): string {
     return v.employee || v.employeeId || '—';
+  }
+
+  isSectionCollapsed(sectionId: string): boolean {
+    return this.collapsedSections().has(sectionId);
+  }
+
+  toggleSection(sectionId: string): void {
+    this.collapsedSections.update((current) => {
+      const next = new Set(current);
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
+      } else {
+        next.add(sectionId);
+      }
+      return next;
+    });
+  }
+
+  sectionChevron(sectionId: string): string {
+    return this.isSectionCollapsed(sectionId) ? 'pi pi-chevron-right' : 'pi pi-chevron-down';
   }
 
   statusTagSeverity(status: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {

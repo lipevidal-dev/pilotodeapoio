@@ -1,19 +1,58 @@
 <p-dialog
-  [visible]="visible()"
+  [visible]="dialogVisible()"
   [modal]="true"
   [draggable]="false"
   [resizable]="false"
-  [style]="{ width: '22rem' }"
-  [header]="title()"
-  (onHide)="onHide()"
+  [closable]="true"
+  [closeOnEscape]="true"
+  [dismissableMask]="true"
+  [showHeader]="false"
+  [style]="{ width: '26rem' }"
+  styleClass="allocation-dialog"
+  (onHide)="onDialogHide()"
 >
-  <p class="popup-lead">O que deseja alocar?</p>
-  <div class="option-grid">
-    @for (opt of options; track opt.key) {
-      <button type="button" class="alloc-btn" [class.alloc-btn--danger]="opt.key === 'CLEAR'" (click)="pick(opt.key)">
-        <i [class]="opt.icon"></i>
-        <span>{{ opt.label }}</span>
+  <div class="alloc-card">
+    <header class="alloc-header">
+      <div class="alloc-header-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <path
+            d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5L21 16z"
+            fill="currentColor"
+          />
+        </svg>
+      </div>
+      <div class="alloc-header-text">
+        <h2 class="alloc-title">Alocar no período</h2>
+        <p class="alloc-subtitle">{{ subtitle() }}</p>
+      </div>
+      <button type="button" class="alloc-close" aria-label="Fechar" (click)="cancel()">
+        <i class="pi pi-times"></i>
       </button>
-    }
+    </header>
+
+    <div class="alloc-body">
+      <label class="alloc-label" for="alloc-type-select">Tipo de alocação</label>
+      <p-select
+        inputId="alloc-type-select"
+        [options]="selectOptions()"
+        [ngModel]="selectedOption()"
+        (ngModelChange)="selectedOption.set($event)"
+        optionLabel="label"
+        optionValue="key"
+        placeholder="Selecione uma opção"
+        class="alloc-select w-full"
+        appendTo="body"
+      />
+    </div>
+
+    <footer class="alloc-footer">
+      <p-button label="Cancelar" severity="secondary" [outlined]="true" (onClick)="cancel()" />
+      <p-button
+        label="Aplicar"
+        icon="pi pi-check"
+        [disabled]="!selectedOption()"
+        (onClick)="apply()"
+      />
+    </footer>
   </div>
 </p-dialog>

@@ -154,6 +154,8 @@ export class EmployeesComponent implements OnInit {
 
   formRestrictedShiftIds: string[] = [];
 
+  formPreferredShiftIds: string[] = [];
+
   calendarViewYear = new Date().getFullYear();
 
   calendarViewMonth = new Date().getMonth() + 1;
@@ -388,6 +390,8 @@ export class EmployeesComponent implements OnInit {
 
     this.formRestrictedShiftIds = [];
 
+    this.formPreferredShiftIds = [];
+
     this.dialogVisible.set(true);
 
   }
@@ -414,6 +418,8 @@ export class EmployeesComponent implements OnInit {
 
     this.formRestrictedShiftIds = [];
 
+    this.formPreferredShiftIds = [];
+
     this.dialogVisible.set(true);
 
     this.loadingDetail.set(true);
@@ -425,6 +431,8 @@ export class EmployeesComponent implements OnInit {
         this.formNoFlightDates = (detail.noFlightDates ?? []).map((d) => new Date(`${d}T12:00:00`));
 
         this.formRestrictedShiftIds = [...(detail.restrictedShiftIds ?? [])];
+
+        this.formPreferredShiftIds = [...(detail.preferredShiftIds ?? [])];
 
         this.loadingDetail.set(false);
 
@@ -498,6 +506,16 @@ export class EmployeesComponent implements OnInit {
 
 
 
+  restrictedPreferredConflict(): boolean {
+
+    const restricted = new Set(this.formRestrictedShiftIds);
+
+    return this.formPreferredShiftIds.some((id) => restricted.has(id));
+
+  }
+
+
+
   selectedRoleCode(): string {
 
     return this.roles().find((r) => r.id === this.formRoleId)?.code ?? 'PAO';
@@ -554,6 +572,22 @@ export class EmployeesComponent implements OnInit {
 
     }
 
+    if (this.restrictedPreferredConflict()) {
+
+      this.messages.add({
+
+        severity: 'error',
+
+        summary: 'Validação',
+
+        detail: 'Um turno não pode estar em restrição e preferência ao mesmo tempo.',
+
+      });
+
+      return;
+
+    }
+
 
 
     this.saving.set(true);
@@ -563,6 +597,8 @@ export class EmployeesComponent implements OnInit {
     const noFlightDates = [...new Set(this.formNoFlightDates.map((d) => dateToIso(d)))].sort();
 
     const restrictedShiftIds = [...new Set(this.formRestrictedShiftIds)];
+
+    const preferredShiftIds = [...new Set(this.formPreferredShiftIds)];
 
 
 
@@ -583,6 +619,8 @@ export class EmployeesComponent implements OnInit {
         noFlightDates,
 
         restrictedShiftIds,
+
+        preferredShiftIds,
 
       };
 
@@ -617,6 +655,8 @@ export class EmployeesComponent implements OnInit {
         noFlightDates,
 
         restrictedShiftIds,
+
+        preferredShiftIds,
 
       })
 

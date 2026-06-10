@@ -116,6 +116,60 @@
   margin: 0.75rem 0 0.5rem;
 }
 
+.section-sub--toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.35rem 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+
+  &:hover {
+    opacity: 0.85;
+  }
+
+  .pi-chevron-down,
+  .pi-chevron-right {
+    font-size: 0.75rem;
+    color: var(--gol-gray-medium);
+    flex-shrink: 0;
+  }
+}
+
+.collapsible-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.85rem 1.25rem 0;
+  border: none;
+  background: transparent;
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--gol-gray-dark);
+  cursor: pointer;
+  text-align: left;
+
+  &:hover {
+    color: var(--gol-orange-dark);
+  }
+
+  .pi-chevron-down,
+  .pi-chevron-right {
+    font-size: 0.85rem;
+    color: var(--gol-gray-medium);
+  }
+}
+
+:host ::ng-deep .collapsible-card .p-card-header {
+  padding: 0;
+}
+
 .reason-list {
   margin: 0;
   padding-left: 1.25rem;

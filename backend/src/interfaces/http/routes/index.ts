@@ -46,6 +46,7 @@ import {
 } from "../controllers/operational-cadastro.controller.js";
 import {
   clearGeneratedScheduleController,
+  generateApaoScheduleController,
   generateFlightsController,
   generateScheduleByStepsController,
   generateScheduleController,
@@ -73,9 +74,13 @@ import {
   listRolesController,
   updateRoleController,
 } from "../controllers/role.controller.js";
+import { loginController, meController } from "../controllers/auth.controller.js";
 
 export async function registerRoutes(app: FastifyInstance) {
   app.get("/health", healthController);
+
+  app.post("/auth/login", loginController);
+  app.get("/auth/me", meController);
 
   app.get("/employees", listEmployeesController);
   app.get("/employees/:id", getEmployeeController);
@@ -150,6 +155,7 @@ export async function registerRoutes(app: FastifyInstance) {
   app.post("/schedules/generate", generateScheduleController);
   app.post("/schedules/generate-by-steps", generateScheduleByStepsController);
   app.post("/schedules/:id/generate-flights", generateFlightsController);
+  app.post("/schedules/:id/generate-apao", generateApaoScheduleController);
   app.get("/schedules/published/:year/:month", getPublishedScheduleController);
   app.post("/schedules/:id/publish", publishScheduleController);
   app.delete("/schedules/:id/generated-data", clearGeneratedScheduleController);

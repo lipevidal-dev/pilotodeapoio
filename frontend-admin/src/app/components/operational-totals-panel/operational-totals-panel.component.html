@@ -17,5 +17,22 @@
     <span class="audit-coverage__chip" [class.audit-coverage__chip--ok]="totals().coverageT6 >= 100">T6 {{ totals().coverageT6 }}%</span>
     <span class="audit-coverage__chip" [class.audit-coverage__chip--ok]="totals().coverageT7 >= 100">T7 {{ totals().coverageT7 }}%</span>
     <span class="audit-coverage__chip" [class.audit-coverage__chip--ok]="totals().coverageT8 >= 100">T8 {{ totals().coverageT8 }}%</span>
+    @if (gapDayEntries().length > 0) {
+      <div class="audit-coverage__gaps">
+        @for (gap of gapDayEntries(); track gap.day) {
+          <span
+            class="audit-coverage__gap-day"
+            [title]="'Dia ' + (gap.day < 10 ? '0' + gap.day : gap.day) + ': falta ' + gap.shifts.join(', ')"
+          >
+            <img
+              class="audit-coverage__gap-icon"
+              src="assets/icons/coverage-attention.svg"
+              alt="Falta cobertura"
+            />
+            <span class="audit-coverage__gap-label">{{ gap.day < 10 ? '0' + gap.day : gap.day }}</span>
+          </span>
+        }
+      </div>
+    }
   </div>
 </div>

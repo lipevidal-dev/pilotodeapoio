@@ -1,0 +1,117 @@
+:host ::ng-deep .delete-dialog {
+  .p-dialog-content {
+    padding: 0 !important;
+    border-radius: var(--card-radius, 10px);
+    overflow: hidden;
+  }
+}
+
+.delete-card {
+  background: var(--gol-white, #fff);
+  border-radius: var(--card-radius, 10px);
+  box-shadow: var(--card-shadow, 0 4px 12px rgba(45, 45, 45, 0.08));
+}
+
+.delete-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.75rem;
+  border-bottom: 1px solid rgba(45, 45, 45, 0.08);
+  background: linear-gradient(180deg, #fff 0%, #fafafa 100%);
+}
+
+.delete-header-icon {
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+
+  svg {
+    width: 1.2rem;
+    height: 1.2rem;
+  }
+}
+
+.delete-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.delete-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--gol-gray-dark, #2d2d2d);
+}
+
+.delete-subtitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  color: rgba(45, 45, 45, 0.65);
+}
+
+.delete-close {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: rgba(45, 45, 45, 0.5);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+
+  &:hover {
+    background: rgba(45, 45, 45, 0.06);
+    color: var(--gol-gray-dark, #2d2d2d);
+  }
+}
+
+.delete-body {
+  padding: 1rem;
+}
+
+.delete-message {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--gol-gray-dark, #2d2d2d);
+  line-height: 1.45;
+}
+
+.delete-cells {
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  background: rgba(45, 45, 45, 0.04);
+  font-size: 0.78rem;
+  color: rgba(45, 45, 45, 0.8);
+  word-break: break-word;
+}
+
+.delete-warning {
+  margin: 0 0 0.65rem;
+  font-size: 0.78rem;
+  color: #b45309;
+  line-height: 1.4;
+}
+
+.delete-force {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--gol-gray-dark, #2d2d2d);
+  cursor: pointer;
+}
+
+.delete-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem 1rem;
+  border-top: 1px solid rgba(45, 45, 45, 0.08);
+}

@@ -1,12 +1,13 @@
 import { classifyPlanningGroup } from "./demand-planning-capacity.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import { buildOperationalSummary } from "./operational-summary.js";
-import { countOperationalShifts } from "./pao-operational-shifts.js";
 import { vacationDaysForPao } from "./pao-operational-priority.js";
+import { listParallelShiftCodes } from "../shift/coverage-type.js";
 import {
   calculateRequiredT6T7Shifts,
   workTargetForGroup,
 } from "./real-schedule-targets.js";
+import { computeTurnRateio } from "./real-schedule-turn-rateio.js";
 import { countMotorWorkDays, countWorkdayBreakdown } from "./real-schedule-workdays.js";
 import { MONTHLY_WORKDAY_TARGET, type EmployeeDiagnostic } from "./real-schedule-types.js";
 
@@ -20,17 +21,23 @@ function collectFailedAllocationReasons(
   name: string,
   target: number,
   actual: number,
+  turnTarget: number,
+  allocatedTurns: number,
   restrictedCodes: string[],
+  reasonForDeviation?: string,
 ): string[] {
   const reasons: string[] = [];
-  if (actual >= target) return reasons;
+  if (reasonForDeviation) reasons.push(reasonForDeviation);
 
-  const deficit = target - actual;
-  reasons.push(`Déficit de ${deficit} dia(s) trabalhado(s) (${actual}/${target}).`);
+  if (actual < target) {
+    reasons.push(`Déficit de ${target - actual} dia(s) trabalhado(s) (${actual}/${target}).`);
+  }
+
+  if (allocatedTurns < turnTarget) {
+    reasons.push(`Déficit de ${turnTarget - allocatedTurns} turno(s) (${allocatedTurns}/${turnTarget}).`);
+  }
 
   if (ws.isFullMonthNoFlight(uuid)) {
-    const turnos = countOperationalShifts(ws, uuid);
-    reasons.push(`PAO mês inteiro sem voo: ${turnos} turnos operacionais alocados.`);
     if (restrictedCodes.includes("T8")) {
       reasons.push("Restrição T8 ativa — somente T6/T7 elegíveis para completar meta.");
     }
@@ -58,7 +65,7 @@ function collectFailedAllocationReasons(
 
   const gaps = ws.listCoverageGaps().length;
   if (gaps > 0) {
-    reasons.push(`${gaps} furo(s) de cobertura T6/T7/T8 no mês limitam realocação.`);
+    reasons.push(`${gaps} furo(s) de cobertura T6/T7/T8 no mês — lacuna mantida para preservar equilíbrio.`);
   }
 
   for (const w of ws.noFlightWarnings) {
@@ -74,6 +81,8 @@ function collectFailedAllocationReasons(
 }
 
 export function buildEmployeeDiagnostics(ws: GenerationWorkspace): EmployeeDiagnostic[] {
+  const rateio = computeTurnRateio(ws);
+  const rateioByUuid = new Map(rateio.entries.map((e) => [e.employeeUuid, e]));
   const summaryByUuid = new Map(
     buildOperationalSummary(ws).byEmployee.map((e) => [e.employeeUuid, e]),
   );
@@ -85,6 +94,7 @@ export function buildEmployeeDiagnostics(ws: GenerationWorkspace): EmployeeDiagn
     const rs = calculateRequiredT6T7Shifts(ws, c.uuid);
     const actual = countMotorWorkDays(ws, c.uuid);
     const op = summaryByUuid.get(c.uuid);
+    const entry = rateioByUuid.get(c.uuid);
 
     const did = c.domainId;
     const restrictedCodes = [
@@ -92,15 +102,37 @@ export function buildEmployeeDiagnostics(ws: GenerationWorkspace): EmployeeDiagn
     ].sort();
     const restrictedShiftIds = shiftIdsForCodes(restrictedCodes);
 
-    const usefulOperationalDays =
-      breakdown.turnosT6 +
-      breakdown.turnosT7 +
-      breakdown.turnosT8 +
-      breakdown.voos +
-      breakdown.cursos +
-      breakdown.simuladores +
-      breakdown.cma +
-      breakdown.outros;
+    const preferredCodes = [
+      ...((ws.input.preferredShifts?.get(did) ?? new Set<string>()).values()),
+    ].sort();
+    const preferredShiftIds = shiftIdsForCodes(preferredCodes);
+    const parallelCodes = listParallelShiftCodes(ws.input.shifts);
+    const preferredParallelShiftCodes = preferredCodes.filter((code) =>
+      parallelCodes.includes(code),
+    );
+    const assignments = ws.toAssignments().filter((a) => a.employeeUuid === c.uuid);
+    const preferredShiftHitCount = assignments.filter((a) =>
+      preferredCodes.includes(a.shiftCode.toUpperCase()),
+    ).length;
+    const parallelShiftCount = assignments.filter((a) =>
+      parallelCodes.includes(a.shiftCode.toUpperCase()),
+    ).length;
+    let preferredShiftMissCount = 0;
+    for (const code of preferredParallelShiftCodes) {
+      if (!assignments.some((a) => a.shiftCode.toUpperCase() === code)) {
+        preferredShiftMissCount++;
+      }
+    }
+    const preferredShiftWarning =
+      preferredShiftMissCount > 0
+        ? `Preferência paralela não totalmente atendida: ${preferredParallelShiftCodes.join(", ")}.`
+        : undefined;
+
+    const turnTarget = entry?.turnTarget ?? rs.turnTarget;
+    const allocatedTurns = entry?.allocatedTurns ?? rs.allocatedTurns;
+    const usefulOperationalDays = entry?.usefulOperationalDays ?? rs.usefulOperationalDays;
+    const turnDeviation = entry?.turnDeviation ?? rs.turnDeviation;
+    const reasonForDeviation = entry?.reasonForDeviation ?? rs.reasonForDeviation;
 
     const failedAllocationReasons = collectFailedAllocationReasons(
       ws,
@@ -108,23 +140,39 @@ export function buildEmployeeDiagnostics(ws: GenerationWorkspace): EmployeeDiagn
       c.employee.name,
       target,
       actual,
+      turnTarget,
+      allocatedTurns,
       restrictedCodes,
+      reasonForDeviation,
     );
 
     return {
       employeeUuid: c.uuid,
       name: c.employee.name,
+      group,
+      turnTarget,
+      allocatedTurns,
+      usefulOperationalDays,
+      flightCount: op?.voos ?? breakdown.voos,
+      totalWorkdays: actual,
+      turnDeviation,
+      reasonForDeviation,
       targetWorkdays: target,
       actualWorkdays: actual,
-      neededTurns: Math.max(0, MONTHLY_WORKDAY_TARGET - countOperationalShifts(ws, c.uuid)),
+      neededTurns: Math.max(0, MONTHLY_WORKDAY_TARGET - allocatedTurns),
       noFlightFullMonth: ws.isFullMonthNoFlight(c.uuid),
       restrictedShiftIds,
       restrictedShiftCodes: restrictedCodes,
+      preferredShiftIds,
+      preferredShiftCodes: preferredCodes,
+      preferredParallelShiftCodes,
+      parallelShiftCount,
+      preferredShiftHitCount,
+      preferredShiftMissCount,
+      preferredShiftWarning,
       t6Count: breakdown.turnosT6,
       t7Count: breakdown.turnosT7,
       t8Count: breakdown.turnosT8,
-      flightCount: op?.voos ?? breakdown.voos,
-      usefulOperationalDays,
       requiredT6T7: rs.requiredT6T7,
       failedAllocationReasons,
     };

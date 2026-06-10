@@ -196,7 +196,13 @@ describe("Publicação cenário-base", () => {
       }),
     };
     const readiness = evaluatePublishReadiness(publishCtx);
-    if (readiness.criticalViolations.some((c) => c.ruleCode === "DISPONÍVEL PARA VOO" || c.ruleCode === "DIA VAZIO")) {
+    const blocking = readiness.criticalViolations.filter(
+      (c) =>
+        c.ruleCode === "DISPONÍVEL PARA VOO" ||
+        c.ruleCode === "DIA VAZIO" ||
+        c.ruleCode === "FOLGAS PAO",
+    );
+    if (blocking.length > 0) {
       await expect(uc.execute("m-real")).rejects.toBeInstanceOf(
         PublishBlockedCriticalViolationsError,
       );

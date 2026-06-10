@@ -12,11 +12,17 @@ import {
   trimShiftsForMinimumFolgas,
 } from "./real-schedule-folgas.js";
 import { allocateFlightsForWorkdayDeficit } from "./real-schedule-flights.js";
+import { deduplicatePaoShiftCoverage } from "./pao-shift-dedup.js";
 import { coverResidualT6T7Only } from "./real-schedule-residual.js";
 import { computeRealMotorTargets } from "./real-schedule-targets.js";
 import { materializeT6T7BlocksStrict } from "./real-schedule-blocks.js";
 import { buildStructuralMetrics } from "./real-schedule-audit.js";
 import { buildEmployeeDiagnostics } from "./real-schedule-employee-diagnostics.js";
+import {
+  buildRealV1FolgaReport,
+  countAutoCommonFolgas,
+} from "./real-schedule-folga-metrics.js";
+import { allocateParallelShifts } from "./real-schedule-parallel.js";
 import { allocateT8BlocksStrict, closeT8CoverageGaps } from "./real-schedule-t8.js";
 import { materializeVacationFortnightPatterns } from "./real-schedule-vacation-materialize.js";
 import {
@@ -32,10 +38,14 @@ export class RealScheduleEngine {
   constructor(private readonly repairEngine = new ScheduleRepairEngine()) {}
 
   execute(ws: GenerationWorkspace): RealMotorReport {
+    ws.realV1ManualCommonFolga = true;
     const stepNotes: string[] = [];
     const warnings: RealMotorReport["warnings"] = [];
     const demand = calculateOperationalDemand(ws.days.length);
     stepNotes.push(`[1] Dados carregados: ${ws.paoEmps.length} PAO(s), demanda ${demand.totalDemand}.`);
+    stepNotes.push(
+      "[1b] REAL_V1: turnos + 1 folga social/PAO; folga comum, FA e voos ficam para edição manual.",
+    );
 
     ws.planFolgaSocial();
 
@@ -55,9 +65,18 @@ export class RealScheduleEngine {
       );
     }
 
-    const { required, targets, warnings: targetWarnings } = computeRealMotorTargets(ws);
+    const {
+      required,
+      targets,
+      turnRateio,
+      turnosRateio,
+      metaTurnosNormal,
+      warnings: targetWarnings,
+    } = computeRealMotorTargets(ws);
     warnings.push(...targetWarnings);
-    stepNotes.push(`[4] ${required.length} PAO(s) classificados; turnos T6/T7 necessários calculados.`);
+    stepNotes.push(
+      `[4] ${required.length} PAO(s) classificados; rateio turnos=${turnosRateio}, meta normal=${metaTurnosNormal.toFixed(1)}.`,
+    );
 
     const blocks = materializeT6T7BlocksStrict(ws, targets);
     stepNotes.push(
@@ -74,47 +93,72 @@ export class RealScheduleEngine {
       `[5b] Cobertura residual: blocos=${residual.blockCoverageApplied}; unitária=${residual.unitCoverageApplied}; gaps ${residual.gapsBefore}→${residual.gapsAfter}.`,
     );
 
-    const trimmed = trimShiftsForMinimumFolgas(ws);
-    if (trimmed > 0) {
-      const residual2 = coverResidualT6T7Only(ws);
-      totalResidualBlocks += residual2.blockCoverageApplied;
-      totalResidualUnits += residual2.unitCoverageApplied;
-      stepNotes.push(
-        `[5c] ${trimmed} turno(s) removido(s) para folgas; residual blocos=${residual2.blockCoverageApplied}, unitária=${residual2.unitCoverageApplied}.`,
-      );
+    if (!ws.realV1ManualCommonFolga) {
+      const trimmed = trimShiftsForMinimumFolgas(ws);
+      if (trimmed > 0) {
+        const residual2 = coverResidualT6T7Only(ws);
+        totalResidualBlocks += residual2.blockCoverageApplied;
+        totalResidualUnits += residual2.unitCoverageApplied;
+        stepNotes.push(
+          `[5c] ${trimmed} turno(s) removido(s) para folgas; residual blocos=${residual2.blockCoverageApplied}, unitária=${residual2.unitCoverageApplied}.`,
+        );
+      }
     }
 
     closeStructurePreservingGaps(ws, this.repairEngine, stepNotes, "[5d]", false);
 
     ws.allocatePaoRestDaysAfterCoverage();
     const mono = ws.correctMonoFolgasPedidas();
-    ws.ensureExactTenFolgasPerPao();
-    ws.fillUnclassifiedPaoDays();
+    if (!ws.realV1ManualCommonFolga) {
+      ws.ensureExactTenFolgasPerPao();
+      ws.fillUnclassifiedPaoDays();
+    }
     ws.finalizePaoFolgaCounts();
     ws.correctMonoFolgasPedidas();
+    const folgaReport = buildRealV1FolgaReport(ws);
     stepNotes.push(
-      `[6] Folgas: mínimo ${IDEAL_PAO_REST_COUNT}; mono-folgas ${mono.detected}/${mono.corrected}.`,
+      `[6] Folgas: FS=${folgaReport.socialFolgaGenerated}, FA=${folgaReport.groupedApaoFolgaGenerated}, vazios=${folgaReport.emptyDaysLeftForManualEditing}; mono-folgas ${mono.detected}/${mono.corrected}.`,
     );
 
-    const flightsCreated = allocateFlightsForWorkdayDeficit(ws);
-    stepNotes.push(`[7] Voos déficit: ${flightsCreated.length} alocado(s) para completar dias trabalhados.`);
+    const flightsCreated = ws.realV1ManualCommonFolga ? [] : allocateFlightsForWorkdayDeficit(ws);
+    if (flightsCreated.length > 0) {
+      stepNotes.push(`[7] Voos déficit: ${flightsCreated.length} alocado(s) para completar dias trabalhados.`);
+    } else if (ws.realV1ManualCommonFolga) {
+      stepNotes.push("[7] Voos não gerados — alocação manual na escala.");
+    }
 
     ws.ensureMinShiftsForFullMonthNoFlight(["T6", "T7", "T8"]);
     stepNotes.push("[7b] PAO mês sem voo: turnos T6/T7 priorizados para meta de 20 dias.");
 
-    ws.assignApaoWithPao();
-    ws.allocateApaoRestDays();
-    ws.completeApaoAgenda();
-    ws.enforceApaoSixByOne();
+    const parallel = allocateParallelShifts(ws);
+    stepNotes.push(
+      `[7c] Turnos paralelos: ${parallel.parallelShiftsAllocated} alocação(ões); ${Object.entries(parallel.byShift)
+        .map(([code, detail]) => `${code}=${detail.days}`)
+        .join(", ") || "nenhum"}.`,
+    );
 
-    closeStructurePreservingGaps(ws, this.repairEngine, stepNotes, "[8]", true);
+    if (ws.apaoMotorEnabled) {
+      ws.assignApaoWithPao();
+      ws.allocateApaoRestDays();
+      ws.completeApaoAgenda();
+      ws.enforceApaoSixByOne();
+      stepNotes.push("[8] APAO: turnos, FA e regime 6x1 aplicados pelo motor APAO.");
+    } else {
+      stepNotes.push(
+        "[8] APAO omitido — use o botão Gerar Escala APAO após concluir folgas PAO.",
+      );
+    }
+
+    closeStructurePreservingGaps(ws, this.repairEngine, stepNotes, "[8b]", true);
     ws.correctMonoFolgasPedidas();
 
-    ws.fillUnclassifiedPaoDays();
-    ws.ensureExactTenFolgasPerPao();
+    if (!ws.realV1ManualCommonFolga) {
+      ws.fillUnclassifiedPaoDays();
+      ws.ensureExactTenFolgasPerPao();
+      preferIdealFolgaCount(ws);
+      repairIsolatedRestDays(ws);
+    }
     ws.finalizePaoFolgaCounts();
-    preferIdealFolgaCount(ws);
-    repairIsolatedRestDays(ws);
     ws.correctMonoFolgasPedidas();
 
     const assignments = ws.toAssignments();
@@ -129,6 +173,18 @@ export class RealScheduleEngine {
       demand,
       requiredShifts: required,
       targets,
+      turnRateio: turnRateio.map((e) => ({
+        employeeUuid: e.employeeUuid,
+        name: e.name,
+        group: e.group,
+        turnTarget: e.turnTarget,
+        allocatedTurns: e.allocatedTurns,
+        usefulOperationalDays: e.usefulOperationalDays,
+        turnDeviation: e.turnDeviation,
+        reasonForDeviation: e.reasonForDeviation,
+      })),
+      turnosRateio,
+      metaTurnosNormal,
       t8BlocksPlaced: t8.blocksPlaced,
       t8CoverageGaps: t8.coverageGaps,
       t8IsolatedCount: structuralMetrics.isolatedT8Count,
@@ -141,6 +197,12 @@ export class RealScheduleEngine {
       residualUnitCoverage: totalResidualUnits,
       structuralMetrics,
       flightsForDeficit: flightsCreated.length,
+      commonFolgaAutoGenerated: false,
+      socialFolgaGenerated: folgaReport.socialFolgaGenerated,
+      groupedApaoFolgaGenerated: folgaReport.groupedApaoFolgaGenerated,
+      emptyDaysLeftForManualEditing: folgaReport.emptyDaysLeftForManualEditing,
+      parallelShiftsAllocated: parallel.parallelShiftsAllocated,
+      parallelShiftReport: parallel.byShift,
       stepNotes,
       warnings,
     };
@@ -192,13 +254,27 @@ export class RealScheduleEngine {
     motorReport.employeeDiagnostics = buildEmployeeDiagnostics(ws);
 
     ws.correctMonoFolgasPedidas();
-    const folgasTrimmed = preferIdealFolgaCount(ws);
-    const monoRestFixed = repairIsolatedRestDays(ws);
-    if (folgasTrimmed > 0 || monoRestFixed > 0) {
+    const dupesRemoved = deduplicatePaoShiftCoverage(ws);
+    if (dupesRemoved > 0) {
       motorReport.stepNotes.push(
-        `[11] Ajuste folgas: ${folgasTrimmed} acima do ideal; ${monoRestFixed} monofolga(s) reparada(s).`,
+        `[11b] Turnos PAO duplicados removidos: ${dupesRemoved} alocação(ões).`,
       );
+      closeStructurePreservingGaps(ws, this.repairEngine, motorReport.stepNotes, "[11c]", true);
     }
+    if (!ws.realV1ManualCommonFolga) {
+      const folgasTrimmed = preferIdealFolgaCount(ws);
+      const monoRestFixed = repairIsolatedRestDays(ws);
+      if (folgasTrimmed > 0 || monoRestFixed > 0) {
+        motorReport.stepNotes.push(
+          `[11] Ajuste folgas: ${folgasTrimmed} acima do ideal; ${monoRestFixed} monofolga(s) reparada(s).`,
+        );
+      }
+    }
+    const finalFolgaReport = buildRealV1FolgaReport(ws);
+    motorReport.socialFolgaGenerated = finalFolgaReport.socialFolgaGenerated;
+    motorReport.groupedApaoFolgaGenerated = finalFolgaReport.groupedApaoFolgaGenerated;
+    motorReport.emptyDaysLeftForManualEditing = finalFolgaReport.emptyDaysLeftForManualEditing;
+    motorReport.commonFolgaAutoGenerated = false;
     ws.correctMonoFolgasPedidas();
 
     for (const w of balanceReport.warnings) {
@@ -237,13 +313,19 @@ export class RealScheduleEngine {
         `${coverageGaps} furo(s) de cobertura — revise equipe, bloqueios e blocos T8/T8/ND.`,
       );
     }
-    for (const c of ws.paoEmps) {
-      const n = folgasPerPao[c.employee.name];
-      if (n < IDEAL_PAO_REST_COUNT) {
-        engineSuggestions.push(
-          `${c.employee.name}: ${n}/${IDEAL_PAO_REST_COUNT} folgas — revise carga do mês.`,
-        );
+    if (!ws.realV1ManualCommonFolga) {
+      for (const c of ws.paoEmps) {
+        const n = folgasPerPao[c.employee.name];
+        if (n < IDEAL_PAO_REST_COUNT) {
+          engineSuggestions.push(
+            `${c.employee.name}: ${n}/${IDEAL_PAO_REST_COUNT} folgas — revise carga do mês.`,
+          );
+        }
       }
+    } else if (countAutoCommonFolgas(ws) > 0) {
+      engineSuggestions.push(
+        "Folga comum detectada após geração — deve ser alocada manualmente na escala visual.",
+      );
     }
 
     const insights = buildGenerationInsights(

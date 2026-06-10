@@ -1,6 +1,15 @@
 @if (field(); as f) {
   @if (f === 'status') {
-    <span class="sum-status" [class]="statusClass()">{{ displayValue() }}</span>
+    <div
+      class="sum-status-wrap"
+      [pTooltip]="statusDetail()"
+      tooltipPosition="top"
+    >
+      <span class="sum-status" [class]="statusClass()">{{ displayValue() }}</span>
+      @if (summary().statusReason) {
+        <span class="sum-status-reason">{{ summary().statusReason }}</span>
+      }
+    </div>
   } @else if (f === 'turnos') {
     <span
       class="sum-cell sum-turnos"
@@ -21,6 +30,11 @@
     <span class="sum-item sum-ferias" title="Férias">{{ summary().ferias }}</span>
     <span class="sum-item sum-voodisp" title="Disponível para voo">{{ summary().vooDisp }}</span>
     <span class="sum-item sum-maxconsec" title="Máx. dias consecutivos">{{ summary().maxConsec }}</span>
-    <span class="sum-status" [class]="statusClass()">{{ summary().status }}</span>
+    <div class="sum-status-wrap" [pTooltip]="statusDetail()" tooltipPosition="top">
+      <span class="sum-status" [class]="statusClass()">{{ summary().status }}</span>
+      @if (summary().statusReason) {
+        <span class="sum-status-reason">{{ summary().statusReason }}</span>
+      }
+    </div>
   </div>
 }

@@ -1,4 +1,4 @@
-import type { EmployeeTypeAllowed } from "@prisma/client";
+import type { EmployeeTypeAllowed, ShiftCoverageType } from "@prisma/client";
 import { prisma } from "../database/prisma-client.js";
 
 export interface ShiftWriteData {
@@ -12,6 +12,7 @@ export interface ShiftWriteData {
   displayOrder?: number;
   mandatoryCoverage?: boolean;
   requiresT8PairNd?: boolean;
+  coverageType?: ShiftCoverageType;
 }
 
 export class ShiftRepository {

@@ -68,7 +68,7 @@ describe("EmployeeUseCase — restrições", () => {
       updatedAt: new Date(),
       role: rolePao,
       flightRestrictions: [{ date: new Date("2026-06-10"), employeeId: "emp-1", id: "f1", notes: null, createdAt: new Date(), updatedAt: new Date() }],
-      shiftRestrictions: [{ shiftId: "shift-t6", employeeId: "emp-1", id: "s1", createdAt: new Date(), updatedAt: new Date(), shift: { id: "shift-t6", code: "T6", name: "T6", startTime: "06:00", endTime: "12:00", durationHours: 6, employeeTypeAllowed: "PAO", active: true, displayOrder: 1, mandatoryCoverage: true, requiresT8PairNd: false, createdAt: new Date(), updatedAt: new Date() } }],
+      shiftRestrictions: [{ shiftId: "shift-t6", employeeId: "emp-1", id: "s1", createdAt: new Date(), updatedAt: new Date(), shift: { id: "shift-t6", code: "T6", name: "T6", startTime: "06:00", endTime: "12:00", durationHours: 6, employeeTypeAllowed: "PAO", active: true, displayOrder: 1, mandatoryCoverage: true, requiresT8PairNd: false, coverageType: "REQUIRED", createdAt: new Date(), updatedAt: new Date() } }],
     });
 
     await new EmployeeUseCase(empRepo, roleRepo).create({

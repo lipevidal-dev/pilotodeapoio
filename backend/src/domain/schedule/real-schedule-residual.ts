@@ -1,6 +1,6 @@
-import { sortPaoByOperationalPriority } from "./pao-operational-priority.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import { MIN_MONTHLY_FOLGAS } from "./real-schedule-types.js";
+import { computeTurnRateio, sortPaoForTurnBalance } from "./real-schedule-turn-rateio.js";
 import { wouldExceedT6T7BlockMax } from "./t6-t7-block-coverage.js";
 
 function shouldReserveDaysForFolgas(ws: GenerationWorkspace, uuid: string): boolean {
@@ -17,7 +17,8 @@ export interface ResidualT6T7Result {
   gapsAfter: number;
 }
 
-const BLOCK_TRY_SIZES = [5, 4, 3] as const;
+/** Prioridade de bloco: 4 → 5 → 3 (6 excede máximo operacional de 5). */
+const BLOCK_TRY_SIZES = [4, 5, 3] as const;
 
 function gapNeedsCode(ws: GenerationWorkspace, day: string, code: "T6" | "T7"): boolean {
   return !ws.hasPaoCoverage(day, code);
@@ -28,7 +29,7 @@ function tryPlaceResidualBlock(
   startDi: number,
   code: "T6" | "T7",
   size: number,
-  candidates: ReturnType<typeof sortPaoByOperationalPriority>,
+  candidates: ReturnType<typeof sortPaoForTurnBalance>,
 ): boolean {
   if (startDi + size > ws.days.length) return false;
 
@@ -67,8 +68,8 @@ function tryPlaceResidualBlock(
 }
 
 /**
- * Cobertura residual T6/T7 — tenta blocos 5→4→3 antes de alocação unitária.
- * T8 já foi alocado antes no motor real.
+ * Cobertura residual T6/T7 — blocos 4→5→3 antes de unitário.
+ * Respeita equilíbrio de turnos: não força PAO acima da meta; lacunas permanecem.
  */
 export function coverResidualT6T7Only(ws: GenerationWorkspace): ResidualT6T7Result {
   const gapsBefore = ws.listCoverageGaps().length;
@@ -84,7 +85,8 @@ export function coverResidualT6T7Only(ws: GenerationWorkspace): ResidualT6T7Resu
         continue;
       }
 
-      const candidates = sortPaoByOperationalPriority(ws, di);
+      const rateio = computeTurnRateio(ws);
+      const candidates = sortPaoForTurnBalance(ws, di, rateio.entries);
       let placed = false;
 
       for (const size of BLOCK_TRY_SIZES) {
@@ -98,27 +100,12 @@ export function coverResidualT6T7Only(ws: GenerationWorkspace): ResidualT6T7Resu
 
       if (placed) continue;
 
-      let unitPlaced = false;
       for (const c of candidates) {
         if (shouldReserveDaysForFolgas(ws, c.uuid)) continue;
         if (wouldExceedT6T7BlockMax(ws, c.uuid, day, code)) continue;
         if (ws.tryAssignShift(c.uuid, day, code)) {
           unitCoverageApplied++;
-          unitPlaced = true;
           break;
-        }
-      }
-
-      if (!unitPlaced) {
-        for (const c of candidates) {
-          if (shouldReserveDaysForFolgas(ws, c.uuid)) continue;
-          const maxWork = ws.maxWorkDaysForPao(c.uuid);
-          if (maxWork != null && ws.workCount(c.uuid) >= maxWork) continue;
-          if (ws.tryAssignShift(c.uuid, day, code, true)) {
-            unitCoverageApplied++;
-            unitPlaced = true;
-            break;
-          }
         }
       }
 

@@ -27,9 +27,13 @@ import {
 export interface CanWorkOptions {
   shiftMap: ShiftMap;
   shiftRestrictions?: Map<number, Set<string>>;
+  preferredShifts?: Map<number, Set<string>>;
+  parallelShiftCodes?: Set<string>;
   roleByEmployeeId: Map<number, string>;
   maxMonthlyWork?: number;
   coverageEmergency?: boolean;
+  /** Edição manual: operador pode alocar além do limite físico de 2 estações. */
+  skipSimultaneousStationsCheck?: boolean;
 }
 
 function monthlyWorkCount(employeeId: number, planned: PlannedMap): number {
@@ -55,9 +59,12 @@ export function canWork(
   const {
     shiftMap,
     shiftRestrictions,
+    preferredShifts,
+    parallelShiftCodes,
     roleByEmployeeId,
     maxMonthlyWork,
     coverageEmergency = false,
+    skipSimultaneousStationsCheck = false,
   } = options;
 
   const empId = employee.id;
@@ -68,8 +75,17 @@ export function canWork(
     if (["T1", "T2", "T3", "T4"].includes(shiftCode)) {
       return { ok: false, reason: `PAO não pode assumir turno de APAO (${shiftCode})` };
     }
-    if (!["T6", "T7", "T8"].includes(shiftCode)) {
-      return { ok: false, reason: `PAO só pode assumir T6, T7, T8 (proposto: ${shiftCode})` };
+    const normalizedCode = shiftCode.toUpperCase();
+    const isCoverageShift = ["T6", "T7", "T8"].includes(normalizedCode);
+    const isParallelShift = parallelShiftCodes?.has(normalizedCode) ?? false;
+    if (!isCoverageShift && !isParallelShift) {
+      return { ok: false, reason: `PAO só pode assumir T6, T7, T8 ou turno paralelo autorizado (proposto: ${shiftCode})` };
+    }
+    if (isParallelShift) {
+      const preferred = preferredShifts?.get(empId);
+      if (!preferred?.has(normalizedCode)) {
+        return { ok: false, reason: `turno ${shiftCode} requer preferência de alocação no cadastro` };
+      }
     }
   }
 
@@ -142,7 +158,10 @@ export function canWork(
     return { ok: false, reason: rest.reason };
   }
 
-  if (maxSimultaneousWorkersIfAdded(empId, workDay, shiftCode, planned, shiftMap, roleByEmployeeId) > 2) {
+  if (
+    !skipSimultaneousStationsCheck &&
+    maxSimultaneousWorkersIfAdded(empId, workDay, shiftCode, planned, shiftMap, roleByEmployeeId) > 2
+  ) {
     return { ok: false, reason: "limite físico de 2 estações simultâneas" };
   }
 

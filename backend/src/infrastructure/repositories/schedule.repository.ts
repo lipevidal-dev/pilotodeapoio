@@ -11,6 +11,7 @@ import {
   CLEAR_GENERATED_LABELS,
   REGENERATION_CLEAR_LABELS,
 } from "../../domain/schedule/operational-labels.js";
+import { iterDays } from "../../domain/rules/dates.js";
 import { isoDateKey, toDbDate } from "../../domain/rules/date-keys.js";
 import { prisma } from "../database/prisma-client.js";
 export class ScheduleRepository {
@@ -79,26 +80,50 @@ export class ScheduleRepository {
     });
   }
 
-  async clearGeneratedData(scheduleMonthId: string) {
+  async clearApaoGeneratedData(scheduleMonthId: string, apaoEmployeeIds: string[]) {
+    if (apaoEmployeeIds.length === 0) return;
     await prisma.scheduleAssignment.deleteMany({
-      where: { scheduleMonthId, source: "GENERATOR" },
-    });
-    await prisma.scheduleAssignment.deleteMany({
-      where: {
-        scheduleMonthId,
-        OR: [
-          { label: "VOO" },
-          { label: { contains: "VOO", mode: "insensitive" } },
-        ],
-      },
+      where: { scheduleMonthId, employeeId: { in: apaoEmployeeIds } },
     });
     await prisma.preAllocation.deleteMany({
       where: {
         scheduleMonthId,
-        label: { in: [...CLEAR_GENERATED_LABELS] },
+        employeeId: { in: apaoEmployeeIds },
+        label: { in: ["FOLGA AGRUPADA", "FOLGA"] },
       },
     });
+  }
+
+  async clearGeneratedData(scheduleMonthId: string) {
+    const month = await prisma.scheduleMonth.findUnique({ where: { id: scheduleMonthId } });
+    if (!month) {
+      throw new Error(`ScheduleMonth ${scheduleMonthId} não encontrado`);
+    }
+
+    const days = iterDays(month.year, month.month);
+    const start = toDbDate(days[0]!);
+    const end = toDbDate(days[days.length - 1]!);
+
+    await prisma.preAllocation.deleteMany({
+      where: {
+        scheduleMonthId,
+        OR: [
+          { label: { in: [...CLEAR_GENERATED_LABELS] } },
+          { label: { contains: "VOO", mode: "insensitive" } },
+          { notes: "escala-manual" },
+        ],
+      },
+    });
+
+    // Voos do mês (cadastro + escala) — férias e FP vêm de outras tabelas
+    await prisma.flightAssignment.deleteMany({
+      where: { date: { gte: start, lte: end } },
+    });
+
+    await prisma.scheduleAssignment.deleteMany({ where: { scheduleMonthId } });
+
     await prisma.ruleViolation.deleteMany({ where: { scheduleMonthId } });
+
     return prisma.scheduleMonth.update({
       where: { id: scheduleMonthId },
       data: { status: "DRAFT" },
@@ -167,6 +192,17 @@ export class ScheduleRepository {
   /** Restrições permanentes de turno por funcionário (cadastro Funcionários). */
   async listShiftRestrictionsForMonth(_year: number, _month: number): Promise<ShiftRestrictionRow[]> {
     const rows = await prisma.employeeShiftRestriction.findMany({
+      include: { shift: { select: { code: true } } },
+    });
+    return rows.map((r) => ({
+      employeeUuid: r.employeeId,
+      shiftCode: r.shift.code.toUpperCase(),
+    }));
+  }
+
+  /** Preferências permanentes de turno por funcionário (cadastro Funcionários). */
+  async listPreferredShiftsForMonth(_year: number, _month: number): Promise<import("../../domain/schedule/generation-types.js").PreferredShiftRow[]> {
+    const rows = await prisma.employeePreferredShift.findMany({
       include: { shift: { select: { code: true } } },
     });
     return rows.map((r) => ({

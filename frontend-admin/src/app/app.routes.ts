@@ -1,10 +1,61 @@
 import { Routes } from '@angular/router';
 import { AdminLayoutComponent } from './layout/admin-layout.component';
+import { EmployeeLayoutComponent } from './components/employee-layout/employee-layout.component';
+import { adminGuard, employeeGuard, guestGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
   {
+    path: 'login',
+    canActivate: [guestGuard],
+    loadComponent: () => import('./pages/login/login.component').then((m) => m.LoginComponent),
+  },
+  {
+    path: 'portal',
+    component: EmployeeLayoutComponent,
+    canActivate: [employeeGuard],
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'escala' },
+      {
+        path: 'escala',
+        loadComponent: () =>
+          import('./pages/portal/portal-schedule.component').then((m) => m.PortalScheduleComponent),
+      },
+      {
+        path: 'folga',
+        loadComponent: () =>
+          import('./pages/portal/portal-placeholder.component').then((m) => m.PortalPlaceholderComponent),
+        data: {
+          title: 'Solicitar Folga',
+          subtitle: 'Solicitação de folga pelo portal do colaborador',
+          message: 'Em breve você poderá solicitar folgas por aqui.',
+        },
+      },
+      {
+        path: 'perfil',
+        loadComponent: () =>
+          import('./pages/portal/portal-placeholder.component').then((m) => m.PortalPlaceholderComponent),
+        data: {
+          title: 'Meu Perfil',
+          subtitle: 'Dados pessoais e preferências',
+          message: 'Em breve você poderá consultar e atualizar seu perfil.',
+        },
+      },
+      {
+        path: 'notificacoes',
+        loadComponent: () =>
+          import('./pages/portal/portal-placeholder.component').then((m) => m.PortalPlaceholderComponent),
+        data: {
+          title: 'Notificações',
+          subtitle: 'Avisos e comunicados da operação',
+          message: 'Em breve você receberá notificações nesta área.',
+        },
+      },
+    ],
+  },
+  {
     path: '',
     component: AdminLayoutComponent,
+    canActivate: [adminGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
       {
@@ -115,5 +166,5 @@ export const routes: Routes = [
       },
     ],
   },
-  { path: '**', redirectTo: 'dashboard' },
+  { path: '**', redirectTo: 'login' },
 ];

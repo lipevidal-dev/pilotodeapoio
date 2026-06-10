@@ -1,0 +1,105 @@
+<h1 class="page-title">Minha Escala</h1>
+<p class="page-subtitle">Visualização da escala publicada — somente consulta</p>
+
+<p-card styleClass="grid-card gol-card-accent">
+  <ng-template pTemplate="header">
+    <div class="grid-card-header">
+      <span><i class="pi pi-table"></i> Escala operacional — {{ periodLabel() }}</span>
+      @if (scheduleData(); as sd) {
+        <p-tag [value]="sd.scheduleMonth.status" [severity]="statusTagSeverity(sd.scheduleMonth.status)" />
+      }
+    </div>
+  </ng-template>
+
+  <div class="grid-toolbar">
+    <div class="nav-group">
+      <p-button icon="pi pi-chevron-left" severity="secondary" (onClick)="prevMonth()" title="Mês anterior" />
+      <p-button label="Hoje" icon="pi pi-calendar" severity="secondary" (onClick)="goToday()" />
+      <p-button icon="pi pi-chevron-right" severity="secondary" (onClick)="nextMonth()" title="Próximo mês" />
+      <p-button
+        icon="pi pi-refresh"
+        severity="secondary"
+        [loading]="loadingView()"
+        (onClick)="loadPublishedSchedule()"
+        title="Recarregar"
+      />
+    </div>
+
+    <div class="filter-group">
+      <div class="field-group">
+        <label class="field-label">Ano</label>
+        <p-inputNumber
+          [ngModel]="yearSig()"
+          (ngModelChange)="yearSig.set($event); loadPublishedSchedule()"
+          [useGrouping]="false"
+          [min]="2020"
+          [max]="2100"
+        />
+      </div>
+      <div class="field-group">
+        <label class="field-label">Mês</label>
+        <p-inputNumber
+          [ngModel]="monthSig()"
+          (ngModelChange)="monthSig.set($event); loadPublishedSchedule()"
+          [useGrouping]="false"
+          [min]="1"
+          [max]="12"
+        />
+      </div>
+      <div class="field-group field-group--wide">
+        <label class="field-label">Funcionário</label>
+        <p-select
+          [options]="employeeOptions()"
+          [ngModel]="filterEmployeeId()"
+          (ngModelChange)="filterEmployeeId.set($event); onFiltersChange()"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Todos"
+          class="w-full"
+        />
+      </div>
+      <div class="field-group">
+        <label class="field-label">Cargo</label>
+        <p-select
+          [options]="typeOptions"
+          [ngModel]="filterType()"
+          (ngModelChange)="filterType.set($event)"
+          optionLabel="label"
+          optionValue="value"
+          class="w-full"
+        />
+      </div>
+      <div class="field-group field-group--check">
+        <p-checkbox
+          [ngModel]="singleEmployeeOnly()"
+          (ngModelChange)="singleEmployeeOnly.set($event); onFiltersChange()"
+          [binary]="true"
+          inputId="portalSingleEmp"
+        />
+        <label for="portalSingleEmp" class="check-label">Somente selecionado</label>
+      </div>
+    </div>
+  </div>
+
+  <app-schedule-legend />
+
+  @if (loadingView()) {
+    <span class="loading-text">Carregando escala publicada...</span>
+  } @else if (loadError()) {
+    <p-message severity="warn" [text]="loadError()!" />
+  } @else {
+    @if (displayGrid(); as grid) {
+      @if (!hasVisibleRows(grid)) {
+        <p-message severity="info" text="Nenhum dado para os filtros selecionados." />
+      } @else {
+        <app-schedule-grid
+          [grid]="grid"
+          [auditTotals]="gridAuditTotals()"
+          [editable]="false"
+        />
+      }
+    } @else {
+      <p-message severity="info" text="Selecione um período com escala publicada." />
+    }
+  }
+</p-card>

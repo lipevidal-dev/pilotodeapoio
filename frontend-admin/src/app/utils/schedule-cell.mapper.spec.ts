@@ -75,6 +75,35 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
     expect(grid.groups[0].rows[0].summary.nd).toBe(1);
   });
 
+  it('VOO gerado em preAllocations aparece na escala visual', () => {
+    const emp: Employee = {
+      id: 'pao-1',
+      name: 'PAO Test',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 6,
+      employees: [emp],
+      assignments: [],
+      preAllocations: [
+        {
+          id: 'voo-1',
+          employeeId: 'pao-1',
+          date: '2026-06-08T12:00:00.000Z',
+          label: 'VOO',
+        },
+      ],
+      operationalCadastros: [],
+    });
+    expect(grid.groups[0].rows[0].cells[7].display).toBe('VOO');
+    expect(grid.groups[0].rows[0].cells[7].kind).toBe('voo');
+  });
+
   it('ND em preAllocation tem prioridade sobre turno na mesma célula', () => {
     const cell = resolveScheduleCell(
       {
@@ -152,7 +181,7 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
     expect(summary.folgas).toBe(1);
   });
 
-  it('não exibe VOO fantasma de preAllocation quando operationalCadastros vazio', () => {
+  it('exibe VOO do motor em preAllocation na grade visual', () => {
     const emp: Employee = {
       id: 'pao-1',
       name: 'PAO Test',
@@ -169,7 +198,7 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
       assignments: [],
       preAllocations: [
         {
-          id: 'ghost',
+          id: 'motor-voo',
           employeeId: 'pao-1',
           date: '2026-06-05T12:00:00.000Z',
           label: 'VOO',
@@ -177,7 +206,8 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
       ],
       operationalCadastros: [],
     });
-    expect(grid.groups[0].rows[0].cells[4].kind).toBe('empty');
+    expect(grid.groups[0].rows[0].cells[4].kind).toBe('voo');
+    expect(grid.groups[0].rows[0].cells[4].display).toBe('VOO');
   });
 
   it('assignment com label VOO é ignorado sem operationalCadastro', () => {
@@ -271,7 +301,7 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
     expect(cell.kind).toBe('ferias');
   });
 
-  it('operationalCadastros exibe FÉRIAS no último dia inclusivo do período', () => {
+  it('operationalCadastros exibe FER no último dia inclusivo do período', () => {
     const emp: Employee = {
       id: 'pao-1',
       name: 'PAO Test',
@@ -297,10 +327,54 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
       operationalCadastros: vacationCadastros,
     });
     const cells = grid.groups[0].rows[0].cells;
-    expect(cells[0].display).toBe('FÉRIAS');
-    expect(cells[14].display).toBe('FÉRIAS');
+    expect(cells[0].display).toBe('FER');
+    expect(cells[14].display).toBe('FER');
     expect(cells[15].kind).toBe('empty');
     expect(grid.groups[0].rows[0].summary.ferias).toBe(15);
+  });
+
+  it('FP sábado+domingo usa fundo verde (folga social) mantendo sigla FP', () => {
+    const emp: Employee = {
+      id: 'pao-1',
+      name: 'Lucas Flavio',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 7,
+      employees: [emp],
+      assignments: [],
+      preAllocations: [],
+      operationalCadastros: [
+        {
+          id: 'fp-sat',
+          employeeId: 'pao-1',
+          date: '2026-07-11T12:00:00.000Z',
+          label: 'FOLGA PEDIDA',
+          source: 'requested_day_off',
+        },
+        {
+          id: 'fp-sun',
+          employeeId: 'pao-1',
+          date: '2026-07-12T12:00:00.000Z',
+          label: 'FOLGA PEDIDA',
+          source: 'requested_day_off',
+        },
+      ],
+    });
+    const cells = grid.groups[0].rows[0].cells;
+    expect(cells[10].display).toBe('FP');
+    expect(cells[10].kind).toBe('fp-weekend');
+    expect(cells[11].display).toBe('FP');
+    expect(cells[11].kind).toBe('fp-weekend');
+    expect(cellKindClass('fp-weekend')).toBe('cell-fp-weekend');
+    expect(grid.groups[0].rows[0].summary.fp).toBe(2);
+    expect(grid.groups[0].rows[0].summary.folgaSocial).toBe(2);
+    expect(grid.groups[0].rows[0].summary.folgaSocialOk).toBe(true);
   });
 
   it('operationalCadastros exibe FP sem gerar escala', () => {

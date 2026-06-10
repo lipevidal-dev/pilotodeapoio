@@ -131,7 +131,7 @@ describe("Motor estrutural — folgas PAO e FP", () => {
 
 describe("Motor estrutural — APAO e voos", () => {
   it(
-    "APAO sem dia vazio após geração",
+    "APAO pode ter dias vazios para folga comum manual",
     () => {
       const input = realisticGenerationInput({
         shifts: realisticGenerationInput().shifts.map((s) => ({
@@ -141,13 +141,19 @@ describe("Motor estrutural — APAO e voos", () => {
       });
       const result = engine.generate(input);
       const apaoUuids = input.employees.filter((e) => e.employee.role === "APAO").map((e) => e.uuid);
+      let emptyDays = 0;
       for (const uuid of apaoUuids) {
         for (const day of input.employees.length ? new GenerationWorkspace(input).days : []) {
           const hasAssign = result.assignments.some((a) => a.employeeUuid === uuid && a.date === day);
           const hasAlloc = result.allocations.some((a) => a.employeeUuid === uuid && a.date === day);
-          expect(hasAssign || hasAlloc, `APAO vazio ${uuid} em ${day}`).toBe(true);
+          if (!hasAssign && !hasAlloc) emptyDays++;
         }
+        const fa = result.allocations.filter(
+          (a) => a.employeeUuid === uuid && a.label === "FOLGA AGRUPADA",
+        ).length;
+        expect(fa).toBe(0);
       }
+      expect(emptyDays).toBeGreaterThan(0);
     },
     SLOW_MS,
   );

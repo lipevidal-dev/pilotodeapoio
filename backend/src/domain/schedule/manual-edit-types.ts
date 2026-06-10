@@ -2,6 +2,8 @@ export type ManualAllocationType =
   | "T6"
   | "T7"
   | "T8"
+  | "T9"
+  | "T8_BLOCK"
   | "ND"
   | "FOLGA"
   | "FP"
@@ -47,7 +49,7 @@ export interface ManualEditMovePayload {
   force?: boolean;
 }
 
-export const SHIFT_ALLOCATION_TYPES = new Set<ManualAllocationType>(["T6", "T7", "T8"]);
+export const SHIFT_ALLOCATION_TYPES = new Set<ManualAllocationType>(["T6", "T7", "T8", "T9"]);
 
 export const PREALLOC_ALLOCATION_TYPES = new Set<ManualAllocationType>([
   "ND",
@@ -75,6 +77,8 @@ export function manualTypeToPreallocLabel(type: ManualAllocationType): string | 
       return "CMA";
     case "OUTRO":
       return "OUTRO";
+    case "VOO":
+      return "VOO";
     default:
       return null;
   }

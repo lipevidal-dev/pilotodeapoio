@@ -31,6 +31,10 @@
     }
     <div class="sidebar-footer">
       <span class="sidebar-footer-label">Ambiente local</span>
+      <button type="button" class="logout-btn" (click)="logout()">
+        <i class="pi pi-sign-out"></i>
+        Sair
+      </button>
     </div>
   </aside>
 
@@ -42,6 +46,10 @@
           <span class="topbar-badge">Operações PAO</span>
         </div>
         <div class="topbar-end">
+          <span class="user-chip">
+            <i class="pi pi-user"></i>
+            {{ userName() }}
+          </span>
           <span class="api-hint">
             <i class="pi pi-server"></i>
             API localhost:3334

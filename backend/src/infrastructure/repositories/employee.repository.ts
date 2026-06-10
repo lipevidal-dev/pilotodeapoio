@@ -22,6 +22,10 @@ const employeeDetailInclude = {
     include: { shift: true },
     orderBy: { shift: { code: "asc" as const } },
   },
+  preferredShifts: {
+    include: { shift: true },
+    orderBy: { shift: { code: "asc" as const } },
+  },
 } as const;
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
@@ -51,8 +55,9 @@ export class EmployeeRepository {
     seniorityNumber?: number | null;
     noFlightDates?: string[];
     restrictedShiftIds?: string[];
+    preferredShiftIds?: string[];
   }) {
-    const { birthDate, seniorityNumber, type, noFlightDates, restrictedShiftIds, ...rest } = data;
+    const { birthDate, seniorityNumber, type, noFlightDates, restrictedShiftIds, preferredShiftIds, ...rest } = data;
 
     return prisma.$transaction(async (tx) => {
       const assigned = await this.assignSeniorityOnCreate(tx, type, seniorityNumber, async (position) =>
@@ -66,7 +71,7 @@ export class EmployeeRepository {
           include: employeeInclude,
         }),
       );
-      await this.syncRestrictions(tx, assigned.id, noFlightDates, restrictedShiftIds);
+      await this.syncRestrictions(tx, assigned.id, noFlightDates, restrictedShiftIds, preferredShiftIds);
       return tx.employee.findUniqueOrThrow({
         where: { id: assigned.id },
         include: employeeDetailInclude,
@@ -85,12 +90,13 @@ export class EmployeeRepository {
       seniorityNumber?: number | null;
       noFlightDates?: string[];
       restrictedShiftIds?: string[];
+      preferredShiftIds?: string[];
     },
   ) {
     const current = await prisma.employee.findUnique({ where: { id } });
     if (!current) throw new Error("NOT_FOUND");
 
-    const { birthDate, seniorityNumber, type, noFlightDates, restrictedShiftIds, ...rest } = data;
+    const { birthDate, seniorityNumber, type, noFlightDates, restrictedShiftIds, preferredShiftIds, ...rest } = data;
     const nextType = type ?? current.type;
 
     return prisma.$transaction(async (tx) => {
@@ -124,8 +130,8 @@ export class EmployeeRepository {
         await tx.employee.update({ where: { id }, data: patch });
       }
 
-      if (noFlightDates !== undefined || restrictedShiftIds !== undefined) {
-        await this.syncRestrictions(tx, id, noFlightDates, restrictedShiftIds);
+      if (noFlightDates !== undefined || restrictedShiftIds !== undefined || preferredShiftIds !== undefined) {
+        await this.syncRestrictions(tx, id, noFlightDates, restrictedShiftIds, preferredShiftIds);
       }
 
       return tx.employee.findUniqueOrThrow({ where: { id }, include: employeeDetailInclude });
@@ -193,6 +199,7 @@ export class EmployeeRepository {
     employeeId: string,
     noFlightDates?: string[],
     restrictedShiftIds?: string[],
+    preferredShiftIds?: string[],
   ): Promise<void> {
     if (noFlightDates !== undefined) {
       const dates = dedupeIsoDates(noFlightDates);
@@ -216,6 +223,22 @@ export class EmployeeRepository {
         const rows = shiftIds.filter((sid) => valid.has(sid)).map((shiftId) => ({ employeeId, shiftId }));
         if (rows.length > 0) {
           await tx.employeeShiftRestriction.createMany({ data: rows });
+        }
+      }
+    }
+
+    if (preferredShiftIds !== undefined) {
+      const shiftIds = dedupeIds(preferredShiftIds);
+      await tx.employeePreferredShift.deleteMany({ where: { employeeId } });
+      if (shiftIds.length > 0) {
+        const existing = await tx.shift.findMany({
+          where: { id: { in: shiftIds } },
+          select: { id: true },
+        });
+        const valid = new Set(existing.map((s) => s.id));
+        const rows = shiftIds.filter((sid) => valid.has(sid)).map((shiftId) => ({ employeeId, shiftId }));
+        if (rows.length > 0) {
+          await tx.employeePreferredShift.createMany({ data: rows });
         }
       }
     }

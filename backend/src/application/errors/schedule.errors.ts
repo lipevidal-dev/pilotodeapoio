@@ -52,7 +52,7 @@ export class PublishedScheduleCannotBeClearedError extends Error {
 export class ScheduleNotGeneratedError extends Error {
   readonly code = "SCHEDULE_NOT_GENERATED";
   constructor(status: string) {
-    super(`Somente escalas com status GENERATED podem ser limpas (atual: ${status}).`);
+    super(`Somente escalas DRAFT ou GENERATED podem ser limpas (atual: ${status}).`);
     this.name = "ScheduleNotGeneratedError";
   }
 }

@@ -1,6 +1,6 @@
 import { IDEAL_PAO_REST_COUNT, PAO_REST_TYPES } from "../rules/constants.js";
 import {
-  computeEmployeeStatus,
+  evaluateEmployeeOperationalStatus,
   coveragePercentages,
   workDatesFromWorkspace,
   maxConsecutiveWorkDays,
@@ -48,6 +48,7 @@ export interface EmployeeOperationalSummary {
   /** Maior sequência consecutiva de dias trabalhados */
   maxConsec: number;
   status: OperationalStatus;
+  statusReason: string | null;
 }
 
 export interface OperationalTotals {
@@ -201,6 +202,7 @@ function emptyStats(emp: { uuid: string; employee: { name: string; role: string 
     folgasAjusteOperacional: false,
     maxConsec: 0,
     status: "OK",
+    statusReason: null,
   };
 }
 
@@ -285,7 +287,9 @@ export function buildOperationalSummary(
     stats.folgaSocialOk = stats.folgaSocial >= 2;
     stats.folgasAjusteOperacional = stats.folgas === IDEAL_PAO_REST_COUNT + 1;
     stats.maxConsec = maxConsecutiveWorkDays(workDatesFromWorkspace(ws, stats.employeeUuid));
-    stats.status = computeEmployeeStatus(stats, violations, { daysInMonth });
+    const evaluation = evaluateEmployeeOperationalStatus(stats, violations, { daysInMonth });
+    stats.status = evaluation.status;
+    stats.statusReason = evaluation.statusReason;
 
     if (ws.paoEmps.some((p) => p.uuid === stats.employeeUuid)) {
       const buckets = exclusiveDayBuckets(ws, stats.employeeUuid);

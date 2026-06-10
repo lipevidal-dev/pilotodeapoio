@@ -1,0 +1,58 @@
+<div class="employee-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <img
+        class="brand-logo"
+        src="assets/brand/logo-gol-placeholder.svg"
+        alt="GOL | Portal do Colaborador"
+      />
+      <div class="brand-text">
+        <div class="brand-title">Portal do Colaborador</div>
+        <div class="brand-sub">Escala PAO — consulta</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      @for (item of navItems; track item.route) {
+        <a
+          class="nav-link"
+          [routerLink]="item.route"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: item.route === '/portal/escala' }"
+        >
+          <i [class]="item.icon"></i>
+          <span>{{ item.label }}</span>
+        </a>
+      }
+    </nav>
+
+    <div class="sidebar-footer">
+      <button type="button" class="logout-btn" (click)="logout()">
+        <i class="pi pi-sign-out"></i>
+        Sair
+      </button>
+    </div>
+  </aside>
+
+  <div class="main-column">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-start">
+          <span class="topbar-title">Área do Colaborador</span>
+          <span class="topbar-badge">Somente leitura</span>
+        </div>
+        <div class="topbar-end">
+          <span class="user-chip">
+            <i class="pi pi-user"></i>
+            {{ userName() }}
+          </span>
+        </div>
+      </div>
+    </header>
+    <main class="content">
+      <div class="content-inner">
+        <router-outlet />
+      </div>
+    </main>
+  </div>
+</div>

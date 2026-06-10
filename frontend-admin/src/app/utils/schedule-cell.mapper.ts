@@ -83,7 +83,7 @@ export function mapLabelToCell(label: string): ScheduleCellData {
 
   }
 
-  if (n.includes('FERIAS')) return { display: 'FÉRIAS', kind: 'ferias', title: label };
+  if (n.includes('FERIAS')) return { display: 'FER', kind: 'ferias', title: label };
 
   if (n.includes('VOO')) return { display: 'VOO', kind: 'voo', title: label };
 
@@ -156,6 +156,7 @@ const GENERATOR_PREALLOC_DISPLAY_LABELS = new Set([
   'FOLGA AGRUPADA',
   'FOLGA ANIVERSÁRIO',
   'FANI',
+  'VOO',
 ]);
 
 function isGeneratorPreallocDisplayLabel(label: string): boolean {
@@ -194,6 +195,7 @@ export function mapCellToCalendarDisplay(cell: ScheduleCellData): { display: str
     case 'ferias':
       return { display: 'FÉRIAS', title };
     case 'fp':
+    case 'fp-weekend':
       return { display: 'FP', title };
     case 'fani':
       return { display: 'FANI', title };
@@ -347,6 +349,16 @@ function countForSummary(cell: ScheduleCellData, stats: EmployeeSummaryStats): v
 
       break;
 
+    case 'fp-weekend':
+
+      stats.fp++;
+
+      stats.folgaSocial++;
+
+      stats.folgas++;
+
+      break;
+
     case 'empty':
 
       stats.disponivel++;
@@ -442,6 +454,7 @@ function emptySummary(): EmployeeSummaryStats {
     maxConsec: 0,
 
     status: 'OK',
+    statusReason: null,
 
     voos: 0,
 
@@ -483,6 +496,31 @@ function daysInMonth(year: number, month: number): number {
 
 
 
+function isFpCell(cell: ScheduleCellData): boolean {
+  return cell.kind === 'fp';
+}
+
+/** FP em sábado e domingo consecutivos equivale a folga social (fundo verde, sigla FP). */
+function applyWeekendFpAsFolgaSocial(cells: ScheduleCellData[], year: number, month: number): void {
+  for (let day = 1; day <= cells.length; day++) {
+    const satIdx = day - 1;
+    const satDate = new Date(year, month - 1, day);
+    if (satDate.getDay() !== 6 || day >= cells.length) continue;
+
+    const satCell = cells[satIdx];
+    const domCell = cells[satIdx + 1];
+    if (!isFpCell(satCell) || !isFpCell(domCell)) continue;
+
+    const weekendFp: ScheduleCellData = {
+      display: 'FP',
+      kind: 'fp-weekend',
+      title: 'Folga pedida (sáb+dom — folga social)',
+    };
+    cells[satIdx] = weekendFp;
+    cells[satIdx + 1] = { ...weekendFp };
+  }
+}
+
 function buildEmployeeRow(
   employee: Employee,
   year: number,
@@ -501,6 +539,11 @@ function buildEmployeeRow(
       operationalLabelMap.get(key) ?? [],
     );
     cells.push(cell);
+  }
+
+  applyWeekendFpAsFolgaSocial(cells, year, month);
+
+  for (const cell of cells) {
     countForSummary(cell, summary);
   }
 
