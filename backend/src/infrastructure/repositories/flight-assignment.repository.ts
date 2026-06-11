@@ -51,4 +51,23 @@ export class FlightAssignmentRepository {
   delete(id: string) {
     return prisma.flightAssignment.delete({ where: { id } });
   }
+
+  update(
+    id: string,
+    data: {
+      employeeId?: string;
+      date?: string;
+      description?: string | null;
+    },
+  ) {
+    return prisma.flightAssignment.update({
+      where: { id },
+      data: {
+        employeeId: data.employeeId,
+        date: data.date ? toDbDate(data.date) : undefined,
+        description: data.description,
+      },
+      include: { employee: true },
+    });
+  }
 }

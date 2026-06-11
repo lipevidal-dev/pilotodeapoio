@@ -37,4 +37,25 @@ export class VacationRepository {
   delete(id: string) {
     return prisma.vacation.delete({ where: { id } });
   }
+
+  update(
+    id: string,
+    data: {
+      employeeId?: string;
+      startDate?: string;
+      endDate?: string;
+      notes?: string | null;
+    },
+  ) {
+    return prisma.vacation.update({
+      where: { id },
+      data: {
+        employeeId: data.employeeId,
+        startDate: data.startDate ? toDbDate(data.startDate) : undefined,
+        endDate: data.endDate ? toDbDate(data.endDate) : undefined,
+        notes: data.notes,
+      },
+      include: { employee: true },
+    });
+  }
 }

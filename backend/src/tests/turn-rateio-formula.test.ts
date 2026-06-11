@@ -10,6 +10,7 @@ import {
   countAllocatedTurns,
   countUsefulOperationalDays,
 } from "../domain/schedule/real-schedule-turn-rateio.js";
+import { buildOperationalSummary } from "../domain/schedule/operational-summary.js";
 import { buildPreferredShiftMap } from "../infrastructure/mappers/generation-input.mapper.js";
 import { DEFAULT_SHIFTS } from "../domain/shift/default-shifts.js";
 import type { Shift } from "../domain/shift/types.js";
@@ -88,7 +89,7 @@ describe("Fórmula definitiva de rateio de turnos", () => {
     expect(rateioDemand.perShift.T9).toBeUndefined();
   });
 
-  it("4. PAO preferencial T9 não recebe excesso quando já atingiu meta", () => {
+  it("4. PAO preferencial T9 recebe T9 até meta sem excesso", () => {
     const input = julyInput(4);
     input.preferredShifts = buildPreferredShiftMap(input.employees, [
       { employeeUuid: paoUuid(0), shiftCode: "T9" },
@@ -108,6 +109,40 @@ describe("Fórmula definitiva de rateio de turnos", () => {
     const allocated = countAllocatedTurns(ws, paoUuid(0));
     expect(allocated).toBeLessThanOrEqual(target + 1);
     expect(allocated).toBeGreaterThanOrEqual(target - 1);
+  });
+
+  it("4b. PAO sem preferência T9 nunca recebe T9", () => {
+    const input = julyInput(4);
+    input.preferredShifts = buildPreferredShiftMap(input.employees, [
+      { employeeUuid: paoUuid(0), shiftCode: "T9" },
+    ]);
+    const ws = new GenerationWorkspace(input);
+    ws.applyHardBlocks();
+    allocateParallelShifts(ws);
+
+    for (const emp of input.employees.slice(1)) {
+      const t9 = ws
+        .toAssignments()
+        .filter((a) => a.employeeUuid === emp.uuid && a.shiftCode === "T9").length;
+      expect(t9).toBe(0);
+    }
+  });
+
+  it("4c. T9 conta como turno e dia trabalhado no resumo", () => {
+    const input = julyInput(2);
+    input.preferredShifts = buildPreferredShiftMap(input.employees, [
+      { employeeUuid: paoUuid(0), shiftCode: "T9" },
+    ]);
+    const ws = new GenerationWorkspace(input);
+    ws.applyHardBlocks();
+    ws["planned"].set(`${ws.input.employees[0]!.domainId}|2026-07-01`, "T7");
+    ws["planned"].set(`${ws.input.employees[0]!.domainId}|2026-07-02`, "T9");
+    ws["planned"].set(`${ws.input.employees[0]!.domainId}|2026-07-03`, "T9");
+
+    const summary = buildOperationalSummary(ws).byEmployee.find((e) => e.employeeUuid === paoUuid(0))!;
+    expect(summary.turnos).toBe(3);
+    expect(summary.diasTrabalhados).toBe(3);
+    expect(summary.assignedShiftCount).toBe(3);
   });
 
   it("5. SIM/CRS/CMA/OUTRO não alteram meta matemática de turnos", () => {

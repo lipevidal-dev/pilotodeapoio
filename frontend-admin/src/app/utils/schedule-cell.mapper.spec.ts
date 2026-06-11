@@ -146,7 +146,7 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
     expect(summary.diasTrabalhados).toBe(2);
   });
 
-  it('9. T9 paralelo conta em turnos mas não em dias trabalhados', () => {
+  it('9. T9 paralelo conta em turnos e dias trabalhados', () => {
     const emp: Employee = {
       id: 'pao-t9',
       name: 'PAO T9',
@@ -174,7 +174,7 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
     });
     const summary = grid.groups[0].rows[0].summary;
     expect(summary.turnos).toBe(3);
-    expect(summary.diasTrabalhados).toBe(2);
+    expect(summary.diasTrabalhados).toBe(3);
     expect(summary.t7).toBe(1);
     expect(summary.t8).toBe(1);
   });

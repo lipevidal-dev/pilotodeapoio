@@ -25,7 +25,7 @@ import {
   batchResultSeverity,
 } from '../../../utils/batch-result.util';
 import { datesToIsoList, formatIsoDate } from '../../../utils/date-format';
-import type { Employee, FlightAssignment } from '../../../models/api.models';
+import type { Employee, FlightAssignment, UpdateFlightAssignmentPayload } from '../../../models/api.models';
 
 @Component({
   selector: 'app-flights',
@@ -67,6 +67,8 @@ export class FlightsComponent implements OnInit {
   );
   readonly loading = signal(false);
   readonly dialogVisible = signal(false);
+  readonly editingId = signal<string | null>(null);
+  readonly isEditing = computed(() => !!this.editingId());
   readonly saving = signal(false);
   readonly deletingBatch = signal(false);
 
@@ -116,12 +118,37 @@ export class FlightsComponent implements OnInit {
     });
   }
 
+  dialogTitle(): string {
+    return this.isEditing() ? 'Editar voo' : 'Novo voo';
+  }
+
+  onDialogVisibleChange(visible: boolean): void {
+    this.dialogVisible.set(visible);
+    if (!visible) {
+      this.resetForm();
+    }
+  }
+
   openNew(): void {
     this.resetForm();
     this.dialogVisible.set(true);
   }
 
+  openEdit(row: FlightAssignment): void {
+    this.editingId.set(row.id);
+    const iso = row.date.slice(0, 10);
+    const d = new Date(`${iso}T12:00:00`);
+    this.formEmployeeId = row.employeeId;
+    this.formDates = [d];
+    this.formDescription = row.description ?? '';
+    this.calendarYear.set(d.getFullYear());
+    this.calendarMonth.set(d.getMonth() + 1);
+    this.dialogVisible.set(true);
+    this.reloadOccupancy();
+  }
+
   resetForm(): void {
+    this.editingId.set(null);
     this.formEmployeeId = '';
     this.formDates = [];
     this.formDescription = '';
@@ -185,6 +212,35 @@ export class FlightsComponent implements OnInit {
       return;
     }
     this.saving.set(true);
+
+    if (this.isEditing()) {
+      const updatePayload: UpdateFlightAssignmentPayload = {
+        employeeId: this.formEmployeeId,
+        date: datesToIsoList(this.formDates)[0],
+        description: this.formDescription.trim() || null,
+      };
+      this.service.update(this.editingId()!, updatePayload).subscribe({
+        next: () => {
+          this.saving.set(false);
+          this.dialogVisible.set(false);
+          this.messages.add({ severity: 'success', summary: 'Atualizado', detail: 'Voo atualizado.' });
+          this.workspace.year.set(this.calendarYear());
+          this.workspace.month.set(this.calendarMonth());
+          this.load();
+          this.scheduleRefresh.notify();
+        },
+        error: (err) => {
+          this.saving.set(false);
+          this.messages.add({
+            severity: 'error',
+            summary: 'Erro',
+            detail: err.error?.error ?? 'Falha ao atualizar voo.',
+          });
+        },
+      });
+      return;
+    }
+
     this.service
       .createBatch({
         employeeId: this.formEmployeeId,
@@ -196,7 +252,6 @@ export class FlightsComponent implements OnInit {
         next: (res) => {
           this.saving.set(false);
           this.dialogVisible.set(false);
-          this.resetForm();
           this.messages.add({
             severity: batchResultSeverity(res),
             summary: res.created > 0 ? 'Criado' : 'Atenção',

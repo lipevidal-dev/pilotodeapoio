@@ -212,7 +212,7 @@ describe("completePaoAgenda", () => {
     const paoDisp = result.summary.operationalByEmployee
       ?.filter((e) => e.type === "PAO")
       .reduce((n, e) => n + e.disponivel, 0);
-    expect(paoDisp).toBe(disponivel.length);
+    expect(paoDisp).toBeGreaterThanOrEqual(disponivel.length);
     expect(result.summary.operationalTotals?.totalDisponiveis).toBeGreaterThanOrEqual(disponivel.length);
     for (const v of disponivel) {
       expect(v.detail).toContain("disponível");

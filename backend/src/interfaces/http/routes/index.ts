@@ -25,6 +25,7 @@ import {
   deleteVacationBatchController,
   deleteVacationController,
   listVacationsController,
+  updateVacationController,
 } from "../controllers/vacation.controller.js";
 import {
   createRequestedDayOffBatchController,
@@ -32,6 +33,7 @@ import {
   deleteRequestedDayOffBatchController,
   deleteRequestedDayOffController,
   listRequestedDayOffsController,
+  updateRequestedDayOffController,
 } from "../controllers/requested-day-off.controller.js";
 import {
   createFlightAssignmentBatchController,
@@ -39,6 +41,7 @@ import {
   deleteFlightAssignmentBatchController,
   deleteFlightAssignmentController,
   listFlightAssignmentsController,
+  updateFlightAssignmentController,
 } from "../controllers/flight-assignment.controller.js";
 import {
   debugOperationalCadastrosController,
@@ -103,18 +106,21 @@ export async function registerRoutes(app: FastifyInstance) {
   app.get("/vacations", listVacationsController);
   app.post("/vacations/batch", createVacationBatchController);
   app.post("/vacations", createVacationController);
+  app.put("/vacations/:id", updateVacationController);
   app.delete("/vacations/batch", deleteVacationBatchController);
   app.delete("/vacations/:id", deleteVacationController);
 
   app.get("/requested-day-offs", listRequestedDayOffsController);
   app.post("/requested-day-offs/batch", createRequestedDayOffBatchController);
   app.post("/requested-day-offs", createRequestedDayOffController);
+  app.put("/requested-day-offs/:id", updateRequestedDayOffController);
   app.delete("/requested-day-offs/batch", deleteRequestedDayOffBatchController);
   app.delete("/requested-day-offs/:id", deleteRequestedDayOffController);
 
   app.get("/flight-assignments", listFlightAssignmentsController);
   app.post("/flight-assignments/batch", createFlightAssignmentBatchController);
   app.post("/flight-assignments", createFlightAssignmentController);
+  app.put("/flight-assignments/:id", updateFlightAssignmentController);
   app.delete("/flight-assignments/batch", deleteFlightAssignmentBatchController);
   app.delete("/flight-assignments/:id", deleteFlightAssignmentController);
 

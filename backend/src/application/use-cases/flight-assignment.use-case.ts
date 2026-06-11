@@ -76,6 +76,43 @@ export class FlightAssignmentUseCase {
     };
   }
 
+  async update(
+    id: string,
+    input: {
+      employeeId?: string;
+      date?: string;
+      description?: string | null;
+    },
+  ) {
+    const row = await repo.findById(id);
+    if (!row) throw new Error("Voo não encontrado");
+
+    const employeeId = input.employeeId ?? row.employeeId;
+    const date = input.date ?? isoDateKey(row.date);
+
+    if (input.date || input.employeeId) {
+      const existing = await repo.findByEmployeeDates(employeeId, [date]);
+      const duplicate = existing.find((r) => r.id !== id);
+      if (duplicate) {
+        throw new Error("Já existe voo para este funcionário nesta data");
+      }
+    }
+
+    try {
+      return await repo.update(id, {
+        employeeId: input.employeeId,
+        date: input.date,
+        description: input.description,
+      });
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code === "P2002") {
+        throw new Error("Já existe voo para este funcionário nesta data");
+      }
+      throw err;
+    }
+  }
+
   async remove(id: string) {
     const row = await repo.findById(id);
     if (!row) throw new Error("Voo não encontrado");

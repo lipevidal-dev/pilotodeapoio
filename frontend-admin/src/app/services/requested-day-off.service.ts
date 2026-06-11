@@ -8,6 +8,7 @@ import type {
   CreateRequestedDayOffPayload,
   RequestedDayOff,
   RequestedDayOffBatchResult,
+  UpdateRequestedDayOffPayload,
 } from '../models/api.models';
 
 @Injectable({ providedIn: 'root' })
@@ -35,5 +36,9 @@ export class RequestedDayOffService {
     return this.http.delete<BatchDeleteResult>(`${this.base}/requested-day-offs/batch`, {
       body: { ids },
     });
+  }
+
+  update(id: string, payload: UpdateRequestedDayOffPayload): Observable<RequestedDayOff> {
+    return this.http.put<RequestedDayOff>(`${this.base}/requested-day-offs/${id}`, payload);
   }
 }

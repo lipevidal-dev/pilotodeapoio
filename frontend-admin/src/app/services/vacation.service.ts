@@ -6,6 +6,7 @@ import type {
   BatchDeleteResult,
   CreateVacationBatchPayload,
   CreateVacationPayload,
+  UpdateVacationPayload,
   Vacation,
   VacationBatchResult,
 } from '../models/api.models';
@@ -25,6 +26,10 @@ export class VacationService {
 
   createBatch(payload: CreateVacationBatchPayload): Observable<VacationBatchResult> {
     return this.http.post<VacationBatchResult>(`${this.base}/vacations/batch`, payload);
+  }
+
+  update(id: string, payload: UpdateVacationPayload): Observable<Vacation> {
+    return this.http.put<Vacation>(`${this.base}/vacations/${id}`, payload);
   }
 
   delete(id: string): Observable<void> {

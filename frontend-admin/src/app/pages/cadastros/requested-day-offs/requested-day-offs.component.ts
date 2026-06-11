@@ -24,7 +24,7 @@ import {
   batchResultSeverity,
 } from '../../../utils/batch-result.util';
 import { datesToIsoList, formatIsoDate } from '../../../utils/date-format';
-import type { Employee, RequestedDayOff, RequestedDayOffStatus } from '../../../models/api.models';
+import type { Employee, RequestedDayOff, RequestedDayOffStatus, UpdateRequestedDayOffPayload } from '../../../models/api.models';
 
 @Component({
   selector: 'app-requested-day-offs',
@@ -65,6 +65,8 @@ export class RequestedDayOffsComponent implements OnInit {
   );
   readonly loading = signal(false);
   readonly dialogVisible = signal(false);
+  readonly editingId = signal<string | null>(null);
+  readonly isEditing = computed(() => !!this.editingId());
   readonly saving = signal(false);
   readonly deletingBatch = signal(false);
 
@@ -131,12 +133,38 @@ export class RequestedDayOffsComponent implements OnInit {
     }
   }
 
+  dialogTitle(): string {
+    return this.isEditing() ? 'Editar folga pedida' : 'Nova folga pedida';
+  }
+
+  onDialogVisibleChange(visible: boolean): void {
+    this.dialogVisible.set(visible);
+    if (!visible) {
+      this.resetForm();
+    }
+  }
+
   openNew(): void {
     this.resetForm();
     this.dialogVisible.set(true);
   }
 
+  openEdit(row: RequestedDayOff): void {
+    this.editingId.set(row.id);
+    const iso = row.date.slice(0, 10);
+    const d = new Date(`${iso}T12:00:00`);
+    this.formEmployeeId = row.employeeId;
+    this.formDates = [d];
+    this.formStatus = row.status;
+    this.formNotes = row.notes ?? '';
+    this.calendarYear.set(d.getFullYear());
+    this.calendarMonth.set(d.getMonth() + 1);
+    this.dialogVisible.set(true);
+    this.reloadOccupancy();
+  }
+
   resetForm(): void {
+    this.editingId.set(null);
     this.formEmployeeId = '';
     this.formDates = [];
     this.formStatus = 'APPROVED';
@@ -196,6 +224,34 @@ export class RequestedDayOffsComponent implements OnInit {
       return;
     }
     this.saving.set(true);
+
+    if (this.isEditing()) {
+      const updatePayload: UpdateRequestedDayOffPayload = {
+        employeeId: this.formEmployeeId,
+        date: datesToIsoList(this.formDates)[0],
+        status: this.formStatus,
+        notes: this.formNotes.trim() || null,
+      };
+      this.service.update(this.editingId()!, updatePayload).subscribe({
+        next: () => {
+          this.saving.set(false);
+          this.dialogVisible.set(false);
+          this.messages.add({ severity: 'success', summary: 'Atualizado', detail: 'FP atualizada.' });
+          this.load();
+          this.scheduleRefresh.notify();
+        },
+        error: (err) => {
+          this.saving.set(false);
+          this.messages.add({
+            severity: 'error',
+            summary: 'Erro',
+            detail: err.error?.error ?? 'Falha ao atualizar FP.',
+          });
+        },
+      });
+      return;
+    }
+
     this.service
       .createBatch({
         employeeId: this.formEmployeeId,
@@ -207,7 +263,6 @@ export class RequestedDayOffsComponent implements OnInit {
         next: (res) => {
           this.saving.set(false);
           this.dialogVisible.set(false);
-          this.resetForm();
           this.messages.add({
             severity: batchResultSeverity(res),
             summary: res.created > 0 ? 'Criado' : 'Atenção',

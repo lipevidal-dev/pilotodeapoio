@@ -167,7 +167,7 @@ describe("Fase 8.0 — Motor real v1", () => {
     expect(rs.requiredT6T7).toBeGreaterThan(0);
   });
 
-  it("9. Curso/simulador contam como dia trabalhado", () => {
+  it("9. Curso/simulador são auditados mas não contam como dia trabalhado", () => {
     const input = minimalPaoInput(2);
     const uuid = paoUuid(0);
     input.lockedAllocations = [
@@ -179,7 +179,7 @@ describe("Fase 8.0 — Motor real v1", () => {
     const b = countWorkdayBreakdown(ws, uuid);
     expect(b.cursos).toBe(1);
     expect(b.simuladores).toBe(1);
-    expect(b.total).toBe(2);
+    expect(b.total).toBe(0);
   });
 
   it("10. Férias não contam como dia trabalhado", () => {
@@ -244,7 +244,7 @@ describe("Fase 8.0 — Motor real v1", () => {
     expect(after).toBeGreaterThanOrEqual(before);
   });
 
-  it("15. Voo completa déficit para 20 dias trabalhados", () => {
+  it("15. Voo alocado não altera dias trabalhados do motor", () => {
     const input = minimalPaoInput(2);
     const uuid = paoUuid(0);
     const ws = freshWorkspace(input);
@@ -258,7 +258,7 @@ describe("Fase 8.0 — Motor real v1", () => {
     expect(deficit).toBeGreaterThan(0);
     const flights = allocateFlightsForWorkdayDeficit(ws);
     expect(flights.length).toBeGreaterThan(0);
-    expect(countMotorWorkDays(ws, uuid)).toBeGreaterThan(before);
+    expect(countMotorWorkDays(ws, uuid)).toBe(before);
   });
 
   it("16. REAL_V1 não gera folga comum automaticamente (folga manual)", () => {

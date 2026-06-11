@@ -102,7 +102,7 @@ describe("ND — somente após T8/T8", () => {
   });
 
   it(
-    "4. ND conta em dias trabalhados no resumo operacional",
+    "4. ND não conta em dias trabalhados no resumo operacional",
     () => {
       const input = realisticGenerationInput();
       const result = engine.generate(input);
@@ -224,12 +224,12 @@ describe("Resumo operacional", () => {
     return buildOperationalSummary(ws);
   }
 
-  it("1. PAO: turnos incluem paralelos; dias trabalhados = T6 + T7 + T8", () => {
+  it("1. PAO: turnos ≤ dias trabalhados (ND/cadastros somam no display)", () => {
     const op = opSummary(realisticGenerationInput());
     for (const e of op.byEmployee.filter((x) => x.type === "PAO")) {
       expect(e.turnos).toBeGreaterThanOrEqual(e.t6 + e.t7 + e.t8);
       expect(e.assignedShiftCount).toBe(e.turnos);
-      expect(e.diasTrabalhados).toBeGreaterThanOrEqual(e.t6 + e.t7 + e.t8);
+      expect(e.diasTrabalhados).toBeGreaterThanOrEqual(e.turnos);
     }
   });
 
@@ -243,11 +243,11 @@ describe("Resumo operacional", () => {
     }
   });
 
-  it("2. ND conta em dias trabalhados", () => {
+  it("2. ND conta em dias trabalhados do resumo", () => {
     const op = opSummary(realisticGenerationInput());
     const withNd = op.byEmployee.find((e) => e.nd > 0);
     if (withNd) {
-      expect(withNd.diasTrabalhados).toBeGreaterThanOrEqual(withNd.nd);
+      expect(withNd.diasTrabalhados).toBeGreaterThanOrEqual(withNd.turnos + withNd.nd);
     }
   });
 
@@ -259,7 +259,7 @@ describe("Resumo operacional", () => {
     );
     const pao = op.byEmployee.find((e) => e.employeeUuid === "real-1")!;
     expect(pao.voos).toBeGreaterThanOrEqual(1);
-    expect(pao.diasTrabalhados).toBeGreaterThanOrEqual(pao.voos);
+    expect(pao.diasTrabalhados).toBeGreaterThanOrEqual(pao.turnos + pao.voos);
   });
 
   it("4. SIMULADOR conta em dias trabalhados", () => {
@@ -270,7 +270,7 @@ describe("Resumo operacional", () => {
     );
     const pao = op.byEmployee.find((e) => e.employeeUuid === "real-2")!;
     expect(pao.simuladores).toBe(1);
-    expect(pao.diasTrabalhados).toBeGreaterThanOrEqual(1);
+    expect(pao.diasTrabalhados).toBeGreaterThanOrEqual(pao.turnos + pao.simuladores);
   });
 
   it("5. CURSO conta em dias trabalhados", () => {
@@ -311,9 +311,9 @@ describe("Resumo operacional", () => {
     );
     const pao = op.byEmployee.find((e) => e.employeeUuid === "real-1")!;
     expect(pao.fp).toBeGreaterThanOrEqual(1);
-    const workOnly =
-      pao.t6 + pao.t7 + pao.t8 + pao.nd + pao.voos + pao.simuladores + pao.cursos + pao.cma + pao.outros;
-    expect(pao.diasTrabalhados).toBe(workOnly);
+    expect(pao.diasTrabalhados).toBe(
+      pao.turnos + pao.nd + pao.voos + pao.simuladores + pao.cursos + pao.cma + pao.outros,
+    );
   });
 
   it("9. FÉRIAS não contam em dias trabalhados", () => {

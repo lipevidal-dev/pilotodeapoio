@@ -9,7 +9,6 @@ import {
 import { listAvailableForFlightFromWorkspace } from "./available-for-flight.js";
 import { normalizeOperationalLabel } from "./operational-labels.js";
 import { listPaoRateioShiftCodesFromWorkspace } from "./pao-rateio-shifts.js";
-import { listParallelShiftCodes } from "../shift/coverage-type.js";
 import type { ScheduleContext, ValidationIssue } from "./types.js";
 import { assignmentKey } from "./types.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
@@ -117,38 +116,42 @@ function isFolgaComputable(label: string): boolean {
   return new Set(PAO_REST_TYPES.map((t) => t.toUpperCase())).has(u);
 }
 
+function computeDisplayWorkDays(stats: EmployeeOperationalSummary): number {
+  return (
+    stats.turnos +
+    stats.nd +
+    stats.voos +
+    stats.simuladores +
+    stats.cursos +
+    stats.cma +
+    stats.outros
+  );
+}
+
 function bumpAllocLabel(stats: EmployeeOperationalSummary, label: string): void {
   const n = normalizeOperationalLabel(label).toUpperCase();
   if (n === "ND") {
-    if (stats.type === "PAO") {
-      stats.nd++;
-      stats.diasTrabalhados++;
-    }
+    if (stats.type === "PAO") stats.nd++;
     return;
   }
   if (n === "VOO") {
     stats.voos++;
-    stats.diasTrabalhados++;
     return;
   }
   if (n === "SIMULADOR") {
     stats.simuladores++;
-    stats.diasTrabalhados++;
     return;
   }
   if (n === "CURSO" || n === "CURSO ONLINE") {
     stats.cursos++;
-    stats.diasTrabalhados++;
     return;
   }
   if (n === "CMA") {
     stats.cma++;
-    stats.diasTrabalhados++;
     return;
   }
   if (n === "OUTRO") {
     stats.outros++;
-    stats.diasTrabalhados++;
     return;
   }
   if (n === "FOLGA SOCIAL") {
@@ -225,7 +228,6 @@ function exclusiveDayBuckets(
   let folgas = 0;
   let ferias = 0;
   let disponivel = 0;
-  const parallelCodes = new Set(listParallelShiftCodes(ws.input.shifts));
 
   for (const day of ws.days) {
     const shift = ws.planned.get(assignmentKey(did, day));
@@ -236,7 +238,7 @@ function exclusiveDayBuckets(
       ferias++;
       continue;
     }
-    if (shift && !parallelCodes.has(shift.toUpperCase())) {
+    if (shift) {
       trabalho++;
       continue;
     }
@@ -265,7 +267,6 @@ export function buildOperationalSummary(
 
   const apaoCodes = apaoTurnoCodes(ws);
   const paoCodes = paoTurnoCodes(ws);
-  const parallelCodes = new Set(listParallelShiftCodes(ws.input.shifts));
 
   for (const a of ws.toAssignments()) {
     const stats = byUuid.get(a.employeeUuid);
@@ -274,16 +275,12 @@ export function buildOperationalSummary(
     if (stats.type === "PAO" && paoCodes.has(code)) {
       stats.turnos++;
       stats.assignedShiftCount++;
-      if (!parallelCodes.has(code)) {
-        stats.diasTrabalhados++;
-        if (code === "T6") stats.t6++;
-        if (code === "T7") stats.t7++;
-        if (code === "T8") stats.t8++;
-      }
+      if (code === "T6") stats.t6++;
+      if (code === "T7") stats.t7++;
+      if (code === "T8") stats.t8++;
     } else if (stats.type === "APAO" && apaoCodes.has(code)) {
       stats.turnos++;
       stats.assignedShiftCount++;
-      stats.diasTrabalhados++;
     }
   }
 
@@ -291,6 +288,10 @@ export function buildOperationalSummary(
     const stats = byUuid.get(al.employeeUuid);
     if (!stats) continue;
     bumpAllocLabel(stats, al.label);
+  }
+
+  for (const stats of byUuid.values()) {
+    stats.diasTrabalhados = computeDisplayWorkDays(stats);
   }
 
   const availableMap = listAvailableForFlightFromWorkspace(ws);

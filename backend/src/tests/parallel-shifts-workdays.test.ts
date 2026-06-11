@@ -51,25 +51,26 @@ function forceAssign(ws: GenerationWorkspace, uuid: string, day: string, code: s
   ws["planned"].set(`${emp.domainId}|${day}`, code);
 }
 
-describe("Turnos paralelos — workedDays vs assignedShiftCount", () => {
-  it("1. funcionário com apenas T9: workedDays=0, assignedShiftCount>0", () => {
+describe("Turnos paralelos — rateio e dias trabalhados", () => {
+  it("1. funcionário com apenas T9: turnos = dias trabalhados = assignedShiftCount", () => {
     const input = inputWithT9Preference();
     const ws = new GenerationWorkspace(input);
     ws.applyHardBlocks();
     allocateParallelShifts(ws);
 
     const uuid = paoUuid(0);
-    expect(countMotorWorkDays(ws, uuid)).toBe(0);
+    const allocated = countAllocatedOperationalTurns(ws, uuid);
+    expect(allocated).toBeGreaterThan(0);
+    expect(countMotorWorkDays(ws, uuid)).toBe(allocated);
     expect(countAllocatedPrimaryTurns(ws, uuid)).toBe(0);
-    expect(countAllocatedOperationalTurns(ws, uuid)).toBeGreaterThan(0);
 
     const summary = buildOperationalSummary(ws).byEmployee.find((e) => e.employeeUuid === uuid)!;
-    expect(summary.diasTrabalhados).toBe(0);
-    expect(summary.assignedShiftCount).toBeGreaterThan(0);
-    expect(summary.turnos).toBe(summary.assignedShiftCount);
+    expect(summary.diasTrabalhados).toBe(allocated);
+    expect(summary.assignedShiftCount).toBe(allocated);
+    expect(summary.turnos).toBe(allocated);
   });
 
-  it("2. T6/T7/T8 + T9: workedDays só principais; assignedShiftCount inclui T9", () => {
+  it("2. T6/T7/T8 + T9: turnos e dias trabalhados incluem ambos", () => {
     const input = inputWithT9();
     const ws = new GenerationWorkspace(input);
     ws.applyHardBlocks();
@@ -84,42 +85,42 @@ describe("Turnos paralelos — workedDays vs assignedShiftCount", () => {
       forceAssign(ws, uuid, day, "T9");
     }
 
-    expect(countMotorWorkDays(ws, uuid)).toBe(primaryDays.length);
-    expect(countAllocatedOperationalTurns(ws, uuid)).toBe(
-      primaryDays.length + parallelDays.length,
-    );
+    const total = primaryDays.length + parallelDays.length;
+    expect(countMotorWorkDays(ws, uuid)).toBe(total);
+    expect(countAllocatedOperationalTurns(ws, uuid)).toBe(total);
 
     const summary = buildOperationalSummary(ws).byEmployee.find((e) => e.employeeUuid === uuid)!;
-    expect(summary.diasTrabalhados).toBe(primaryDays.length);
-    expect(summary.assignedShiftCount).toBe(primaryDays.length + parallelDays.length);
+    expect(summary.diasTrabalhados).toBe(total);
+    expect(summary.assignedShiftCount).toBe(total);
+    expect(summary.turnos).toBe(total);
   });
 
-  it("3. exemplo 10 T7/T8 + 11 T9 → Dias Trab.=10, turnos rateio=21", () => {
+  it("3. exemplo 6 T7/T8 + 5 T9 → Turnos=11, Dias Trab.=11", () => {
     const input = inputWithT9();
     const ws = new GenerationWorkspace(input);
     ws.applyHardBlocks();
     const uuid = paoUuid(2);
 
-    for (let i = 1; i <= 10; i++) {
+    for (let i = 1; i <= 6; i++) {
       const day = `2026-06-${String(i).padStart(2, "0")}`;
       forceAssign(ws, uuid, day, i % 2 === 0 ? "T8" : "T7");
     }
-    for (let i = 11; i <= 21; i++) {
+    for (let i = 7; i <= 11; i++) {
       const day = `2026-06-${String(i).padStart(2, "0")}`;
       forceAssign(ws, uuid, day, "T9");
     }
 
     const breakdown = countWorkdayBreakdown(ws, uuid);
-    expect(breakdown.total).toBe(10);
-    expect(countAllocatedOperationalTurns(ws, uuid)).toBe(21);
+    expect(breakdown.total).toBe(11);
+    expect(countAllocatedOperationalTurns(ws, uuid)).toBe(11);
 
     const summary = buildOperationalSummary(ws).byEmployee.find((e) => e.employeeUuid === uuid)!;
-    expect(summary.diasTrabalhados).toBe(10);
-    expect(summary.assignedShiftCount).toBe(21);
-    expect(summary.turnos).toBe(21);
+    expect(summary.diasTrabalhados).toBe(11);
+    expect(summary.assignedShiftCount).toBe(11);
+    expect(summary.turnos).toBe(11);
   });
 
-  it("4. T9 não infla workCount (orçamento mensal de dias trabalhados)", () => {
+  it("4. T9 não infla workCount (orçamento mensal de dias trabalhados do motor)", () => {
     const input = inputWithT9();
     const ws = new GenerationWorkspace(input);
     ws.applyHardBlocks();
@@ -135,7 +136,7 @@ describe("Turnos paralelos — workedDays vs assignedShiftCount", () => {
     expect(ws.workCount(uuid)).toBe(1);
   });
 
-  it("5. T9 continua participando da média de distribuição de turnos", () => {
+  it("5. T9 participa da média de distribuição de turnos", () => {
     const input = inputWithT9Preference();
     const ws = new GenerationWorkspace(input);
     ws.applyHardBlocks();
@@ -147,7 +148,43 @@ describe("Turnos paralelos — workedDays vs assignedShiftCount", () => {
     expect(countAllocatedOperationalTurns(ws, paoUuid(0))).toBe(preferred.allocatedTurns);
   });
 
-  it("6. isParallelShiftCode usa coverageType PARALLEL (não hardcode T9)", () => {
+  it("6. PAO sem preferência T9 nunca recebe T9 pelo allocateParallelShifts", () => {
+    const input = inputWithT9();
+    input.preferredShifts = buildPreferredShiftMap(input.employees, [
+      { employeeUuid: paoUuid(0), shiftCode: "T9" },
+    ]);
+    const ws = new GenerationWorkspace(input);
+    ws.applyHardBlocks();
+    allocateParallelShifts(ws);
+
+    for (const emp of input.employees.slice(1)) {
+      expect(countAllocatedPrimaryTurns(ws, emp.uuid)).toBeGreaterThanOrEqual(0);
+      const t9Count = ws
+        .toAssignments()
+        .filter((a) => a.employeeUuid === emp.uuid && a.shiftCode === "T9").length;
+      expect(t9Count).toBe(0);
+    }
+  });
+
+  it("7. T9 respeita bloqueio operacional (simulador)", () => {
+    const input = inputWithT9Preference();
+    input.lockedAllocations = [
+      {
+        employeeUuid: paoUuid(0),
+        date: "2026-06-10",
+        label: "SIMULADOR",
+        startTime: "12:00",
+        endTime: "00:00",
+      },
+    ];
+    const ws = new GenerationWorkspace(input);
+    ws.applyHardBlocks();
+
+    expect(ws.tryAssignShift(paoUuid(0), "2026-06-11", "T9")).toBe(false);
+    expect(ws.tryAssignShift(paoUuid(0), "2026-06-12", "T9")).toBe(true);
+  });
+
+  it("8. isParallelShiftCode usa coverageType PARALLEL (não hardcode T9)", () => {
     const input = inputWithT9();
     const ws = new GenerationWorkspace(input);
     expect(isParallelShiftCode(ws, "T9")).toBe(true);

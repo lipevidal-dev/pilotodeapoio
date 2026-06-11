@@ -75,6 +75,8 @@ export class PreAllocationRepository {
       employeeId?: string;
       date?: Date;
       notes?: string | null;
+      startTime?: string | null;
+      endTime?: string | null;
     },
   ) {
     return prisma.preAllocation.update({

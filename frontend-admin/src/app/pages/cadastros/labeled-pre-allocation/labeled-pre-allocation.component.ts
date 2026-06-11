@@ -34,7 +34,7 @@ import {
   batchResultSeverity,
 } from '../../../utils/batch-result.util';
 import { datesToIsoList, formatIsoDate } from '../../../utils/date-format';
-import type { Employee, PreAllocation } from '../../../models/api.models';
+import type { Employee, PreAllocation, UpdateLabeledPreAllocationPayload } from '../../../models/api.models';
 
 export interface LabeledCadastroRouteData {
   title: string;
@@ -94,6 +94,8 @@ export class LabeledPreAllocationComponent implements OnInit {
   );
   readonly loading = signal(false);
   readonly dialogVisible = signal(false);
+  readonly editingId = signal<string | null>(null);
+  readonly isEditing = computed(() => !!this.editingId());
   readonly saving = signal(false);
   readonly deletingBatch = signal(false);
 
@@ -180,12 +182,39 @@ export class LabeledPreAllocationComponent implements OnInit {
     });
   }
 
+  dialogTitle(): string {
+    return this.isEditing() ? `Editar ${this.config.title.toLowerCase()}` : `Novo ${this.config.title.toLowerCase()}`;
+  }
+
+  onDialogVisibleChange(visible: boolean): void {
+    this.dialogVisible.set(visible);
+    if (!visible) {
+      this.resetForm();
+    }
+  }
+
   openNew(): void {
     this.resetForm();
     this.dialogVisible.set(true);
   }
 
+  openEdit(row: PreAllocation): void {
+    this.editingId.set(row.id);
+    const iso = row.date.slice(0, 10);
+    const d = new Date(`${iso}T12:00:00`);
+    this.formYear = d.getFullYear();
+    this.formMonth = d.getMonth() + 1;
+    this.formEmployeeId = row.employeeId;
+    this.formDates = [d];
+    this.formNotes = row.notes ?? '';
+    this.formStartTime = row.startTime ?? '';
+    this.formEndTime = row.endTime ?? '';
+    this.dialogVisible.set(true);
+    this.reloadOccupancy();
+  }
+
   resetForm(): void {
+    this.editingId.set(null);
     this.formYear = this.filterYear;
     this.formMonth = this.filterMonth;
     this.formEmployeeId = '';
@@ -271,6 +300,50 @@ export class LabeledPreAllocationComponent implements OnInit {
       }
     }
     this.saving.set(true);
+
+    if (this.isEditing()) {
+      const updatePayload: UpdateLabeledPreAllocationPayload = {
+        employeeId: this.formEmployeeId,
+        date: datesToIsoList(this.formDates)[0],
+        notes: this.formNotes.trim() || null,
+      };
+      if (this.isSimulatorCadastro) {
+        const start = this.formStartTime.trim();
+        const end = this.formEndTime.trim();
+        if (start && end) {
+          updatePayload.startTime = start;
+          updatePayload.endTime = end;
+        } else {
+          updatePayload.startTime = null;
+          updatePayload.endTime = null;
+        }
+      }
+      this.service.update(this.editingId()!, updatePayload).subscribe({
+        next: () => {
+          this.saving.set(false);
+          this.dialogVisible.set(false);
+          this.messages.add({
+            severity: 'success',
+            summary: 'Atualizado',
+            detail: `${this.config.title} atualizado.`,
+          });
+          this.workspace.year.set(this.formYear);
+          this.workspace.month.set(this.formMonth);
+          this.load();
+          this.scheduleRefresh.notify();
+        },
+        error: (err) => {
+          this.saving.set(false);
+          this.messages.add({
+            severity: 'error',
+            summary: 'Erro',
+            detail: err.error?.error ?? `Falha ao atualizar ${this.config.title.toLowerCase()}.`,
+          });
+        },
+      });
+      return;
+    }
+
     const payload: Parameters<LabeledPreAllocationService['createBatch']>[0] = {
       year: this.formYear,
       month: this.formMonth,
@@ -288,7 +361,6 @@ export class LabeledPreAllocationComponent implements OnInit {
         next: (res) => {
           this.saving.set(false);
           this.dialogVisible.set(false);
-          this.resetForm();
           this.messages.add({
             severity: batchResultSeverity(res),
             summary: res.created > 0 ? 'Criado' : 'Atenção',

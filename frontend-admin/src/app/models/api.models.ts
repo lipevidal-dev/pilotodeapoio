@@ -401,6 +401,28 @@ export interface UpdateLabeledPreAllocationPayload {
   date?: string;
   notes?: string | null;
   employeeId?: string;
+  startTime?: string | null;
+  endTime?: string | null;
+}
+
+export interface UpdateRequestedDayOffPayload {
+  employeeId?: string;
+  date?: string;
+  status?: RequestedDayOffStatus;
+  notes?: string | null;
+}
+
+export interface UpdateFlightAssignmentPayload {
+  employeeId?: string;
+  date?: string;
+  description?: string | null;
+}
+
+export interface UpdateVacationPayload {
+  employeeId?: string;
+  startDate?: string;
+  endDate?: string;
+  notes?: string | null;
 }
 
 export type RequestedDayOffStatus = 'PENDING' | 'APPROVED' | 'REJECTED';

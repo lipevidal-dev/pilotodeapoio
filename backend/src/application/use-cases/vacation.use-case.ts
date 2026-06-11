@@ -72,6 +72,45 @@ export class VacationUseCase {
     };
   }
 
+  async update(
+    id: string,
+    input: {
+      employeeId?: string;
+      startDate?: string;
+      endDate?: string;
+      notes?: string | null;
+    },
+  ) {
+    const row = await this.repo.findById(id);
+    if (!row) throw new Error("Férias não encontradas");
+
+    const startDate = input.startDate ?? isoDateKey(row.startDate);
+    const endDate = input.endDate ?? isoDateKey(row.endDate);
+    if (startDate > endDate) {
+      throw new Error("Data início deve ser anterior ou igual à data fim");
+    }
+
+    const employeeId = input.employeeId ?? row.employeeId;
+    const existing = await this.repo.findByEmployee(employeeId);
+    const duplicate = existing.find(
+      (r) =>
+        r.id !== id &&
+        isoDateKey(r.startDate) === startDate &&
+        isoDateKey(r.endDate) === endDate,
+    );
+    if (duplicate) {
+      throw new Error("Já existe férias com o mesmo período para este funcionário");
+    }
+
+    const updated = await this.repo.update(id, {
+      employeeId: input.employeeId,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      notes: input.notes,
+    });
+    return vacationToApi(updated);
+  }
+
   async remove(id: string) {
     const row = await this.repo.findById(id);
     if (!row) throw new Error("Férias não encontradas");

@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { vacationUseCase } from "../../../application/use-cases/vacation.use-case.js";
 import { createBatchDeleteHandler } from "./batch-delete.controller.js";
-import { createVacationBatchSchema, createVacationSchema } from "../dto/vacation.dto.js";
+import { createVacationBatchSchema, createVacationSchema, updateVacationSchema } from "../dto/vacation.dto.js";
 
 export async function listVacationsController(_req: FastifyRequest, reply: FastifyReply) {
   const data = await vacationUseCase.list();
@@ -33,6 +33,24 @@ export async function createVacationController(req: FastifyRequest, reply: Fasti
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro ao criar férias";
     return reply.status(400).send({ error: msg });
+  }
+}
+
+export async function updateVacationController(
+  req: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply,
+) {
+  const parsed = updateVacationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return reply.status(400).send({ error: "Payload inválido", details: parsed.error.flatten() });
+  }
+  try {
+    const updated = await vacationUseCase.update(req.params.id, parsed.data);
+    return reply.send(updated);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro ao atualizar férias";
+    const status = msg.includes("não encontradas") ? 404 : 400;
+    return reply.status(status).send({ error: msg });
   }
 }
 

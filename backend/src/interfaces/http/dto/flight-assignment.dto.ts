@@ -19,3 +19,11 @@ export const createFlightAssignmentBatchSchema = z.object({
 });
 
 export type CreateFlightAssignmentBatchBody = z.infer<typeof createFlightAssignmentBatchSchema>;
+
+export const updateFlightAssignmentSchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  date: dateStr.optional(),
+  description: z.string().max(500).nullable().optional(),
+});
+
+export type UpdateFlightAssignmentBody = z.infer<typeof updateFlightAssignmentSchema>;

@@ -98,6 +98,7 @@ describe('ScheduleComponent — geração principal', () => {
     fixture.detectChanges();
 
     const html = fixture.nativeElement as HTMLElement;
-    expect(html.textContent).toContain('REAL_V1');
+    expect(html.textContent).not.toContain('Atualizar visualização');
+    expect(html.textContent).not.toContain('scheduleMonthId');
   });
 });

@@ -66,6 +66,7 @@
         <td><p-tag [value]="row.source" severity="info" /></td>
         <td class="col-selection"><p-tableCheckbox [value]="row" /></td>
         <td class="col-actions">
+          <p-button icon="pi pi-pencil" severity="secondary" [text]="true" (onClick)="openEdit(row)" />
           <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="confirmDelete(row)" />
         </td>
       </tr>
@@ -77,9 +78,9 @@
 </p-card>
 
 <p-dialog
-  header="Novo voo"
+  [header]="dialogTitle()"
   [visible]="dialogVisible()"
-  (visibleChange)="dialogVisible.set($event)"
+  (visibleChange)="onDialogVisibleChange($event)"
   [modal]="true"
   styleClass="operational-dialog-wide"
   [style]="{ width: 'min(920px, 96vw)' }"
@@ -117,7 +118,7 @@
     </div>
   </div>
   <ng-template pTemplate="footer">
-    <p-button label="Cancelar" severity="secondary" (onClick)="dialogVisible.set(false)" />
+    <p-button label="Cancelar" severity="secondary" (onClick)="onDialogVisibleChange(false)" />
     <p-button
       label="Salvar"
       icon="pi pi-check"

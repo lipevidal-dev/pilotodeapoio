@@ -1,51 +1,9 @@
-import { normalizeOperationalLabel } from "./operational-labels.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import type { WorkdayBreakdown } from "./real-schedule-types.js";
-import {
-  isParallelShiftCode,
-  listPaoRateioShiftCodesFromWorkspace,
-} from "./pao-rateio-shifts.js";
+import { listPaoRateioShiftCodesFromWorkspace } from "./pao-rateio-shifts.js";
+import { normalizeOperationalLabel } from "./operational-labels.js";
 
-const USEFUL_CADASTRO = new Set([
-  "CURSO",
-  "CURSO ONLINE",
-  "SIMULADOR",
-  "CMA",
-  "OUTRO",
-  "VOO",
-]);
-
-function bumpCadastro(stats: WorkdayBreakdown, label: string): void {
-  const n = normalizeOperationalLabel(label).toUpperCase();
-  if (n === "ND") return;
-  if (n === "VOO") {
-    stats.voos++;
-    stats.total++;
-    return;
-  }
-  if (n === "SIMULADOR") {
-    stats.simuladores++;
-    stats.total++;
-    return;
-  }
-  if (n === "CURSO" || n === "CURSO ONLINE") {
-    stats.cursos++;
-    stats.total++;
-    return;
-  }
-  if (n === "CMA") {
-    stats.cma++;
-    stats.total++;
-    return;
-  }
-  if (n === "OUTRO") {
-    stats.outros++;
-    stats.total++;
-    return;
-  }
-}
-
-/** Conta dias trabalhados conforme fórmula do motor real (ND não conta). */
+/** Conta dias trabalhados: turnos de rateio (inclui T9). Cadastros operacionais não entram. */
 export function countWorkdayBreakdown(ws: GenerationWorkspace, uuid: string): WorkdayBreakdown {
   const stats: WorkdayBreakdown = {
     turnosT6: 0,
@@ -59,12 +17,12 @@ export function countWorkdayBreakdown(ws: GenerationWorkspace, uuid: string): Wo
     total: 0,
   };
 
+  const rateioCodes = new Set(listPaoRateioShiftCodesFromWorkspace(ws));
+
   for (const a of ws.toAssignments()) {
     if (a.employeeUuid !== uuid) continue;
     const code = a.shiftCode.toUpperCase();
-    const rateioCodes = new Set(listPaoRateioShiftCodesFromWorkspace(ws));
     if (!rateioCodes.has(code)) continue;
-    if (isParallelShiftCode(ws, code)) continue;
     if (code === "T6") stats.turnosT6++;
     else if (code === "T7") stats.turnosT7++;
     else if (code === "T8") stats.turnosT8++;
@@ -74,7 +32,11 @@ export function countWorkdayBreakdown(ws: GenerationWorkspace, uuid: string): Wo
   for (const al of ws.allocations) {
     if (al.employeeUuid !== uuid) continue;
     const n = normalizeOperationalLabel(al.label).toUpperCase();
-    if (USEFUL_CADASTRO.has(n)) bumpCadastro(stats, al.label);
+    if (n === "VOO") stats.voos++;
+    else if (n === "SIMULADOR") stats.simuladores++;
+    else if (n === "CURSO" || n === "CURSO ONLINE") stats.cursos++;
+    else if (n === "CMA") stats.cma++;
+    else if (n === "OUTRO") stats.outros++;
   }
 
   return stats;
@@ -82,8 +44,4 @@ export function countWorkdayBreakdown(ws: GenerationWorkspace, uuid: string): Wo
 
 export function countMotorWorkDays(ws: GenerationWorkspace, uuid: string): number {
   return countWorkdayBreakdown(ws, uuid).total;
-}
-
-export function countT8Shifts(ws: GenerationWorkspace, uuid: string): number {
-  return countWorkdayBreakdown(ws, uuid).turnosT8;
 }

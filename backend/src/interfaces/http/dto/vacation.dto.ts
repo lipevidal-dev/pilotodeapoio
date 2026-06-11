@@ -27,3 +27,18 @@ export const createVacationBatchSchema = z.object({
 });
 
 export type CreateVacationBatchBody = z.infer<typeof createVacationBatchSchema>;
+
+export const updateVacationSchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  startDate: dateStr.optional(),
+  endDate: dateStr.optional(),
+  notes: z.string().max(500).nullable().optional(),
+}).refine(
+  (data) => {
+    if (data.startDate && data.endDate) return data.startDate <= data.endDate;
+    return true;
+  },
+  { message: "Data início deve ser anterior ou igual à data fim", path: ["endDate"] },
+);
+
+export type UpdateVacationBody = z.infer<typeof updateVacationSchema>;

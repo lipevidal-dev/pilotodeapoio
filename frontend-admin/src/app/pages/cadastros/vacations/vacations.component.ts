@@ -25,9 +25,10 @@ import {
 import { formatIsoDate } from '../../../utils/date-format';
 import {
   datesToContinuousPeriods,
+  eachDayInRange,
   formatPeriodsSummaryPt,
 } from '../../../utils/date-range-utils';
-import type { Employee, Vacation } from '../../../models/api.models';
+import type { Employee, UpdateVacationPayload, Vacation } from '../../../models/api.models';
 
 @Component({
   selector: 'app-vacations',
@@ -67,6 +68,8 @@ export class VacationsComponent implements OnInit {
   );
   readonly loading = signal(false);
   readonly dialogVisible = signal(false);
+  readonly editingId = signal<string | null>(null);
+  readonly isEditing = computed(() => !!this.editingId());
   readonly saving = signal(false);
   readonly deletingBatch = signal(false);
 
@@ -114,12 +117,37 @@ export class VacationsComponent implements OnInit {
     });
   }
 
+  dialogTitle(): string {
+    return this.isEditing() ? 'Editar férias' : 'Nova férias';
+  }
+
+  onDialogVisibleChange(visible: boolean): void {
+    this.dialogVisible.set(visible);
+    if (!visible) {
+      this.resetForm();
+    }
+  }
+
   openNew(): void {
     this.resetForm();
     this.dialogVisible.set(true);
   }
 
+  openEdit(row: Vacation): void {
+    this.editingId.set(row.id);
+    const start = new Date(`${row.startDate.slice(0, 10)}T12:00:00`);
+    const end = new Date(`${row.endDate.slice(0, 10)}T12:00:00`);
+    this.formEmployeeId = row.employeeId;
+    this.formDates = eachDayInRange(start, end);
+    this.formNotes = row.notes ?? '';
+    this.calendarYear.set(start.getFullYear());
+    this.calendarMonth.set(start.getMonth() + 1);
+    this.dialogVisible.set(true);
+    this.reloadOccupancy();
+  }
+
   resetForm(): void {
+    this.editingId.set(null);
     this.formEmployeeId = '';
     this.formDates = [];
     this.formNotes = '';
@@ -190,11 +218,46 @@ export class VacationsComponent implements OnInit {
     const notes = this.formNotes.trim() || undefined;
     this.saving.set(true);
 
+    if (this.isEditing()) {
+      if (periods.length !== 1) {
+        this.saving.set(false);
+        this.messages.add({
+          severity: 'warn',
+          summary: 'Validação',
+          detail: 'Edição permite apenas um período contínuo.',
+        });
+        return;
+      }
+      const updatePayload: UpdateVacationPayload = {
+        employeeId: this.formEmployeeId,
+        startDate: periods[0].startDate,
+        endDate: periods[0].endDate,
+        notes: notes ?? null,
+      };
+      this.service.update(this.editingId()!, updatePayload).subscribe({
+        next: () => {
+          this.saving.set(false);
+          this.dialogVisible.set(false);
+          this.messages.add({ severity: 'success', summary: 'Atualizado', detail: 'Férias atualizadas.' });
+          this.load();
+          this.scheduleRefresh.notify();
+        },
+        error: (err) => {
+          this.saving.set(false);
+          this.messages.add({
+            severity: 'error',
+            summary: 'Erro',
+            detail: err.error?.error ?? 'Falha ao atualizar férias.',
+          });
+        },
+      });
+      return;
+    }
+
     this.service.createBatch({ employeeId: this.formEmployeeId, periods, notes }).subscribe({
       next: (res) => {
         this.saving.set(false);
         this.dialogVisible.set(false);
-        this.resetForm();
         this.messages.add({
           severity: batchResultSeverity(res),
           summary: res.created > 0 ? 'Criado' : 'Atenção',

@@ -82,7 +82,7 @@ describe("REAL_V1 — equilíbrio por turnos", () => {
     allocateFlightsForWorkdayDeficit(ws);
     const afterFlights = normals.map((n) => countMotorWorkDays(ws, n.employeeUuid));
     const allocatedAfter = normals.map((n) => countAllocatedTurns(ws, n.employeeUuid));
-    expect(afterFlights.some((w, i) => w > allocatedAfter[i])).toBe(true);
+    expect(afterFlights.every((w, i) => w === allocatedAfter[i])).toBe(true);
   });
 
   it("4. Curso/simulador/CMA não alteram alvo de turnos do PAO normal", () => {
@@ -144,10 +144,10 @@ describe("REAL_V1 — equilíbrio por turnos", () => {
     const after = computeTurnRateio(ws);
     const entryAfter = after.entries.find((e) => e.employeeUuid === uuid)!;
     expect(entryAfter.allocatedTurns).toBe(countAllocatedTurns(ws, uuid));
-    expect(entryAfter.allocatedTurns).not.toBe(countMotorWorkDays(ws, uuid));
+    expect(entryAfter.allocatedTurns).toBeLessThanOrEqual(countMotorWorkDays(ws, uuid));
   });
 
-  it("7. Voos entram depois para completar 20 dias trabalhados", () => {
+  it("7. Voos não aumentam dias trabalhados do motor", () => {
     const input = minimalPaoInput(3);
     const uuid = paoUuid(1);
     const ws = freshWorkspace(input);
@@ -160,10 +160,7 @@ describe("REAL_V1 — equilíbrio por turnos", () => {
 
     allocateFlightsForWorkdayDeficit(ws);
     const after = countMotorWorkDays(ws, uuid);
-    expect(after).toBeGreaterThanOrEqual(before);
-    if (before < MONTHLY_WORKDAY_TARGET) {
-      expect(after).toBeGreaterThan(before);
-    }
+    expect(after).toBe(before);
   });
 
   it("8. André não pode receber T8 se tiver restrição T8", () => {

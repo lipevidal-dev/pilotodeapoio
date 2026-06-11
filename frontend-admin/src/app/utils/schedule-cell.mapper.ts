@@ -5,7 +5,6 @@ import type {
   ScheduleAssignmentRow,
 } from '../models/api.models';
 import { compareEmployeesBySeniority } from './employee-sort.util';
-import { listParallelShiftCodes } from './coverage-type.util';
 import type { Shift } from '../models/api.models';
 
 import type {
@@ -275,34 +274,36 @@ export function resolveScheduleCell(
 
 
 
-function countForSummary(
-  cell: ScheduleCellData,
-  stats: EmployeeSummaryStats,
-  parallelShiftCodes: Set<string>,
-): void {
+function computeDisplayWorkDays(stats: EmployeeSummaryStats): number {
+  return (
+    stats.turnos +
+    stats.nd +
+    stats.voos +
+    stats.simuladores +
+    stats.cursos +
+    stats.cma +
+    stats.outros
+  );
+}
+
+function countForSummary(cell: ScheduleCellData, stats: EmployeeSummaryStats): void {
 
   switch (cell.kind) {
     case 'shift': {
       const d = cell.display.toUpperCase();
-      const isParallel = parallelShiftCodes.has(d);
       if (d === 'T6') {
         stats.t6++;
         stats.turnos++;
-        if (!isParallel) stats.diasTrabalhados++;
       } else if (d === 'T7') {
         stats.t7++;
         stats.turnos++;
-        if (!isParallel) stats.diasTrabalhados++;
       } else if (d === 'T8') {
         stats.t8++;
         stats.turnos++;
-        if (!isParallel) stats.diasTrabalhados++;
       } else if (['T1', 'T2', 'T3', 'T4'].includes(d)) {
         stats.turnos++;
-        stats.diasTrabalhados++;
       } else {
         stats.turnos++;
-        if (!isParallel) stats.diasTrabalhados++;
       }
       break;
     }
@@ -313,8 +314,6 @@ function countForSummary(
 
       stats.turnos++;
 
-      stats.diasTrabalhados++;
-
       break;
 
     case 't7':
@@ -322,8 +321,6 @@ function countForSummary(
       stats.t7++;
 
       stats.turnos++;
-
-      stats.diasTrabalhados++;
 
       break;
 
@@ -333,15 +330,11 @@ function countForSummary(
 
       stats.turnos++;
 
-      stats.diasTrabalhados++;
-
       break;
 
     case 'nd':
 
       stats.nd++;
-
-      stats.diasTrabalhados++;
 
       break;
 
@@ -409,15 +402,11 @@ function countForSummary(
 
       stats.voos++;
 
-      stats.diasTrabalhados++;
-
       break;
 
     case 'simulador':
 
       stats.simuladores++;
-
-      stats.diasTrabalhados++;
 
       break;
 
@@ -425,23 +414,17 @@ function countForSummary(
 
       stats.cursos++;
 
-      stats.diasTrabalhados++;
-
       break;
 
     case 'cma':
 
       stats.cma++;
 
-      stats.diasTrabalhados++;
-
       break;
 
     case 'outro':
 
       stats.outros++;
-
-      stats.diasTrabalhados++;
 
       break;
 
@@ -562,7 +545,6 @@ function buildEmployeeRow(
   days: number,
   assignmentMap: Map<string, ScheduleAssignmentRow>,
   operationalLabelMap: Map<string, string[]>,
-  parallelShiftCodes: Set<string>,
 ): EmployeeRowData {
   const cells: ScheduleCellData[] = [];
   const summary = emptySummary();
@@ -579,10 +561,11 @@ function buildEmployeeRow(
   applyWeekendFpAsFolgaSocial(cells, year, month);
 
   for (const cell of cells) {
-    countForSummary(cell, summary, parallelShiftCodes);
+    countForSummary(cell, summary);
   }
 
   summary.folgaSocialOk = summary.folgaSocial >= 2;
+  summary.diasTrabalhados = computeDisplayWorkDays(summary);
 
 
 
@@ -659,11 +642,9 @@ function mergeLabelMaps(
 }
 
 export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
-  const { year, month, employees, assignments, preAllocations, operationalCadastros, shifts } = input;
+  const { year, month, employees, assignments, preAllocations, operationalCadastros } = input;
   const days = daysInMonth(year, month);
   const dayNumbers = Array.from({ length: days }, (_, i) => i + 1);
-  const parallelShiftCodes = listParallelShiftCodes(shifts);
-
   const weekdayLabels = dayNumbers.map((d) => {
     const wd = new Date(year, month - 1, d).getDay();
     return WEEKDAYS[wd];
@@ -714,7 +695,6 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
       days,
       assignmentMap,
       operationalLabelMap,
-      parallelShiftCodes,
     );
     if (emp.type === 'PAO') {
       paoRows.push(row);

@@ -52,13 +52,16 @@
         (onClick)="generateFlights()"
       />
     }
-    <p-button
-      label="Atualizar visualização"
-      icon="pi pi-eye"
-      severity="secondary"
-      [loading]="loadingView()"
-      (onClick)="loadScheduleView()"
-    />
+    @if (scheduleData()?.scheduleMonth?.status === 'GENERATED') {
+      <p-button
+        label="Publicar Escala"
+        icon="pi pi-check-circle"
+        styleClass="btn-gol-publish"
+        [disabled]="!activeScheduleMonthId()"
+        [loading]="publishing()"
+        (onClick)="publish()"
+      />
+    }
     @if (
       scheduleData()?.scheduleMonth?.status === 'GENERATED' ||
       scheduleData()?.scheduleMonth?.status === 'DRAFT'
@@ -73,272 +76,13 @@
       />
     }
   </div>
+  @if (publishResult(); as pub) {
+    <p-message class="mt-3" severity="success" [text]="'Escala publicada — status: ' + pub.status" />
+  }
+  @if (publishBlocked(); as blocked) {
+    <p-message class="mt-3" severity="error" [text]="blocked.message" />
+  }
 </p-card>
-
-@if (generation(); as gen) {
-  <p-card styleClass="mb-3 collapsible-card">
-    <ng-template pTemplate="header">
-      <button type="button" class="collapsible-card-header" (click)="toggleSection('card-gen-summary')">
-        <i [class]="sectionChevron('card-gen-summary')"></i>
-        <span>Resumo da geração</span>
-      </button>
-    </ng-template>
-    @if (!isSectionCollapsed('card-gen-summary')) {
-    <div class="kpi-grid">
-      <div class="kpi-card kpi-card--orange">
-        <span class="kpi-label">Assignments</span>
-        <span class="kpi-value">{{ summaryValue('totalAssignments') }}</span>
-      </div>
-      <div class="kpi-card kpi-card--critical">
-        <span class="kpi-label">Críticos</span>
-        <span class="kpi-value">{{ summaryValue('criticalCount') }}</span>
-      </div>
-      <div class="kpi-card kpi-card--warning">
-        <span class="kpi-label">Warnings</span>
-        <span class="kpi-value">{{ summaryValue('warningCount') }}</span>
-      </div>
-      <div class="kpi-card kpi-card--success">
-        <span class="kpi-label">Dias cobertos</span>
-        <span class="kpi-value">{{ summaryValue('daysWithFullCoverage') }}</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Tempo (ms)</span>
-        <span class="kpi-value">{{ summaryValue('generationMs') }}</span>
-        <span class="kpi-meta">Geração do motor</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Status</span>
-        <span class="kpi-value kpi-value--tag">
-          <p-tag [value]="gen.status" [severity]="statusTagSeverity(gen.status)" />
-        </span>
-      </div>
-    </div>
-
-    <div class="detail-grid mt-3">
-      <div><span class="detail-label">scheduleMonthId</span><code>{{ gen.scheduleMonthId }}</code></div>
-      <div>
-        <span class="detail-label">Motor</span>
-        <p-tag [value]="gen.motorVersion ?? gen.summary.motorVersion ?? '—'" severity="success" />
-      </div>
-      @if (gen.realEngineExecuted ?? gen.summary.realEngineExecuted) {
-        <div><span class="detail-label">Motor real executado</span>Sim</div>
-      }
-      @if (gen.enginePath ?? gen.summary.enginePath; as path) {
-        <div><span class="detail-label">Caminho</span><code>{{ path }}</code></div>
-      }
-      <div><span class="detail-label">Total violações</span>{{ summaryValue('totalViolations') }}</div>
-      <div><span class="detail-label">Furos cobertura</span>{{ summaryValue('coverageMissingCount') }}</div>
-      <div><span class="detail-label">Cenário impossível</span>{{ summaryValue('impossibleScenario') }}</div>
-    </div>
-
-    @if (gen.summary.operationalTotals; as ot) {
-      <p-divider />
-      <button
-        type="button"
-        class="section-sub section-sub--toggle"
-        (click)="toggleSection('gen-operational-totals')"
-      >
-        <i [class]="sectionChevron('gen-operational-totals')"></i>
-        <span>Totais operacionais do mês</span>
-      </button>
-      @if (!isSectionCollapsed('gen-operational-totals')) {
-        <div class="detail-grid">
-          <div><span class="detail-label">Total turnos</span>{{ ot.totalTurnos }}</div>
-          <div><span class="detail-label">Total dias trabalhados</span>{{ ot.totalDiasTrabalhados }}</div>
-          <div><span class="detail-label">Total folgas</span>{{ ot.totalFolgas }}</div>
-          <div><span class="detail-label">Total FP</span>{{ ot.totalFp }}</div>
-          <div><span class="detail-label">Total férias</span>{{ ot.totalFerias }}</div>
-          <div><span class="detail-label">Total voos</span>{{ ot.totalVoos }}</div>
-          <div><span class="detail-label">Total simuladores</span>{{ ot.totalSimuladores }}</div>
-          <div><span class="detail-label">Total cursos</span>{{ ot.totalCursos }}</div>
-          <div><span class="detail-label">Total ND</span>{{ ot.totalNd ?? 0 }}</div>
-          <div><span class="detail-label">Total disponíveis</span>{{ ot.totalDisponiveis ?? ot.totalDiasVazios ?? 0 }}</div>
-        </div>
-      }
-    }
-
-    @if (gen.summary.mainBlockingReasons; as reasons) {
-      @if (reasons.length) {
-        <p-divider />
-        <button
-          type="button"
-          class="section-sub section-sub--toggle severity-critical"
-          (click)="toggleSection('gen-blocking-reasons')"
-        >
-          <i [class]="sectionChevron('gen-blocking-reasons')"></i>
-          <span>Motivos principais de bloqueio</span>
-        </button>
-        @if (!isSectionCollapsed('gen-blocking-reasons')) {
-          <ul class="reason-list">
-            @for (r of reasons; track r) {
-              <li>{{ r }}</li>
-            }
-          </ul>
-        }
-      }
-    }
-
-    @if (gen.suggestions.length) {
-      <p-divider />
-      <button
-        type="button"
-        class="section-sub section-sub--toggle"
-        (click)="toggleSection('gen-suggestions')"
-      >
-        <i [class]="sectionChevron('gen-suggestions')"></i>
-        <span>Sugestões do motor</span>
-      </button>
-      @if (!isSectionCollapsed('gen-suggestions')) {
-        <ul class="reason-list">
-          @for (s of gen.suggestions; track s) {
-            <li>{{ s }}</li>
-          }
-        </ul>
-      }
-    }
-    }
-  </p-card>
-
-  <!-- Violações -->
-  <p-card styleClass="mb-3 collapsible-card">
-    <ng-template pTemplate="header">
-      <button type="button" class="collapsible-card-header" (click)="toggleSection('card-violations')">
-        <i [class]="sectionChevron('card-violations')"></i>
-        <span>Violações</span>
-      </button>
-    </ng-template>
-    @if (!isSectionCollapsed('card-violations')) {
-    <button
-      type="button"
-      class="section-sub section-sub--toggle severity-critical"
-      (click)="toggleSection('violations-critical')"
-    >
-      <i [class]="sectionChevron('violations-critical')"></i>
-      <i class="pi pi-times-circle"></i>
-      <span>CRITICAL ({{ criticalViolations().length }})</span>
-    </button>
-    @if (!isSectionCollapsed('violations-critical')) {
-      <p-table [value]="criticalViolations()" styleClass="gol-table p-datatable-sm mb-3">
-        <ng-template pTemplate="header">
-          <tr>
-            <th>Regra</th>
-            <th>Mensagem</th>
-            <th>Data</th>
-            <th>Funcionário</th>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="body" let-v>
-          <tr class="row-critical">
-            <td><code>{{ v.ruleCode }}</code></td>
-            <td>{{ v.message }}</td>
-            <td>{{ formatDate(v.date) }}</td>
-            <td>{{ violationEmployee(v) }}</td>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="emptymessage">
-          <tr>
-            <td colspan="4">Nenhuma violação CRITICAL.</td>
-          </tr>
-        </ng-template>
-      </p-table>
-    }
-
-    <button
-      type="button"
-      class="section-sub section-sub--toggle severity-warning"
-      (click)="toggleSection('violations-warning')"
-    >
-      <i [class]="sectionChevron('violations-warning')"></i>
-      <i class="pi pi-exclamation-triangle"></i>
-      <span>WARNING ({{ warningViolations().length }})</span>
-    </button>
-    @if (!isSectionCollapsed('violations-warning')) {
-      <p-table [value]="warningViolations()" styleClass="gol-table p-datatable-sm mb-3">
-        <ng-template pTemplate="header">
-          <tr>
-            <th>Regra</th>
-            <th>Mensagem</th>
-            <th>Data</th>
-            <th>Funcionário</th>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="body" let-v>
-          <tr class="row-warning">
-            <td><code>{{ v.ruleCode }}</code></td>
-            <td>{{ v.message }}</td>
-            <td>{{ formatDate(v.date) }}</td>
-            <td>{{ violationEmployee(v) }}</td>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="emptymessage">
-          <tr>
-            <td colspan="4">Nenhuma violação WARNING.</td>
-          </tr>
-        </ng-template>
-      </p-table>
-    }
-    }
-  </p-card>
-
-  <!-- Publicação -->
-  <p-card styleClass="mb-3 publish-card collapsible-card">
-    <ng-template pTemplate="header">
-      <button type="button" class="collapsible-card-header" (click)="toggleSection('card-publish')">
-        <i [class]="sectionChevron('card-publish')"></i>
-        <span>Publicação</span>
-      </button>
-    </ng-template>
-    @if (!isSectionCollapsed('card-publish')) {
-    <p class="publish-hint">
-      Publica a escala gerada. Bloqueado automaticamente se houver violações CRITICAL.
-    </p>
-    <p-button
-      label="Publicar Escala"
-      icon="pi pi-check-circle"
-      styleClass="btn-gol-publish ops-btn-publish"
-          [disabled]="!activeScheduleMonthId()"
-      [loading]="publishing()"
-      (onClick)="publish()"
-    />
-
-    @if (publishResult(); as pub) {
-      <p-message class="mt-3" severity="success" [text]="'Status: ' + pub.status" />
-    }
-
-    @if (publishBlocked(); as blocked) {
-      <p-message class="mt-3" severity="error" [text]="blocked.message" />
-      <button
-        type="button"
-        class="section-sub section-sub--toggle mt-2 severity-critical"
-        (click)="toggleSection('publish-blocked-violations')"
-      >
-        <i [class]="sectionChevron('publish-blocked-violations')"></i>
-        <span>Violações CRITICAL no bloqueio</span>
-      </button>
-      @if (!isSectionCollapsed('publish-blocked-violations')) {
-        <p-table [value]="blocked.criticalViolations" styleClass="gol-table p-datatable-sm">
-          <ng-template pTemplate="header">
-            <tr>
-              <th>Regra</th>
-              <th>Mensagem</th>
-              <th>Data</th>
-              <th>Funcionário</th>
-            </tr>
-          </ng-template>
-          <ng-template pTemplate="body" let-v>
-            <tr class="row-critical">
-              <td><code>{{ v.ruleCode }}</code></td>
-              <td>{{ v.message }}</td>
-              <td>{{ formatDate(v.date) }}</td>
-              <td>{{ v.employee ?? '—' }}</td>
-            </tr>
-          </ng-template>
-        </p-table>
-      }
-    }
-    }
-  </p-card>
-}
 
 <!-- Grade operacional -->
 <p-card styleClass="grid-card gol-card-accent">

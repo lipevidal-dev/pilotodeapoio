@@ -14,14 +14,8 @@ import type { ValidationIssue } from "./types.js";
 import type { EmployeeOperationalSummary } from "./operational-summary.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import { normalizeOperationalLabel } from "./operational-labels.js";
-import { listParallelShiftCodes } from "../shift/coverage-type.js";
 
 export type OperationalStatus = "OK" | "ATENÇÃO" | "CRÍTICO";
-
-export interface EmployeeOperationalEvaluation {
-  status: OperationalStatus;
-  statusReason: string | null;
-}
 
 const WORK_ALLOC_LABELS = new Set([
   "ND",
@@ -32,6 +26,11 @@ const WORK_ALLOC_LABELS = new Set([
   "CMA",
   "OUTRO",
 ]);
+
+export interface EmployeeOperationalEvaluation {
+  status: OperationalStatus;
+  statusReason: string | null;
+}
 
 /** Dia central da maior sequência consecutiva (para quebra de streak). */
 export function longestStreakMiddleDay(dates: string[], minLength = 1): string | null {
@@ -81,14 +80,11 @@ export function maxConsecutiveWorkDays(dates: string[]): number {
 
 export function workDatesFromWorkspace(ws: GenerationWorkspace, uuid: string): string[] {
   const dates: string[] = [];
-  const parallel = new Set(listParallelShiftCodes(ws.input.shifts));
   const did = ws.uuidToDomain.get(uuid);
   if (did != null) {
-    for (const [key, shiftCode] of ws.historyPlanned.entries()) {
+    for (const [key] of ws.historyPlanned.entries()) {
       const parsed = parseAssignmentKey(key);
-      if (parsed.employeeId !== did) continue;
-      if (parallel.has(shiftCode.toUpperCase())) continue;
-      dates.push(parsed.day);
+      if (parsed.employeeId === did) dates.push(parsed.day);
     }
     for (const [key, label] of ws.historyBlocked.entries()) {
       const parsed = parseAssignmentKey(key);
@@ -97,9 +93,7 @@ export function workDatesFromWorkspace(ws: GenerationWorkspace, uuid: string): s
     }
   }
   for (const a of ws.toAssignments()) {
-    if (a.employeeUuid !== uuid) continue;
-    if (parallel.has(a.shiftCode.toUpperCase())) continue;
-    dates.push(a.date);
+    if (a.employeeUuid === uuid) dates.push(a.date);
   }
   for (const al of ws.allocations) {
     if (al.employeeUuid !== uuid) continue;

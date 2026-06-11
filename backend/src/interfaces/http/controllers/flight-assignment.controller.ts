@@ -4,6 +4,7 @@ import { createBatchDeleteHandler } from "./batch-delete.controller.js";
 import {
   createFlightAssignmentBatchSchema,
   createFlightAssignmentSchema,
+  updateFlightAssignmentSchema,
 } from "../dto/flight-assignment.dto.js";
 
 export async function listFlightAssignmentsController(_req: FastifyRequest, reply: FastifyReply) {
@@ -39,6 +40,24 @@ export async function createFlightAssignmentController(req: FastifyRequest, repl
       return reply.status(409).send({ error: "Já existe voo para este funcionário nesta data" });
     }
     return reply.status(400).send({ error: msg });
+  }
+}
+
+export async function updateFlightAssignmentController(
+  req: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply,
+) {
+  const parsed = updateFlightAssignmentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return reply.status(400).send({ error: "Payload inválido", details: parsed.error.flatten() });
+  }
+  try {
+    const updated = await flightAssignmentUseCase.update(req.params.id, parsed.data);
+    return reply.send(updated);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro ao atualizar voo";
+    const status = msg.includes("não encontrado") ? 404 : 400;
+    return reply.status(status).send({ error: msg });
   }
 }
 

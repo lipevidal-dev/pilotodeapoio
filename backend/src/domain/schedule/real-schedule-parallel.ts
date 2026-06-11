@@ -1,5 +1,6 @@
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import { listParallelShiftCodes } from "../shift/coverage-type.js";
+import { assignmentKey } from "./types.js";
 import {
   computeTurnRateio,
   countAllocatedTurns,
@@ -22,6 +23,7 @@ function refreshEntry(entry: TurnRateioEntry, ws: GenerationWorkspace, uuid: str
   entry.turnDeviation = entry.allocatedTurns - entry.turnTarget;
 }
 
+/** Preenche T9/paralelos em dias livres até assignedShiftCount ≈ turnTarget. */
 export function allocateParallelShifts(ws: GenerationWorkspace): ParallelAllocationReport {
   const parallelCodes = listParallelShiftCodes(ws.input.shifts);
   const byShift: Record<string, ParallelShiftAllocationDetail> = {};
@@ -34,35 +36,37 @@ export function allocateParallelShifts(ws: GenerationWorkspace): ParallelAllocat
     byShift[code] = { days: 0, employees: [], conflicts: 0 };
     const assignedEmployees = new Set<string>();
 
-    for (const day of ws.days) {
-      if (ws.hasParallelShiftOnDay(day, code)) continue;
+    const eligible = ws.paoEmps
+      .filter((c) => ws.input.preferredShifts?.get(c.domainId)?.has(code))
+      .sort((a, b) => {
+        const ea = entryByUuid.get(a.uuid)!;
+        const eb = entryByUuid.get(b.uuid)!;
+        if (ea.turnDeviation !== eb.turnDeviation) return ea.turnDeviation - eb.turnDeviation;
+        return a.employee.seniority - b.employee.seniority;
+      });
 
-      const candidates = ws.paoEmps
-        .filter((c) => ws.input.preferredShifts?.get(c.domainId)?.has(code))
-        .filter((c) => {
-          const entry = entryByUuid.get(c.uuid);
-          return entry != null && entry.allocatedTurns < entry.turnTarget;
-        })
-        .sort((a, b) => {
-          const ea = entryByUuid.get(a.uuid)!;
-          const eb = entryByUuid.get(b.uuid)!;
-          if (ea.turnDeviation !== eb.turnDeviation) return ea.turnDeviation - eb.turnDeviation;
-          return a.employee.seniority - b.employee.seniority;
-        });
+    for (const c of eligible) {
+      const entry = entryByUuid.get(c.uuid);
+      if (!entry || entry.allocatedTurns >= entry.turnTarget) continue;
 
-      let placed = false;
-      for (const c of candidates) {
+      const did = c.domainId;
+      let progress = false;
+
+      for (const day of ws.days) {
+        if (entry.allocatedTurns >= entry.turnTarget) break;
+        if (ws.planned.has(assignmentKey(did, day))) continue;
+        if (ws.hasParallelShiftOnDay(day, code)) continue;
+
         if (ws.tryAssignShift(c.uuid, day, code)) {
           parallelShiftsAllocated++;
           byShift[code].days++;
           assignedEmployees.add(c.uuid);
-          const entry = entryByUuid.get(c.uuid);
-          if (entry) refreshEntry(entry, ws, c.uuid);
-          placed = true;
-          break;
+          refreshEntry(entry, ws, c.uuid);
+          progress = true;
         }
       }
-      if (!placed && candidates.length > 0) {
+
+      if (!progress && entry.allocatedTurns < entry.turnTarget) {
         byShift[code].conflicts++;
       }
     }

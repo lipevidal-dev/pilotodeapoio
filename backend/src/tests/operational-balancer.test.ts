@@ -52,11 +52,12 @@ describe("Fase 7.2 — Balanceador pós-geração", () => {
     const ws = freshWorkspace(input);
     setupCoveredMonth(ws);
 
-    const streak = MONTH_DAYS.slice(5, 13);
+    const streak = MONTH_DAYS.slice(5, 14);
+    const did = ws.input.employees.find((e) => e.uuid === uuid)!.domainId;
     for (const day of streak) {
       ws.unassignShift(uuid, day);
       ws.tryRemoveMotorVoo(uuid, day);
-      ws.lockDay(uuid, day, "VOO");
+      ws["planned"].set(`${did}|${day}`, "T7");
     }
 
     const before = buildOperationalSummary(ws).byEmployee.find((e) => e.employeeUuid === uuid)!;

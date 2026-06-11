@@ -19,3 +19,12 @@ export const createRequestedDayOffBatchSchema = z.object({
 });
 
 export type CreateRequestedDayOffBatchBody = z.infer<typeof createRequestedDayOffBatchSchema>;
+
+export const updateRequestedDayOffSchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  date: dateStr.optional(),
+  status: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
+  notes: z.string().max(500).nullable().optional(),
+});
+
+export type UpdateRequestedDayOffBody = z.infer<typeof updateRequestedDayOffSchema>;

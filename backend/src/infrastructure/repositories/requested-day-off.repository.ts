@@ -56,4 +56,25 @@ export class RequestedDayOffRepository {
   delete(id: string) {
     return prisma.requestedDayOff.delete({ where: { id } });
   }
+
+  update(
+    id: string,
+    data: {
+      employeeId?: string;
+      date?: string;
+      status?: RequestedDayOffStatus;
+      notes?: string | null;
+    },
+  ) {
+    return prisma.requestedDayOff.update({
+      where: { id },
+      data: {
+        employeeId: data.employeeId,
+        date: data.date ? toDbDate(data.date) : undefined,
+        status: data.status,
+        notes: data.notes,
+      },
+      include: { employee: true },
+    });
+  }
 }

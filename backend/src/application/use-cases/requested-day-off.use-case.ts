@@ -76,6 +76,38 @@ export class RequestedDayOffUseCase {
     };
   }
 
+  async update(
+    id: string,
+    input: {
+      employeeId?: string;
+      date?: string;
+      status?: "PENDING" | "APPROVED" | "REJECTED";
+      notes?: string | null;
+    },
+  ) {
+    const row = await repo.findById(id);
+    if (!row) throw new Error("Folga pedida não encontrada");
+
+    const employeeId = input.employeeId ?? row.employeeId;
+    const date = input.date ?? isoDateKey(row.date);
+    const status = input.status ?? row.status;
+
+    if (input.date || input.employeeId || input.status) {
+      const existing = await repo.findByEmployeeDatesStatus(employeeId, [date], status);
+      const duplicate = existing.find((r) => r.id !== id);
+      if (duplicate) {
+        throw new Error("Já existe folga pedida para este funcionário nesta data");
+      }
+    }
+
+    return repo.update(id, {
+      employeeId: input.employeeId,
+      date: input.date,
+      status: input.status,
+      notes: input.notes,
+    });
+  }
+
   async remove(id: string) {
     const row = await repo.findById(id);
     if (!row) throw new Error("Folga pedida não encontrada");

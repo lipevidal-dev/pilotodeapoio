@@ -4,6 +4,7 @@ import { createBatchDeleteHandler } from "./batch-delete.controller.js";
 import {
   createRequestedDayOffBatchSchema,
   createRequestedDayOffSchema,
+  updateRequestedDayOffSchema,
 } from "../dto/requested-day-off.dto.js";
 
 export async function listRequestedDayOffsController(_req: FastifyRequest, reply: FastifyReply) {
@@ -31,6 +32,24 @@ export async function createRequestedDayOffBatchController(req: FastifyRequest, 
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro ao criar FPs em lote";
     return reply.status(400).send({ error: msg });
+  }
+}
+
+export async function updateRequestedDayOffController(
+  req: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply,
+) {
+  const parsed = updateRequestedDayOffSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return reply.status(400).send({ error: "Payload inválido", details: parsed.error.flatten() });
+  }
+  try {
+    const updated = await requestedDayOffUseCase.update(req.params.id, parsed.data);
+    return reply.send(updated);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro ao atualizar folga pedida";
+    const status = msg.includes("não encontrada") ? 404 : 400;
+    return reply.status(status).send({ error: msg });
   }
 }
 

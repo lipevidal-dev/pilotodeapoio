@@ -114,6 +114,8 @@ export class PreAllocationUseCase {
       date?: string;
       notes?: string | null;
       employeeId?: string;
+      startTime?: string | null;
+      endTime?: string | null;
     },
     expectedLabel?: string,
   ) {
@@ -125,10 +127,26 @@ export class PreAllocationUseCase {
       throw new Error("Cadastro operacional não encontrado para este tipo");
     }
 
+    const employeeId = input.employeeId ?? row.employeeId;
+    const dateIso = input.date ?? isoDateKey(row.date);
+    if (input.date || input.employeeId) {
+      const conflicts = await preAllocRepo.findByScheduleMonthEmployeeDates(
+        row.scheduleMonthId,
+        employeeId,
+        [dateIso],
+      );
+      const duplicate = conflicts.find((c) => c.id !== id && c.label.toUpperCase() === row.label.toUpperCase());
+      if (duplicate) {
+        throw new Error("Já existe cadastro operacional para este funcionário nesta data");
+      }
+    }
+
     return preAllocRepo.update(id, {
       employeeId: input.employeeId,
       date: input.date ? new Date(`${input.date}T12:00:00.000Z`) : undefined,
       notes: input.notes,
+      startTime: input.startTime,
+      endTime: input.endTime,
     });
   }
 

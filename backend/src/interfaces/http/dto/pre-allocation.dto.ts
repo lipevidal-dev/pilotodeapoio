@@ -51,6 +51,15 @@ export const updatePreAllocationSchema = z.object({
   date: dateStr.optional(),
   notes: z.string().nullable().optional(),
   employeeId: z.string().uuid().optional(),
-});
+  startTime: hhmm.optional(),
+  endTime: hhmm.optional(),
+}).refine(
+  (data) => {
+    const hasStart = !!data.startTime;
+    const hasEnd = !!data.endTime;
+    return hasStart === hasEnd;
+  },
+  { message: "Informe hora inicial e final do simulador", path: ["endTime"] },
+);
 
 export type UpdatePreAllocationBody = z.infer<typeof updatePreAllocationSchema>;
