@@ -3,6 +3,7 @@ import { canWork } from "../rules/eligibility.js";
 import { has12hRest } from "../rules/time.js";
 import { FANI_LABEL } from "../rules/birthday.js";
 import { IDEAL_PAO_REST_COUNT } from "../rules/constants.js";
+import { countPrimaryRateioTurns } from "./pao-rateio-shifts.js";
 import { normalizeOperationalLabel } from "./operational-labels.js";
 import {
   canAssignShiftWithRateio,
@@ -203,13 +204,13 @@ function classifyDayRefusal(
     };
   }
 
-  const budget = ws.workCount(uuid) + 1 + ws.countNd(uuid) + IDEAL_PAO_REST_COUNT;
+  const budget = countPrimaryRateioTurns(ws, uuid) + 1 + ws.countNd(uuid) + IDEAL_PAO_REST_COUNT;
   if (budget > ws.days.length) {
     return { day, shift, reason: "OUTRO", detail: "cota mensal esgotada (turnos+ND+folgas)" };
   }
 
   const maxWork = ws.maxWorkDaysForPao(uuid);
-  if (maxWork != null && ws.workCount(uuid) >= maxWork) {
+  if (maxWork != null && countPrimaryRateioTurns(ws, uuid) >= maxWork) {
     return { day, shift, reason: "OUTRO", detail: `limite ${maxWork} turnos (mês parcial)` };
   }
 

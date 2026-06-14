@@ -8,7 +8,7 @@ import {
   workTargetForGroup,
 } from "./real-schedule-targets.js";
 import { computeTurnRateio } from "./real-schedule-turn-rateio.js";
-import { countMotorWorkDays, countWorkdayBreakdown } from "./real-schedule-workdays.js";
+import { countWorkdayBreakdown, countWorkedDays } from "./real-schedule-workdays.js";
 import { MONTHLY_WORKDAY_TARGET, type EmployeeDiagnostic } from "./real-schedule-types.js";
 
 function shiftIdsForCodes(codes: string[]): string[] {
@@ -92,7 +92,7 @@ export function buildEmployeeDiagnostics(ws: GenerationWorkspace): EmployeeDiagn
     const target = workTargetForGroup(ws, c.uuid, group);
     const breakdown = countWorkdayBreakdown(ws, c.uuid);
     const rs = calculateRequiredT6T7Shifts(ws, c.uuid);
-    const actual = countMotorWorkDays(ws, c.uuid);
+    const actual = countWorkedDays(ws, c.uuid);
     const op = summaryByUuid.get(c.uuid);
     const entry = rateioByUuid.get(c.uuid);
 

@@ -11,11 +11,15 @@ import {
   buildGenerationInput,
   preAllocationsToLocked,
 } from "../../infrastructure/mappers/generation-input.mapper.js";
+import { validateGenerationBeforeSave } from "../../domain/schedule/schedule-generation-validators.js";
 import {
   issueToApiViolation,
   validationIssuesToDb,
 } from "../../infrastructure/mappers/violation.mapper.js";
-import { PublishedScheduleCannotRegenerateError } from "../errors/schedule.errors.js";
+import {
+  PublishedScheduleCannotRegenerateError,
+  SchedulePersistenceValidationError,
+} from "../errors/schedule.errors.js";
 
 export interface GenerateScheduleResult {
   scheduleMonthId: string;
@@ -36,6 +40,16 @@ export interface GenerateScheduleResult {
   motorVersion: typeof MOTOR_VERSION_ID;
   enginePath: typeof ENGINE_PATH;
   realEngineExecuted: true;
+  /** Preenchido quando validateBeforeSave falha antes da persistência. */
+  persistenceBlocked?: boolean;
+  persistenceValidationIssues?: Array<{
+    severity: string;
+    ruleCode: string;
+    message: string;
+    date: string;
+    employee: string;
+    detail: string;
+  }>;
 }
 
 export class GenerateScheduleUseCase {
@@ -93,6 +107,24 @@ export class GenerateScheduleUseCase {
     });
 
     const generated = this.engine.generate(input);
+
+    const saveValidation = validateGenerationBeforeSave(input, generated);
+    if (saveValidation.criticalCount > 0) {
+      const apiIssues = saveValidation.issues.map(issueToApiViolation);
+      throw new SchedulePersistenceValidationError({
+        stage: saveValidation.stage,
+        criticalCount: saveValidation.criticalCount,
+        issues: apiIssues.map((v) => ({
+          level: "CRITICAL" as const,
+          ruleCode: v.ruleCode,
+          message: v.message,
+          date: v.date,
+          employee: v.employee,
+          detail: v.detail,
+        })),
+      });
+    }
+
     const monthRecord = await this.scheduleRepo.upsertGeneratedMonth(year, month);
 
     await this.scheduleRepo.clearForRegeneration(monthRecord.id);

@@ -2,9 +2,13 @@ import type { EmployeeBlockPlan } from "./demand-planning-types.js";
 import type {
   GeneratedAllocation,
   GeneratedAssignment,
+  GenerationInput,
+  GenerationResult,
 } from "./generation-types.js";
-import type { GenerationWorkspace } from "./generation-workspace.js";
+import { GenerationWorkspace } from "./generation-workspace.js";
 import type { ScheduleRateioContext } from "./schedule-rateio-context.js";
+import { countRateioTurns } from "./pao-rateio-shifts.js";
+import { countWorkedDays } from "./real-schedule-workdays.js";
 import type { ValidationIssue } from "./types.js";
 import type { V3BlockMaterializeAudit } from "./v3-block-materialize-audit.js";
 import type { RealMotorReport } from "./real-schedule-types.js";
@@ -111,6 +115,7 @@ function buildEmployeeTurnSnapshots(ws: GenerationWorkspace): EmployeeTurnSnapsh
     const turnsT7 = ctx?.currentT7Counts.get(uuid) ?? 0;
     const turnsT8 = ctx?.currentT8Counts.get(uuid) ?? 0;
     const turnsT9 = ctx?.currentT9Counts.get(uuid) ?? 0;
+    const turnsFromGrid = countRateioTurns(ws, uuid);
     return {
       employeeUuid: uuid,
       name: c.employee.name,
@@ -118,13 +123,33 @@ function buildEmployeeTurnSnapshots(ws: GenerationWorkspace): EmployeeTurnSnapsh
       turnsT7,
       turnsT8,
       turnsT9,
-      turnsTotal: turnsT6 + turnsT7 + turnsT8 + turnsT9,
-      workdaysFromBreakdown: turnsT6 + turnsT7 + turnsT8 + turnsT9,
+      turnsTotal: turnsFromGrid,
+      workdaysFromBreakdown: countWorkedDays(ws, uuid),
       minTurn: ctx?.minTurnCounts.get(uuid) ?? null,
       targetTurn: ctx?.targetTurnCounts.get(uuid) ?? null,
       maxTurn: ctx?.maxTurnCounts.get(uuid) ?? null,
     };
   });
+}
+
+/** Reconstrói workspace a partir do resultado do motor (pré-persistência). */
+export function buildWorkspaceFromGenerationResult(
+  input: GenerationInput,
+  result: GenerationResult,
+): GenerationWorkspace {
+  const ws = new GenerationWorkspace(input);
+  ws.applyHardBlocks();
+  for (const a of result.assignments) {
+    const did = ws.uuidToDomain.get(a.employeeUuid);
+    if (did == null) continue;
+    ws.planned.set(`${did}|${a.date}`, a.shiftCode);
+  }
+  for (const al of result.allocations) {
+    ws.allocations.push({ ...al });
+  }
+  ws.initRateioContext();
+  ws.syncRateioContext();
+  return ws;
 }
 
 /** Reconstrói o estado oficial a partir do workspace (sync rateio antes de chamar). */

@@ -3,9 +3,9 @@ import { listParallelShiftCodes } from "../shift/coverage-type.js";
 import { assignmentKey } from "./types.js";
 import { addDays } from "../rules/dates.js";
 import { isParallelOnlyPreferredPao } from "./employee-t6-t7-shift.js";
+import { countRateioTurns } from "./pao-rateio-shifts.js";
 import {
   computeTurnRateio,
-  countAllocatedTurns,
   type TurnRateioEntry,
 } from "./real-schedule-turn-rateio.js";
 
@@ -21,7 +21,7 @@ export interface ParallelAllocationReport {
 }
 
 function refreshEntry(entry: TurnRateioEntry, ws: GenerationWorkspace, uuid: string): void {
-  entry.allocatedTurns = countAllocatedTurns(ws, uuid);
+  entry.allocatedTurns = countRateioTurns(ws, uuid);
   entry.turnDeviation = entry.allocatedTurns - entry.turnTarget;
 }
 

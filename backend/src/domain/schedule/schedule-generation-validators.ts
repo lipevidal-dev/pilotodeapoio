@@ -1,6 +1,11 @@
 import { auditStructuralT8 } from "./real-schedule-t8.js";
 import { countRateioTurns, isRateioTurnShiftCode } from "./pao-rateio-shifts.js";
-import { countWorkdayBreakdown } from "./real-schedule-workdays.js";
+import { countWorkedDays } from "./real-schedule-workdays.js";
+import type { GenerationInput, GenerationResult, GeneratedAssignment } from "./generation-types.js";
+import {
+  buildWorkspaceFromGenerationResult,
+  refreshScheduleGenerationState,
+} from "./schedule-generation-state.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import {
   currentTurnCount,
@@ -94,7 +99,54 @@ export function validateNdNotCountedAsTurn(ws: GenerationWorkspace): ValidationI
   return issues;
 }
 
-/** Assignments duplicados: mesmo PAO + dia com turno. */
+/** Assignments duplicados na lista gerada (antes de reconstruir workspace). */
+export function validateAssignmentListDuplicates(
+  assignments: GeneratedAssignment[],
+): ValidationIssue[] {
+  const seen = new Map<string, string>();
+  const issues: ValidationIssue[] = [];
+  for (const a of assignments) {
+    const key = `${a.employeeUuid}|${a.date}`;
+    const prev = seen.get(key);
+    if (prev != null) {
+      issues.push(
+        issue(
+          "DUPLICATE_ASSIGNMENT",
+          `${prev} e ${a.shiftCode} no mesmo dia (lista gerada)`,
+          a.employeeUuid,
+          a.date,
+          "CRÍTICA",
+        ),
+      );
+    } else {
+      seen.set(key, a.shiftCode);
+    }
+  }
+  return issues;
+}
+
+/** ND não deve aparecer como shiftCode em assignments gerados. */
+export function validateAssignmentListNoNd(
+  assignments: GeneratedAssignment[],
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  for (const a of assignments) {
+    if (a.shiftCode.toUpperCase() === "ND") {
+      issues.push(
+        issue(
+          "ND_AS_SHIFT",
+          "ND na lista de assignments (deve estar em allocations)",
+          a.employeeUuid,
+          a.date,
+          "CRÍTICA",
+        ),
+      );
+    }
+  }
+  return issues;
+}
+
+/** Assignments duplicados: mesmo PAO + dia com turno no grid. */
 export function validateNoDuplicateAssignments(ws: GenerationWorkspace): ValidationIssue[] {
   const seen = new Map<string, string>();
   const issues: ValidationIssue[] = [];
@@ -228,30 +280,18 @@ export function validateProportionalBounds(
   return issues;
 }
 
-/** Dias trabalhados (breakdown) separados de contagem de turnos rateio. */
+/** Dias trabalhados devem incluir turnos rateio (nunca ser menores). */
 export function validateWorkdaysSeparateFromTurns(ws: GenerationWorkspace): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   for (const c of ws.paoEmps) {
     const uuid = c.uuid;
     const turns = countRateioTurns(ws, uuid);
-    const breakdown = countWorkdayBreakdown(ws, uuid);
-    const shiftOnlyTotal = breakdown.turnosT6 + breakdown.turnosT7 + breakdown.turnosT8;
-    const t9Count = turns - shiftOnlyTotal;
-
-    if (breakdown.total !== shiftOnlyTotal + t9Count) {
-      issues.push(
-        issue(
-          "WORKDAY_BREAKDOWN_MISMATCH",
-          `breakdown.total=${breakdown.total} T6+T7+T8+T9=${shiftOnlyTotal}+${t9Count}`,
-          c.employee.name,
-        ),
-      );
-    }
-    if (turns !== breakdown.total) {
+    const workedDays = countWorkedDays(ws, uuid);
+    if (workedDays < turns) {
       issues.push(
         issue(
           "TURNS_VS_WORKDAYS_MISMATCH",
-          `countRateioTurns=${turns} breakdown.total=${breakdown.total}`,
+          `countRateioTurns=${turns} countWorkedDays=${workedDays}`,
           c.employee.name,
         ),
       );
@@ -379,6 +419,24 @@ function finalize(stage: string, issues: ValidationIssue[]): PipelineValidationR
     (i) => i.severity === "CRÍTICA" || i.level === "CRITICAL",
   ).length;
   return { stage, issues, criticalCount };
+}
+
+/**
+ * Valida resultado do motor antes de persistir — reconstrói workspace e executa validateBeforeSave.
+ */
+export function validateGenerationBeforeSave(
+  input: GenerationInput,
+  result: GenerationResult,
+): PipelineValidationResult {
+  const listIssues = [
+    ...validateAssignmentListNoNd(result.assignments),
+    ...validateAssignmentListDuplicates(result.assignments),
+  ];
+  const ws = buildWorkspaceFromGenerationResult(input, result);
+  const state = refreshScheduleGenerationState(ws, { stage: "PERSISTENCE" });
+  const gridValidation = validateBeforeSave(state, ws);
+  const issues = [...listIssues, ...gridValidation.issues];
+  return finalize("BEFORE_SAVE", issues);
 }
 
 /** Agrega múltiplos resultados de checkpoint. */

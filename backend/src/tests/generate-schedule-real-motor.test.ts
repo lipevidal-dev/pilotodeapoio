@@ -7,19 +7,24 @@ import {
 } from "../domain/schedule/schedule-generation-engine.js";
 import {
   ENGINE_PATH,
-  MOTOR_VERSION_ID,
 } from "../domain/schedule/real-schedule-types.js";
 import type { GenerationInput, GenerationResult } from "../domain/schedule/generation-types.js";
+import { realisticGenerationInput } from "./realistic-fixtures.js";
 import { minimalPaoInput } from "./generation-fixtures.js";
+import {
+  mockPrismaEmployeesFromRealistic,
+  mockPrismaRoles,
+  mockPrismaShifts,
+} from "./helpers/generate-schedule-mocks.js";
 
 function mockRepos() {
   return {
     scheduleRepo: {
       findMonth: async () => null,
-      listActiveEmployees: async () => [],
-      listShifts: async () => minimalPaoInput().shifts,
-      listRoles: async () => [],
-      loadCrossMonthHistory: async () => ({}),
+      listActiveEmployees: async () => mockPrismaEmployeesFromRealistic(),
+      listShifts: async () => mockPrismaShifts(),
+      listRoles: async () => mockPrismaRoles(),
+      loadCrossMonthHistory: async () => undefined,
       listShiftRestrictionsForMonth: async () => [],
       listPreferredShiftsForMonth: async () => [],
       listNoFlightDatesForMonth: async () => [],
@@ -41,33 +46,13 @@ function mockRepos() {
   };
 }
 
-function stubGenerationResult(): GenerationResult {
-  return {
-    assignments: [{ employeeUuid: "uuid-1", date: "2026-06-01", shiftCode: "T6" }],
-    allocations: [],
-    violations: [],
-    summary: {
-      valid: true,
-      totalAssignments: 1,
-      totalAllocations: 0,
-      paoCount: 1,
-      apaoCount: 0,
-      folgasPerPao: {},
-      coverageGaps: 0,
-      blockingViolations: 0,
-      totalViolations: 0,
-      motorVersion: MOTOR_VERSION_ID,
-      enginePath: ENGINE_PATH,
-      realEngineExecuted: true,
-    },
-    success: true,
-    suggestions: [],
-  };
+function stubGenerationResult(month = 7): GenerationResult {
+  return new RealScheduleEngine().generate(realisticGenerationInput({ year: 2026, month }));
 }
 
 describe("GenerateScheduleUseCase — motor REAL_V1", () => {
   it("endpoint use-case chama RealScheduleEngine (não legacy)", async () => {
-    const realGenerate = vi.fn((_input: GenerationInput) => stubGenerationResult());
+    const realGenerate = vi.fn((_input: GenerationInput) => stubGenerationResult(7));
     const realEngine = { generate: realGenerate } as unknown as RealScheduleEngine;
 
     const { scheduleRepo, calendarRepo, preAllocRepo } = mockRepos();
@@ -78,7 +63,7 @@ describe("GenerateScheduleUseCase — motor REAL_V1", () => {
       realEngine,
     );
 
-    const result = await uc.execute(2026, 6);
+    const result = await uc.execute(2026, 7);
 
     expect(realGenerate).toHaveBeenCalledTimes(1);
     expect(result.motorVersion).toBe("REAL_V1");

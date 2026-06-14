@@ -68,6 +68,14 @@ export function countAllocatedOperationalTurns(ws: GenerationWorkspace, uuid: st
   return countRateioTurns(ws, uuid);
 }
 
+/**
+ * Turnos principais PAO (T6+T7+T8) — exclui T9/paralelo.
+ * Usado em budget mensal e priorização (substitui `workCount` legado).
+ */
+export function countPrimaryRateioTurns(ws: GenerationWorkspace, uuid: string): number {
+  return countAllocatedPrimaryTurns(ws, uuid);
+}
+
 /** Dias trabalhados reais — turnos principais PAO (exclui PARALLEL). */
 export function countAllocatedPrimaryTurns(ws: GenerationWorkspace, uuid: string): number {
   const codes = new Set(listPaoPrimaryShiftCodesFromWorkspace(ws));

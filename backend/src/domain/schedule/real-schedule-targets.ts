@@ -8,9 +8,9 @@ import {
 } from "./real-schedule-types.js";
 import {
   computeTurnRateio,
-  countAllocatedTurns,
   type TurnRateioEntry,
 } from "./real-schedule-turn-rateio.js";
+import { countRateioTurns } from "./pao-rateio-shifts.js";
 import { countWorkdayBreakdown } from "./real-schedule-workdays.js";
 import { vacationPatternWorkTarget } from "./real-schedule-vacation-pattern.js";
 import { isVacationDay, vacationDaysForPao } from "./pao-operational-priority.js";
@@ -50,7 +50,7 @@ export function calculateRequiredT6T7Shifts(
       workTarget: MONTHLY_WORKDAY_TARGET,
       turnTarget: 0,
       usefulOperationalDays: 0,
-      allocatedTurns: countAllocatedTurns(ws, uuid),
+      allocatedTurns: countRateioTurns(ws, uuid),
       turnDeviation: 0,
       requiredT6T7: 0,
       breakdown,

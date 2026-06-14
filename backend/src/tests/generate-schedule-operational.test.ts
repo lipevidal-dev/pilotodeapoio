@@ -4,8 +4,12 @@ import { RealScheduleEngine } from "../domain/schedule/real-schedule-engine.js";
 import { generationToScheduleContext } from "../domain/schedule/generation-context.js";
 import { evaluatePublishReadiness } from "../domain/schedule/schedule-publish-guard.js";
 import { GenerateScheduleUseCase } from "../application/use-cases/generate-schedule.use-case.js";
+import {
+  mockPrismaEmployeesFromRealistic,
+  mockPrismaRoles,
+  mockPrismaShifts,
+} from "./helpers/generate-schedule-mocks.js";
 import { realisticGenerationInput } from "./realistic-fixtures.js";
-import type { Employee } from "@prisma/client";
 import type { GenerationInput } from "../domain/schedule/generation-types.js";
 
 const engine = new ScheduleGenerationEngine();
@@ -144,20 +148,8 @@ describe("Cadastros operacionais — motor", () => {
 
 describe("GenerateScheduleUseCase — persistência de cadastros operacionais", () => {
   it("persiste férias, FP e VOO em preAllocations (não pula bloqueios de calendário)", async () => {
-    const empId = "emp-pao-1";
-    const employees: Employee[] = [
-      {
-        id: empId,
-        name: "PAO Test",
-        type: "PAO",
-        roleId: null,
-        seniorityNumber: 1,
-        birthDate: null,
-        active: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    ];
+    const empId = "real-1";
+    const employees = mockPrismaEmployeesFromRealistic();
 
     let savedAllocations: Array<{ employeeUuid: string; date: string; label: string }> = [];
     let skipKeysUsed = new Set<string>();
@@ -166,72 +158,12 @@ describe("GenerateScheduleUseCase — persistência de cadastros operacionais", 
       {
         findMonth: async () => null,
         listActiveEmployees: async () => employees,
-        loadCrossMonthHistory: async () => ({ assignments: [], allocations: [] }),
+        loadCrossMonthHistory: async () => undefined,
         listShiftRestrictionsForMonth: async () => [],
         listPreferredShiftsForMonth: async () => [],
         listNoFlightDatesForMonth: async () => [],
-        listRoles: async () => [
-          {
-            id: "role-pao",
-            name: "Piloto de Apoio Operacional",
-            code: "PAO",
-            description: null,
-            active: true,
-            displayOrder: 1,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        ],
-        listShifts: async () => [
-          {
-            id: "s1",
-            code: "T6",
-            name: "T6",
-            startTime: "06:00",
-            endTime: "14:00",
-            durationHours: 8,
-            employeeTypeAllowed: "PAO",
-            active: true,
-            displayOrder: 1,
-            mandatoryCoverage: true,
-            requiresT8PairNd: false,
-            coverageType: "REQUIRED",
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-          {
-            id: "s2",
-            code: "T7",
-            name: "T7",
-            startTime: "14:00",
-            endTime: "22:00",
-            durationHours: 8,
-            employeeTypeAllowed: "PAO",
-            active: true,
-            displayOrder: 2,
-            mandatoryCoverage: true,
-            requiresT8PairNd: false,
-            coverageType: "REQUIRED",
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-          {
-            id: "s3",
-            code: "T8",
-            name: "T8",
-            startTime: "22:00",
-            endTime: "06:00",
-            durationHours: 8,
-            employeeTypeAllowed: "PAO",
-            active: true,
-            displayOrder: 3,
-            mandatoryCoverage: true,
-            requiresT8PairNd: true,
-            coverageType: "REQUIRED",
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        ],
+        listRoles: async () => mockPrismaRoles(),
+        listShifts: async () => mockPrismaShifts(),
         upsertGeneratedMonth: async () => ({
           id: "month-1",
           year: 2026,

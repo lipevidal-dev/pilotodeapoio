@@ -1,6 +1,8 @@
 import { coverageRuleCode } from "./violation-level.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import type { GenerationInputEmployee } from "./generation-types.js";
+import { countPrimaryRateioTurns } from "./pao-rateio-shifts.js";
+import { currentTurnCount } from "./schedule-rateio-context.js";
 
 export interface RepairResult {
   repaired: number;
@@ -15,12 +17,12 @@ function sortRepairCandidates(ws: GenerationWorkspace): GenerationInputEmployee[
   const ctx = ws.rateioContext;
   return [...ws.paoEmps].sort((a, b) => {
     if (ctx) {
-      const curA = ctx.currentTurnCounts.get(a.uuid) ?? 0;
-      const curB = ctx.currentTurnCounts.get(b.uuid) ?? 0;
+      const curA = currentTurnCount(ctx, a.uuid);
+      const curB = currentTurnCount(ctx, b.uuid);
       if (curA !== curB) return curA - curB;
     }
     return (
-      ws.workCount(a.uuid) - ws.workCount(b.uuid) ||
+      countPrimaryRateioTurns(ws, a.uuid) - countPrimaryRateioTurns(ws, b.uuid) ||
       a.employee.seniority - b.employee.seniority
     );
   });

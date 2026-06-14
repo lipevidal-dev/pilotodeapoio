@@ -13,7 +13,7 @@ import {
   VACATION_TYPES,
 } from "../rules/constants.js";
 import { isOperationalHardBlock, normalizeOperationalLabel } from "./operational-labels.js";
-import { listPaoMinShiftFillCodesFromWorkspace, listPaoRateioShiftCodesFromWorkspace } from "./pao-rateio-shifts.js";
+import { listPaoMinShiftFillCodesFromWorkspace, listPaoRateioShiftCodesFromWorkspace, countPrimaryRateioTurns, countRateioTurns } from "./pao-rateio-shifts.js";
 import { assignmentKey, type BlockedMap, type PlannedMap } from "./types.js";
 import { birthdayInMonth, FANI_LABEL } from "../rules/birthday.js";
 import { addDays, iterDays, weekday } from "../rules/dates.js";
@@ -35,7 +35,7 @@ import {
   correctMonoFolgasPedidas,
   type MonoFolgaAuditResult,
 } from "./mono-folga-pedida.js";
-import { countAllocatedTurns, computeTurnRateio, sortPaoByAssignedTurnBalance, sortPaoForCoverageCandidates } from "./real-schedule-turn-rateio.js";
+import { computeTurnRateio, sortPaoByAssignedTurnBalance, sortPaoForCoverageCandidates } from "./real-schedule-turn-rateio.js";
 import { sortPaoByOperationalPriority } from "./pao-operational-priority.js";
 import {
   clearNdDayConflicts,
@@ -179,8 +179,9 @@ export class GenerationWorkspace {
     return this.days.every((d) => set.has(d));
   }
 
+  /** @deprecated Use {@link countRateioTurns} via `countRateioTurns(ws, uuid)`. */
   countWorkDays(uuid: string): number {
-    return countAllocatedTurns(this, uuid);
+    return countRateioTurns(this, uuid);
   }
 
   initRateioContext(): ScheduleRateioContext {
@@ -253,7 +254,7 @@ export class GenerationWorkspace {
     for (const c of prioritized) {
       const turnTarget = targetByUuid.get(c.uuid) ?? 0;
       const maxTurns = this.rateioContext?.maxTurnCounts.get(c.uuid);
-      let count = countAllocatedTurns(this, c.uuid);
+      let count = countRateioTurns(this, c.uuid);
       const cap = maxTurns != null ? Math.min(turnTarget, maxTurns) : turnTarget;
       if (count >= cap) continue;
 
@@ -280,7 +281,7 @@ export class GenerationWorkspace {
         }
         for (const code of this.shiftOrderRespectingBlocks(c.uuid, day, shiftsForEmployee)) {
           if (this.tryAssignShift(c.uuid, day, code)) {
-            count = countAllocatedTurns(this, c.uuid);
+            count = countRateioTurns(this, c.uuid);
             break;
           }
         }
@@ -522,16 +523,9 @@ export class GenerationWorkspace {
     return ok;
   }
 
+  /** @deprecated Use {@link countPrimaryRateioTurns}. Turnos T6/T7/T8 — exclui T9. */
   workCount(uuid: string): number {
-    const did = this.uuidToDomain.get(uuid)!;
-    const parallel = new Set(listParallelShiftCodes(this.input.shifts));
-    let n = 0;
-    for (const [k, shiftCode] of this.planned.entries()) {
-      if (!k.startsWith(`${did}|`)) continue;
-      if (parallel.has(shiftCode.toUpperCase())) continue;
-      n++;
-    }
-    return n;
+    return countPrimaryRateioTurns(this, uuid);
   }
 
   hasPaoCoverage(day: string, code: string): boolean {

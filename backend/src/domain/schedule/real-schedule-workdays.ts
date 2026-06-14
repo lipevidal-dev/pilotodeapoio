@@ -42,6 +42,16 @@ export function countWorkdayBreakdown(ws: GenerationWorkspace, uuid: string): Wo
   return stats;
 }
 
+/** Turnos rateio (T6–T9) — não inclui voo/cadastros. Preferir {@link countRateioTurns} para rateio. */
 export function countMotorWorkDays(ws: GenerationWorkspace, uuid: string): number {
   return countWorkdayBreakdown(ws, uuid).total;
+}
+
+/**
+ * Dias trabalhados operacionais: turnos rateio + voo + cadastros (SIM/CURSO/CMA/OUTRO).
+ * ND e folgas não entram.
+ */
+export function countWorkedDays(ws: GenerationWorkspace, uuid: string): number {
+  const b = countWorkdayBreakdown(ws, uuid);
+  return b.total + b.voos + b.cursos + b.simuladores + b.cma + b.outros;
 }

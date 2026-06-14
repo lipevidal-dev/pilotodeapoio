@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { GenerationWorkspace } from "../domain/schedule/generation-workspace.js";
 import { buildScheduleGenerationState } from "../domain/schedule/schedule-generation-state.js";
 import {
   validateAfterPlanning,

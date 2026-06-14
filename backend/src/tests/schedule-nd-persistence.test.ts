@@ -3,8 +3,12 @@ import { GenerateScheduleUseCase } from "../application/use-cases/generate-sched
 import { addDays } from "../domain/rules/dates.js";
 import { MOTOR_VERSION_ID } from "../domain/schedule/real-schedule-types.js";
 import { buildShiftRestrictionMap } from "../infrastructure/mappers/generation-input.mapper.js";
-import { minimalPaoInput } from "./generation-fixtures.js";
-import { compareEmployeesBySeniority } from "../domain/employee/seniority.js";
+import { realisticGenerationInput } from "./realistic-fixtures.js";
+import {
+  mockPrismaEmployeesFromRealistic,
+  mockPrismaRoles,
+  mockPrismaShifts,
+} from "./helpers/generate-schedule-mocks.js";
 
 type PersistedAssignment = {
   employeeId: string;
@@ -60,47 +64,20 @@ function assertT8PairsHaveNdInPersisted(
 
 describe("T8/T8/ND — persistência integrada", () => {
   it("gerar → persistir → buscar mês confirma ND no JSON persistido", async () => {
-    const input = minimalPaoInput(4);
-    const employees = input.employees
-      .map((e) => ({
-        id: e.uuid,
-        name: e.employee.name,
-        type: e.employee.role,
-        roleId: e.employee.role === "PAO" ? "role-pao" : "role-apao",
-        seniorityNumber: e.employee.seniority,
-        active: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }))
-      .sort(compareEmployeesBySeniority);
+    realisticGenerationInput();
+    const employees = mockPrismaEmployeesFromRealistic();
+    const shifts = mockPrismaShifts();
 
     let savedAssignments: PersistedAssignment[] = [];
     let savedPreAllocations: PersistedPreAllocation[] = [];
-
-    const shifts = input.shifts.map((s, i) => ({
-      id: `shift-${s.code.toLowerCase()}`,
-      code: s.code,
-      name: s.name,
-      startTime: s.startTime,
-      endTime: s.endTime,
-      durationHours: 8,
-      employeeTypeAllowed: s.role === "APAO" ? "APAO" : "PAO",
-      active: true,
-      displayOrder: i + 1,
-      mandatoryCoverage: ["T6", "T7", "T8"].includes(s.code),
-      requiresT8PairNd: s.code === "T8",
-      coverageType: "REQUIRED" as const,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }));
 
     const useCase = new GenerateScheduleUseCase(
       {
         findMonth: async () => null,
         listActiveEmployees: async () => employees,
         listShifts: async () => shifts,
-        listRoles: async () => [],
-        loadCrossMonthHistory: async () => ({ assignments: [], allocations: [] }),
+        listRoles: async () => mockPrismaRoles(),
+        loadCrossMonthHistory: async () => undefined,
         listShiftRestrictionsForMonth: async () => [],
         listPreferredShiftsForMonth: async () => [],
         listNoFlightDatesForMonth: async () => [],
@@ -174,48 +151,24 @@ describe("T8/T8/ND — persistência integrada", () => {
   });
 
   it("PAO sem voo + restrição T8: diagnóstico no realMotorReport", async () => {
-    const input = minimalPaoInput(4);
-    const uuid = input.employees[0]!.uuid;
+    const uuid = "real-1";
     const days = Array.from({ length: 30 }, (_, i) => {
       const d = String(i + 1).padStart(2, "0");
       return `2026-06-${d}`;
     });
-
-    const employees = input.employees.map((e) => ({
-      id: e.uuid,
-      name: e.employee.name,
-      type: e.employee.role,
-      roleId: e.employee.role === "PAO" ? "role-pao" : "role-apao",
-      seniorityNumber: e.employee.seniority,
-      active: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }));
-
-    const shifts = input.shifts.map((s, i) => ({
-      id: `shift-${s.code.toLowerCase()}`,
-      code: s.code,
-      name: s.name,
-      startTime: s.startTime,
-      endTime: s.endTime,
-      durationHours: 8,
-      employeeTypeAllowed: s.role === "APAO" ? "APAO" : "PAO",
-      active: true,
-      displayOrder: i + 1,
-      mandatoryCoverage: ["T6", "T7", "T8"].includes(s.code),
-      requiresT8PairNd: s.code === "T8",
-      coverageType: "REQUIRED" as const,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }));
+    const input = realisticGenerationInput({
+      noFlightDates: days.map((date) => ({ employeeUuid: uuid, date })),
+    });
+    const employees = mockPrismaEmployeesFromRealistic();
+    const shifts = mockPrismaShifts();
 
     const useCase = new GenerateScheduleUseCase(
       {
         findMonth: async () => null,
         listActiveEmployees: async () => employees,
         listShifts: async () => shifts,
-        listRoles: async () => [],
-        loadCrossMonthHistory: async () => ({ assignments: [], allocations: [] }),
+        listRoles: async () => mockPrismaRoles(),
+        loadCrossMonthHistory: async () => undefined,
         listShiftRestrictionsForMonth: async () => [
           { employeeUuid: uuid, shiftCode: "T8" },
         ],

@@ -57,6 +57,16 @@ export class ScheduleNotGeneratedError extends Error {
   }
 }
 
+export class SchedulePersistenceValidationError extends Error {
+  readonly code = "PERSISTENCE_VALIDATION_FAILED";
+  constructor(readonly validation: { stage: string; issues: CriticalViolationDto[]; criticalCount: number }) {
+    super(
+      `Escala não persistida: ${validation.criticalCount} inconsistência(s) estrutural(is) crítica(s).`,
+    );
+    this.name = "SchedulePersistenceValidationError";
+  }
+}
+
 export class PublishBlockedCriticalViolationsError extends Error {
   readonly code = "PUBLISH_BLOCKED_CRITICAL_VIOLATIONS";
   constructor(readonly criticalViolations: CriticalViolationDto[]) {

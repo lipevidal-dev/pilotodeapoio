@@ -2,7 +2,7 @@ import { isPaoDayDisponivel } from "./available-for-flight.js";
 import { classifyPlanningGroup } from "./demand-planning-capacity.js";
 import type { GeneratedAllocation } from "./generation-types.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
-import { countMotorWorkDays } from "./real-schedule-workdays.js";
+import { countWorkedDays } from "./real-schedule-workdays.js";
 import { workTargetForGroup } from "./real-schedule-targets.js";
 
 /** Voos como preenchimento de buracos — completam déficit de dias trabalhados. */
@@ -17,7 +17,7 @@ export function allocateFlightsForWorkdayDeficit(ws: GenerationWorkspace): Gener
 
     const group = classifyPlanningGroup(ws, c.uuid);
     const target = workTargetForGroup(ws, c.uuid, group);
-    const workDays = countMotorWorkDays(ws, c.uuid);
+    const workDays = countWorkedDays(ws, c.uuid);
     const deficit = target - workDays;
     if (deficit <= 0) continue;
 
