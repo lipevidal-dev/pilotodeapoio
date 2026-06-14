@@ -39,7 +39,9 @@ export interface PaoBelowTargetDiagnostic {
   minTurns: number;
   targetTurns: number;
   maxTurns: number;
-  availableDaysInMonth: number;
+  calendarAvailableDays: number;
+  relativeAvailability: number;
+  emptyDaysRemaining: number;
   vacationDays: string[];
   fpDays: string[];
   faniDays: string[];
@@ -315,6 +317,14 @@ function summarizeRefusals(
 }
 
 function buildSummary(d: PaoBelowTargetDiagnostic): string {
+  if (d.currentTurns >= d.minTurns) {
+    return "Compatível com meta proporcional à disponibilidade.";
+  }
+
+  if (d.calendarAvailableDays <= d.minTurns + 2) {
+    return `Turnos (${d.currentTurns}) compatíveis com baixa disponibilidade calendário (${d.calendarAvailableDays} dia(s)).`;
+  }
+
   if (d.hasRealAvailability) {
     const elegiveis = d.refusalAttempts.filter((a) => a.detail?.startsWith("elegível")).length;
     if (elegiveis > 0) {
@@ -354,7 +364,9 @@ export function buildPaoBelowTargetDiagnostics(ws: GenerationWorkspace): PaoBelo
       minTurns: a.minTurns,
       targetTurns: a.targetTurns,
       maxTurns: a.maxTurns,
-      availableDaysInMonth: emptyDays.length,
+      calendarAvailableDays: a.availableDays,
+      relativeAvailability: a.relativeAvailability,
+      emptyDaysRemaining: emptyDays.length,
       vacationDays: vacationDaysForPao(ws, uuid),
       fpDays: collectFpDays(ws, uuid),
       faniDays: collectFaniDays(ws, uuid),
@@ -382,8 +394,13 @@ export function formatPaoBelowTargetDiagnostics(diagnostics: PaoBelowTargetDiagn
 
   for (const d of diagnostics) {
     lines.push("");
-    lines.push(`▶ ${d.employeeName} — ${d.currentTurns}/${d.minTurns} turnos (min), target ${d.targetTurns.toFixed(1)}, max ${d.maxTurns}`);
-    lines.push(`  Dias livres no mês: ${d.availableDaysInMonth}`);
+    lines.push(
+      `▶ ${d.employeeName} — ${d.currentTurns}/${d.minTurns} turnos (min prop.), target ${d.targetTurns.toFixed(1)}, max ${d.maxTurns}`,
+    );
+    lines.push(
+      `  Dias disponíveis (calendário): ${d.calendarAvailableDays}; relativo: ${d.relativeAvailability.toFixed(2)}`,
+    );
+    lines.push(`  Dias livres restantes: ${d.emptyDaysRemaining}`);
     lines.push(`  Férias: ${d.vacationDays.length ? d.vacationDays.join(", ") : "(nenhuma)"}`);
     lines.push(`  FP: ${d.fpDays.length ? d.fpDays.join(", ") : "(nenhuma)"}`);
     lines.push(`  FANI: ${d.faniDays.length ? d.faniDays.join(", ") : "(nenhuma)"}`);

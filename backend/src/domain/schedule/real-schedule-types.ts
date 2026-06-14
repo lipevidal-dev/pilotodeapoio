@@ -5,6 +5,7 @@ import type { OperationalDemand } from "./demand-planning-types.js";
 import type { ValidationIssue } from "./types.js";
 import type { RealStructuralMetrics } from "./real-schedule-audit.js";
 import type { VacationFortnightBelowPattern } from "./real-schedule-vacation-materialize.js";
+import type { V3BlockMaterializeAudit } from "./v3-block-materialize-audit.js";
 
 export const MOTOR_VERSION_ID = "REAL_V1";
 export const ENGINE_PATH = "GenerateScheduleUseCase -> RealScheduleEngine";
@@ -115,6 +116,7 @@ export interface RealMotorReport {
   >;
   balanceReport?: OperationalBalanceReport;
   blockOptimizerReport?: BlockOptimizerReport;
+  v3BlockMaterializeAudit?: V3BlockMaterializeAudit;
   stepNotes: string[];
   warnings: ValidationIssue[];
 }

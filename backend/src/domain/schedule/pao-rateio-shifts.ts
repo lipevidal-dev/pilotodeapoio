@@ -43,15 +43,29 @@ export function listPaoMinShiftFillCodesFromWorkspace(ws: GenerationWorkspace): 
   return [...required, ...parallel.filter((c) => !required.includes(c))];
 }
 
-/** Turnos alocados para rateio/fairness (inclui PARALLEL). */
-export function countAllocatedOperationalTurns(ws: GenerationWorkspace, uuid: string): number {
-  const codes = new Set(listPaoRateioShiftCodesFromWorkspace(ws));
+/** Turnos que entram no rateio de turnos (não inclui ND, folgas, voo, cadastros). */
+export const RATEIO_TURN_SHIFT_CODES = ["T6", "T7", "T8", "T9"] as const;
+
+export type RateioTurnShiftCode = (typeof RATEIO_TURN_SHIFT_CODES)[number];
+
+export function isRateioTurnShiftCode(code: string): code is RateioTurnShiftCode {
+  const upper = code.toUpperCase();
+  return (RATEIO_TURN_SHIFT_CODES as readonly string[]).includes(upper);
+}
+
+/** Turnos alocados para rateio — somente T6 + T7 + T8 + T9. */
+export function countRateioTurns(ws: GenerationWorkspace, uuid: string): number {
   let count = 0;
   for (const a of ws.toAssignments()) {
     if (a.employeeUuid !== uuid) continue;
-    if (codes.has(a.shiftCode.toUpperCase())) count++;
+    if (isRateioTurnShiftCode(a.shiftCode)) count++;
   }
   return count;
+}
+
+/** @deprecated Use countRateioTurns — mantido como alias. */
+export function countAllocatedOperationalTurns(ws: GenerationWorkspace, uuid: string): number {
+  return countRateioTurns(ws, uuid);
 }
 
 /** Dias trabalhados reais — turnos principais PAO (exclui PARALLEL). */

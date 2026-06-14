@@ -5,6 +5,10 @@ import { isParallelOnlyPreferredPao, isT8PreferredPao } from "./employee-t6-t7-s
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import { analyzeT6T7BlockCoverage } from "./coverage-block-metrics.js";
 import type { GeneratedAssignment } from "./generation-types.js";
+import {
+  V3BlockMaterializeAuditCollector,
+  type V3BlockMaterializeAudit,
+} from "./v3-block-materialize-audit.js";
 
 export interface MaterializeBlocksStrictResult {
   placedBlocks: number;
@@ -12,6 +16,7 @@ export interface MaterializeBlocksStrictResult {
   placedShifts: number;
   unitPlacements: number;
   blockSizesPlaced: number[];
+  v3BlockMaterializeAudit: V3BlockMaterializeAudit;
 }
 
 /**
@@ -29,7 +34,8 @@ export function materializeT6T7BlocksStrict(
     return true;
   });
   const plans = buildBlockPlans(eligible);
-  const result = materializeBlockPlans(ws, plans);
+  const auditCollector = new V3BlockMaterializeAuditCollector();
+  const result = materializeBlockPlans(ws, plans, { audit: auditCollector });
   const coverage = analyzeT6T7BlockCoverage(ws.toAssignments(), ws.days);
   const blockSizesPlaced = plans.flatMap((p) =>
     p.executedBlocks.map((b) => b.size),
@@ -41,6 +47,7 @@ export function materializeT6T7BlocksStrict(
     placedShifts: result.placedShifts,
     unitPlacements: coverage.unitCoverageTotal,
     blockSizesPlaced,
+    v3BlockMaterializeAudit: auditCollector.buildReport(),
   };
 }
 

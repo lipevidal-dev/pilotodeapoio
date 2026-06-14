@@ -14,6 +14,7 @@ import { GenerationWorkspace } from "../src/domain/schedule/generation-workspace
 import {
   buildTurnRateioAudit,
   formatCoverageTable,
+  formatProportionalMetaTable,
   formatTurnRateioAuditTable,
 } from "../src/domain/schedule/turn-rateio-audit.js";
 import {
@@ -25,6 +26,12 @@ import { findWorkBlocks } from "../src/domain/schedule/block-optimizer.js";
 import { auditStructuralT8 } from "../src/domain/schedule/real-schedule-t8.js";
 import { countT8BlocksForEmployee } from "../src/domain/schedule/t8-block-limits.js";
 import { assignmentKey } from "../src/domain/schedule/types.js";
+import {
+  auditV4Transfers,
+} from "../src/domain/schedule/enforce-minimum-turn-targets.js";
+import { formatV4TransferAudit } from "../src/domain/schedule/v4-transfer-audit.js";
+import { formatV3BlockMaterializeAudit } from "../src/domain/schedule/v3-block-materialize-audit.js";
+import type { RealMotorReport } from "../src/domain/schedule/real-schedule-types.js";
 import { addDays } from "../src/domain/rules/dates.js";
 
 const YEAR = 2026;
@@ -102,11 +109,36 @@ async function main() {
     }
   }
 
-  console.log("===== AUDITORIA JULHO/2026 MOTOR V3 =====\n");
-  console.log("Funcionários PAO:");
-  console.log(formatTurnRateioAuditTable(buildTurnRateioAudit(auditWs, auditWs.rateioContext!)));
+  console.log("===== AUDITORIA JULHO/2026 MOTOR V4 =====\n");
+  const rateioAudits = buildTurnRateioAudit(auditWs, auditWs.rateioContext!);
+  console.log(formatProportionalMetaTable(rateioAudits));
+  console.log("\nFuncionários PAO:");
+  console.log(formatTurnRateioAuditTable(rateioAudits));
 
   console.log("\n" + formatPaoBelowTargetDiagnostics(buildPaoBelowTargetDiagnostics(auditWs)));
+
+  auditWs.syncRateioContext();
+  console.log("\n" + formatV4TransferAudit(auditV4Transfers(auditWs)));
+
+  const motorReport = result.realMotorReport as RealMotorReport | undefined;
+  const v3Audit = motorReport?.v3BlockMaterializeAudit;
+  if (v3Audit) {
+    console.log("\n" + formatV3BlockMaterializeAudit(v3Audit));
+    const focus = ["Antonio", "Gustavo", "Lucas", "Davi", "Palombino"];
+    const focused = v3Audit.employees.filter((e) =>
+      focus.some((n) => e.employeeName.toLowerCase().includes(n.toLowerCase())),
+    );
+    if (focused.length > 0) {
+      console.log("\n--- Foco Antonio/Gustavo/Lucas ---");
+      for (const e of focused) {
+        console.log(
+          `${e.employeeName}: planejados=${e.plannedBlocks} materializados=${e.materializedBlocks} descartados=${e.discardedBlocks} | turnos plan=${e.plannedShifts} mat=${e.materializedShifts} desc=${e.discardedShifts}`,
+        );
+      }
+    }
+  } else {
+    console.log("\n(v3BlockMaterializeAudit ausente no motorReport)");
+  }
 
   console.log("\nCobertura:");
   console.log(formatCoverageTable(auditWs));

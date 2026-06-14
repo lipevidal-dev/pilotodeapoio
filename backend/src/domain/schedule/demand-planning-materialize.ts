@@ -15,6 +15,15 @@ import {
 } from "./motor-v3-planning.js";
 import { blockAnchorDaysAfterMonoFolgaPedida } from "./mono-folga-pedida.js";
 import { wouldExceedT6T7BlockMax } from "./t6-t7-block-coverage.js";
+import {
+  classifyNoSlotDiscardReason,
+  classifyPlacementDiscardReason,
+  type V3BlockMaterializeAuditCollector,
+} from "./v3-block-materialize-audit.js";
+
+export interface MaterializeBlockPlansOptions {
+  audit?: V3BlockMaterializeAuditCollector;
+}
 
 export interface MaterializeResult {
   placedBlocks: number;
@@ -72,13 +81,16 @@ function tryPlaceBlock(
 export function materializeBlockPlans(
   ws: GenerationWorkspace,
   plans: EmployeeBlockPlan[],
+  options?: MaterializeBlockPlansOptions,
 ): MaterializeResult {
+  const audit = options?.audit;
   let placedBlocks = 0;
   let failedBlocks = 0;
   let placedShifts = 0;
 
   for (const plan of plans) {
     const initialAvailable = listEmployeeAvailableDays(ws, plan.employeeUuid);
+    audit?.beginEmployee(plan, initialAvailable.length);
     const zf = plan.plannedBlocks.length;
     plan.blockSpacing = idealBlockSpacing(initialAvailable.length, zf);
 
@@ -106,18 +118,30 @@ export function materializeBlockPlans(
 
       if (!start) {
         failedBlocks++;
+        const { reason, detail } = classifyNoSlotDiscardReason(
+          ws,
+          plan.employeeUuid,
+          block.size,
+          blockIndex - 1,
+        );
+        audit?.recordDiscarded(blockIndex - 1, block.size, reason, detail);
         continue;
       }
 
       const blockDays = blockDaysFromStart(start, block.size);
-      const code =
-        tryPlaceBlock(ws, plan.employeeUuid, start, block.size, blockDays) ??
-        (() => {
-          failedBlocks++;
-          return null;
-        })();
+      const code = tryPlaceBlock(ws, plan.employeeUuid, start, block.size, blockDays);
 
-      if (!code) continue;
+      if (!code) {
+        failedBlocks++;
+        const { reason, detail } = classifyPlacementDiscardReason(
+          ws,
+          plan.employeeUuid,
+          start,
+          block.size,
+        );
+        audit?.recordDiscarded(blockIndex - 1, block.size, reason, detail);
+        continue;
+      }
 
       block.shiftCode = code;
       placedShifts += block.size;
@@ -129,6 +153,7 @@ export function materializeBlockPlans(
         endDate: addDays(start, block.size - 1),
       });
       placedBlocks++;
+      audit?.recordMaterialized(blockIndex - 1, block.size, start, code);
     }
   }
 

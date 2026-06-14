@@ -9,10 +9,14 @@ import type { GenerationWorkspace } from "./generation-workspace.js";
 import type { ValidationIssue } from "./types.js";
 import {
   minTurnDeficit,
+  currentTurnCount,
+  syncRateioCountsFromWorkspace,
+  type ScheduleRateioContext,
 } from "./schedule-rateio-context.js";
 import { countWorkdayBreakdown } from "./real-schedule-workdays.js";
-import { countAllocatedOperationalTurns } from "./pao-rateio-shifts.js";
+import { countRateioTurns } from "./pao-rateio-shifts.js";
 import { buildScheduleRateioContext } from "./schedule-rateio-context.js";
+import { getPaoPriorityTier } from "./pao-operational-priority.js";
 
 export interface TurnRateioEntry {
   employeeUuid: string;
@@ -44,18 +48,23 @@ export function countUsefulOperationalDays(ws: GenerationWorkspace, uuid: string
   return b.cursos + b.simuladores + b.cma + b.outros;
 }
 
-/** Turnos alocados para fairness (T6/T7/T8/T9/…). */
+/** Turnos alocados para fairness (T6/T7/T8/T9). */
 export function countAllocatedTurns(ws: GenerationWorkspace, uuid: string): number {
-  return countAllocatedOperationalTurns(ws, uuid);
+  return countRateioTurns(ws, uuid);
 }
 
-function distributeIntegerTargets(employeeUuids: string[], totalPool: number): Map<string, number> {
+/** Distribui inteiros somando totalPool, pesos proporcionais à meta do contexto. */
+function distributeProportionalIntegerTargets(
+  ctx: ScheduleRateioContext,
+  employeeUuids: string[],
+  totalPool: number,
+): Map<string, number> {
   const out = new Map<string, number>();
   if (employeeUuids.length === 0 || totalPool <= 0) return out;
 
-  const meta = totalPool / employeeUuids.length;
+  const fallback = totalPool / employeeUuids.length;
   const floats = employeeUuids.map((uuid) => {
-    const raw = meta;
+    const raw = ctx.targetTurnCounts.get(uuid) ?? fallback;
     const floor = Math.max(0, Math.floor(raw));
     return { uuid, raw, floor, frac: raw - floor };
   });
@@ -102,6 +111,7 @@ export function computeTurnRateio(ws: GenerationWorkspace): TurnRateioResult {
   const targets: IndividualTarget[] = [];
 
   const ctx = ws.rateioContext ?? buildScheduleRateioContext(ws);
+  syncRateioCountsFromWorkspace(ws, ctx);
   const sorted = [...ws.paoEmps].sort((a, b) => a.employee.seniority - b.employee.seniority);
   const mainPoolUuids = sorted
     .filter((e) => ctx.mainPoolEmployeeIds.has(e.uuid))
@@ -109,7 +119,7 @@ export function computeTurnRateio(ws: GenerationWorkspace): TurnRateioResult {
   const turnosRateio = demand.totalDemand;
   const metaTurnosNormal =
     mainPoolUuids.length > 0 ? turnosRateio / mainPoolUuids.length : 0;
-  const turnTargets = distributeIntegerTargets(mainPoolUuids, turnosRateio);
+  const turnTargets = distributeProportionalIntegerTargets(ctx, mainPoolUuids, turnosRateio);
 
   for (const emp of sorted) {
     if (!ctx.mainPoolEmployeeIds.has(emp.uuid)) {
@@ -123,8 +133,7 @@ export function computeTurnRateio(ws: GenerationWorkspace): TurnRateioResult {
   for (const emp of sorted) {
     const group = classifyPlanningGroup(ws, emp.uuid);
     const useful = countUsefulOperationalDays(ws, emp.uuid);
-    const allocated =
-      ctx.currentTurnCounts.get(emp.uuid) ?? countAllocatedTurns(ws, emp.uuid);
+    const allocated = currentTurnCount(ctx, emp.uuid);
     const cap = capByUuid.get(emp.uuid)!;
     const turnTarget = turnTargets.get(emp.uuid) ?? 0;
     const maxTurns = ctx.maxTurnCounts.get(emp.uuid);
@@ -212,7 +221,7 @@ export function sortPaoForCoverageCandidates(
       const dev = byUuid.get(uuid)?.turnDeviation ?? 0;
       return dev < 0 ? 0 : 1;
     }
-    const cur = ctx.currentTurnCounts.get(uuid) ?? 0;
+    const cur = currentTurnCount(ctx, uuid);
     const min = ctx.minTurnCounts.get(uuid) ?? 0;
     const max = ctx.maxTurnCounts.get(uuid);
     if (cur < min) return 0;
@@ -227,18 +236,32 @@ export function sortPaoForCoverageCandidates(
     const tierB = coverageTier(b.uuid);
     if (tierA !== tierB) return tierA - tierB;
 
-    if (ctx && tierA === 0) {
-      const deficitA = minTurnDeficit(ctx, a.uuid);
-      const deficitB = minTurnDeficit(ctx, b.uuid);
-      if (deficitA !== deficitB) return deficitB - deficitA;
+    if (ctx && tierA <= 1) {
+      const targetA = Math.max(ctx.targetTurnCounts.get(a.uuid) ?? 1, 0.5);
+      const targetB = Math.max(ctx.targetTurnCounts.get(b.uuid) ?? 1, 0.5);
+      const curA = currentTurnCount(ctx, a.uuid);
+      const curB = currentTurnCount(ctx, b.uuid);
+      const fillA = curA / targetA;
+      const fillB = curB / targetB;
+      if (fillA !== fillB) return fillA - fillB;
+
+      const opA = getPaoPriorityTier(ws, a.uuid);
+      const opB = getPaoPriorityTier(ws, b.uuid);
+      if (opA !== opB) return opA - opB;
+
+      if (tierA === 0) {
+        const deficitA = minTurnDeficit(ctx, a.uuid);
+        const deficitB = minTurnDeficit(ctx, b.uuid);
+        if (deficitA !== deficitB) return deficitB - deficitA;
+      }
     }
 
     const devA = byUuid.get(a.uuid)?.turnDeviation ?? 0;
     const devB = byUuid.get(b.uuid)?.turnDeviation ?? 0;
     if (devA !== devB) return devA - devB;
 
-    const curA = ctx?.currentTurnCounts.get(a.uuid) ?? 0;
-    const curB = ctx?.currentTurnCounts.get(b.uuid) ?? 0;
+    const curA = ctx ? currentTurnCount(ctx, a.uuid) : 0;
+    const curB = ctx ? currentTurnCount(ctx, b.uuid) : 0;
     if (curA !== curB) return curA - curB;
 
     return a.employee.seniority - b.employee.seniority;

@@ -6,7 +6,7 @@ import { normalizeOperationalLabel } from "./operational-labels.js";
 import type { GeneratedAllocation } from "./generation-types.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import { idealBlockSizeForTarget } from "./motor-v3-planning.js";
-import { syncRateioCountsFromWorkspace } from "./schedule-rateio-context.js";
+import { syncRateioCountsFromWorkspace, currentTurnCount } from "./schedule-rateio-context.js";
 import {
   captureOptimizationSnapshot,
   restoreOptimizationSnapshot,
@@ -257,9 +257,21 @@ function violatesRateioMax(ws: GenerationWorkspace): boolean {
   if (!ctx) return false;
   syncRateioCountsFromWorkspace(ws, ctx);
   for (const emp of ws.paoEmps) {
-    const total = ctx.currentTurnCounts.get(emp.uuid) ?? 0;
+    const total = currentTurnCount(ctx, emp.uuid);
     const max = ctx.maxTurnCounts.get(emp.uuid);
     if (max != null && total > max) return true;
+  }
+  return false;
+}
+
+function violatesRateioMin(ws: GenerationWorkspace): boolean {
+  const ctx = ws.rateioContext;
+  if (!ctx) return false;
+  syncRateioCountsFromWorkspace(ws, ctx);
+  for (const emp of ws.paoEmps) {
+    const total = currentTurnCount(ctx, emp.uuid);
+    const min = ctx.minTurnCounts.get(emp.uuid) ?? 0;
+    if (total < min) return true;
   }
   return false;
 }
@@ -277,6 +289,7 @@ function isMoveValid(
 
   if (!preservesShiftHomogeneity(ws)) return false;
   if (violatesRateioMax(ws)) return false;
+  if (violatesRateioMin(ws)) return false;
   ws.ensureNdForT8Pairs();
   ws.revalidateCoverageAfterBalance();
   const issues = validateSchedule(ws.toScheduleContext());

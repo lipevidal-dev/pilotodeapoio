@@ -2,6 +2,10 @@ import { listParallelShiftCodes } from "../shift/coverage-type.js";
 import type { ShiftCode } from "./assignment-eligibility.js";
 import { isParallelOnlyPreferredPao } from "./employee-t6-t7-shift.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
+import {
+  computeProportionalTurnTargets,
+} from "./pao-turn-availability.js";
+import { isRateioTurnShiftCode } from "./pao-rateio-shifts.js";
 
 export type { ShiftCode };
 
@@ -26,6 +30,12 @@ export interface ScheduleRateioContext {
 
   /** Meta de dias T8 por PAO (cobertura mensal / pool T8). */
   targetT8DaysPerEmployee: Map<string, number>;
+
+  /** Disponibilidade calendário para meta proporcional. */
+  availableDaysByEmployee: Map<string, number>;
+  relativeAvailabilityByEmployee: Map<string, number>;
+  poolAverageAvailableDays: number;
+  baseAverageTurns: number;
 
   overflowEvents: string[];
 }
@@ -78,20 +88,19 @@ export function buildScheduleRateioContext(ws: GenerationWorkspace): ScheduleRat
   }
 
   const totalMainShifts = daysInMonth * 3;
-  const mainCount = mainPoolEmployeeIds.size;
-  const averageMain = mainCount > 0 ? totalMainShifts / mainCount : 0;
-  const minMain = Math.max(0, Math.floor(averageMain) - 1);
-  const maxMain = Math.ceil(averageMain);
-  const targetMain = averageMain;
+  const mainPoolList = [...mainPoolEmployeeIds];
+  const allPoolList = [...allUuids];
 
-  const averageAll = allUuids.length > 0 ? totalMainShifts / allUuids.length : 0;
-  const maxAll = Math.ceil(averageAll);
+  const mainTargets = computeProportionalTurnTargets(ws, mainPoolList, totalMainShifts);
+  const allTargets = computeProportionalTurnTargets(ws, allPoolList, totalMainShifts);
 
   const minTurnCounts = new Map<string, number>();
   const targetTurnCounts = new Map<string, number>();
   const maxTurnCounts = new Map<string, number>();
   const preferredShiftByEmployee = new Map<string, ShiftCode | null>();
   const targetT8DaysPerEmployee = new Map<string, number>();
+  const availableDaysByEmployee = new Map<string, number>();
+  const relativeAvailabilityByEmployee = new Map<string, number>();
 
   const t8TargetDays = allUuids.length > 0 ? daysInMonth / allUuids.length : 0;
 
@@ -99,16 +108,16 @@ export function buildScheduleRateioContext(ws: GenerationWorkspace): ScheduleRat
     preferredShiftByEmployee.set(uuid, resolvePreferredShift(ws, uuid));
     targetT8DaysPerEmployee.set(uuid, t8TargetDays);
 
-    if (mainPoolEmployeeIds.has(uuid)) {
-      minTurnCounts.set(uuid, minMain);
-      targetTurnCounts.set(uuid, targetMain);
-      maxTurnCounts.set(uuid, maxMain);
-    } else {
-      minTurnCounts.set(uuid, Math.max(0, Math.floor(averageAll) - 1));
-      targetTurnCounts.set(uuid, averageAll);
-      maxTurnCounts.set(uuid, maxAll);
-    }
+    const src = mainPoolEmployeeIds.has(uuid) ? mainTargets : allTargets;
+    minTurnCounts.set(uuid, src.minTurnCounts.get(uuid) ?? 0);
+    targetTurnCounts.set(uuid, src.targetTurnCounts.get(uuid) ?? 0);
+    maxTurnCounts.set(uuid, src.maxTurnCounts.get(uuid) ?? 0);
+    availableDaysByEmployee.set(uuid, src.availableDaysByEmployee.get(uuid) ?? daysInMonth);
+    relativeAvailabilityByEmployee.set(uuid, src.relativeAvailabilityByEmployee.get(uuid) ?? 1);
   }
+
+  const poolAverageAvailableDays = mainTargets.poolAverageAvailableDays;
+  const baseAverageTurns = mainTargets.baseAverageTurns;
 
   const ctx: ScheduleRateioContext = {
     daysInMonth,
@@ -125,6 +134,10 @@ export function buildScheduleRateioContext(ws: GenerationWorkspace): ScheduleRat
     currentT9Counts: emptyCounts(allUuids),
     preferredShiftByEmployee,
     targetT8DaysPerEmployee,
+    availableDaysByEmployee,
+    relativeAvailabilityByEmployee,
+    poolAverageAvailableDays,
+    baseAverageTurns,
     overflowEvents: [],
   };
 
@@ -137,6 +150,7 @@ export function syncRateioCountsFromWorkspace(
   ctx: ScheduleRateioContext,
 ): void {
   for (const uuid of ctx.currentTurnCounts.keys()) {
+    ctx.currentTurnCounts.set(uuid, 0);
     ctx.currentT6Counts.set(uuid, 0);
     ctx.currentT7Counts.set(uuid, 0);
     ctx.currentT8Counts.set(uuid, 0);
@@ -144,7 +158,17 @@ export function syncRateioCountsFromWorkspace(
   }
 
   for (const a of ws.toAssignments()) {
+    if (!isRateioTurnShiftCode(a.shiftCode)) continue;
     recordRateioAssignment(ctx, a.employeeUuid, a.shiftCode);
+  }
+
+  for (const uuid of ctx.currentTurnCounts.keys()) {
+    const total =
+      (ctx.currentT6Counts.get(uuid) ?? 0) +
+      (ctx.currentT7Counts.get(uuid) ?? 0) +
+      (ctx.currentT8Counts.get(uuid) ?? 0) +
+      (ctx.currentT9Counts.get(uuid) ?? 0);
+    ctx.currentTurnCounts.set(uuid, total);
   }
 }
 
@@ -153,6 +177,8 @@ export function recordRateioAssignment(
   employeeId: string,
   shiftCode: string,
 ): void {
+  if (!isRateioTurnShiftCode(shiftCode)) return;
+
   const code = shiftCode.toUpperCase();
   if (code === "T6") {
     ctx.currentT6Counts.set(employeeId, (ctx.currentT6Counts.get(employeeId) ?? 0) + 1);
@@ -162,8 +188,6 @@ export function recordRateioAssignment(
     ctx.currentT8Counts.set(employeeId, (ctx.currentT8Counts.get(employeeId) ?? 0) + 1);
   } else if (code === "T9") {
     ctx.currentT9Counts.set(employeeId, (ctx.currentT9Counts.get(employeeId) ?? 0) + 1);
-  } else {
-    return;
   }
   ctx.currentTurnCounts.set(
     employeeId,
@@ -176,6 +200,8 @@ export function recordRateioUnassignment(
   employeeId: string,
   shiftCode: string,
 ): void {
+  if (!isRateioTurnShiftCode(shiftCode)) return;
+
   const code = shiftCode.toUpperCase();
   if (code === "T6") {
     ctx.currentT6Counts.set(employeeId, Math.max(0, (ctx.currentT6Counts.get(employeeId) ?? 0) - 1));
@@ -185,8 +211,6 @@ export function recordRateioUnassignment(
     ctx.currentT8Counts.set(employeeId, Math.max(0, (ctx.currentT8Counts.get(employeeId) ?? 0) - 1));
   } else if (code === "T9") {
     ctx.currentT9Counts.set(employeeId, Math.max(0, (ctx.currentT9Counts.get(employeeId) ?? 0) - 1));
-  } else {
-    return;
   }
   ctx.currentTurnCounts.set(
     employeeId,
@@ -195,7 +219,12 @@ export function recordRateioUnassignment(
 }
 
 export function currentTurnCount(ctx: ScheduleRateioContext, employeeId: string): number {
-  return ctx.currentTurnCounts.get(employeeId) ?? 0;
+  return (
+    (ctx.currentT6Counts.get(employeeId) ?? 0) +
+    (ctx.currentT7Counts.get(employeeId) ?? 0) +
+    (ctx.currentT8Counts.get(employeeId) ?? 0) +
+    (ctx.currentT9Counts.get(employeeId) ?? 0)
+  );
 }
 
 export function isBelowMaxTurns(ctx: ScheduleRateioContext, employeeId: string): boolean {

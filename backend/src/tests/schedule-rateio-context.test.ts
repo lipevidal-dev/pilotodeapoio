@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { minimalPaoInput } from "./generation-fixtures.js";
 import { DEFAULT_SHIFTS } from "../domain/shift/default-shifts.js";
 import { GenerationWorkspace } from "../domain/schedule/generation-workspace.js";
-import { buildScheduleRateioContext } from "../domain/schedule/schedule-rateio-context.js";
+import { buildScheduleRateioContext, syncRateioCountsFromWorkspace } from "../domain/schedule/schedule-rateio-context.js";
+import { countRateioTurns } from "../domain/schedule/pao-rateio-shifts.js";
+import { assignmentKey } from "../domain/schedule/types.js";
 import { isParallelOnlyPreferredPao } from "../domain/schedule/employee-t6-t7-shift.js";
 
 import type { Shift } from "../domain/shift/types.js";
@@ -62,5 +64,33 @@ describe("buildScheduleRateioContext", () => {
     for (const id of ctx.t9PoolEmployeeIds) {
       expect(ctx.t8PoolEmployeeIds.has(id)).toBe(true);
     }
+  });
+
+  it("syncRateioCountsFromWorkspace conta só T6/T7/T8/T9 e resiste a chamadas repetidas", () => {
+    const input = minimalPaoInput(2);
+    const ws = new GenerationWorkspace(input);
+    ws.applyHardBlocks();
+    const uuid = input.employees[0]!.uuid;
+    const did = ws.uuidToDomain.get(uuid)!;
+
+    ws.planned.set(assignmentKey(did, "2026-07-01"), "T6");
+    ws.planned.set(assignmentKey(did, "2026-07-02"), "T7");
+    ws.planned.set(assignmentKey(did, "2026-07-03"), "T8");
+    ws.planned.set(assignmentKey(did, "2026-07-04"), "T9");
+    ws.lockDay(uuid, "2026-07-05", "ND", false);
+    ws.lockDay(uuid, "2026-07-06", "FOLGA", false);
+    ws.lockDay(uuid, "2026-07-07", "VOO", false);
+
+    const ctx = buildScheduleRateioContext(ws);
+    expect(countRateioTurns(ws, uuid)).toBe(4);
+    expect(ctx.currentTurnCounts.get(uuid)).toBe(4);
+    expect(ctx.currentT6Counts.get(uuid)).toBe(1);
+    expect(ctx.currentT7Counts.get(uuid)).toBe(1);
+    expect(ctx.currentT8Counts.get(uuid)).toBe(1);
+    expect(ctx.currentT9Counts.get(uuid)).toBe(1);
+
+    syncRateioCountsFromWorkspace(ws, ctx);
+    syncRateioCountsFromWorkspace(ws, ctx);
+    expect(ctx.currentTurnCounts.get(uuid)).toBe(4);
   });
 });
