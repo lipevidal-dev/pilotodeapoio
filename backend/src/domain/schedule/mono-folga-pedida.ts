@@ -167,3 +167,17 @@ export function correctMonoFolgasPedidas(ws: GenerationWorkspace): MonoFolgaAudi
 
   return { detected, corrected, attempts, warnings };
 }
+
+/** Dias preferenciais para iniciar bloco de turno logo após FP isolada (mono-folga pedida). */
+export function blockAnchorDaysAfterMonoFolgaPedida(
+  ws: GenerationWorkspace,
+  uuid: string,
+): string[] {
+  const anchors: string[] = [];
+  for (const day of ws.days) {
+    if (!isMonoFolgaPedida(ws, uuid, day)) continue;
+    const after = addDays(day, 1);
+    if (ws.days.includes(after)) anchors.push(after);
+  }
+  return anchors;
+}

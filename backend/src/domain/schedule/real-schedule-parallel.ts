@@ -1,6 +1,8 @@
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import { listParallelShiftCodes } from "../shift/coverage-type.js";
 import { assignmentKey } from "./types.js";
+import { addDays } from "../rules/dates.js";
+import { isParallelOnlyPreferredPao } from "./employee-t6-t7-shift.js";
 import {
   computeTurnRateio,
   countAllocatedTurns,
@@ -21,6 +23,42 @@ export interface ParallelAllocationReport {
 function refreshEntry(entry: TurnRateioEntry, ws: GenerationWorkspace, uuid: string): void {
   entry.allocatedTurns = countAllocatedTurns(ws, uuid);
   entry.turnDeviation = entry.allocatedTurns - entry.turnTarget;
+}
+
+function allocatedForParallelCap(
+  ws: GenerationWorkspace,
+  uuid: string,
+  code: string,
+  entry: TurnRateioEntry,
+): number {
+  if (isParallelOnlyPreferredPao(ws, uuid)) {
+    return ws.toAssignments().filter((a) => a.employeeUuid === uuid && a.shiftCode === code).length;
+  }
+  return entry.allocatedTurns;
+}
+
+/** Dias livres agrupados em sequências consecutivas (blocos de T9). */
+function emptyDayRuns(ws: GenerationWorkspace, uuid: string, did: number): string[][] {
+  const runs: string[][] = [];
+  let current: string[] = [];
+
+  for (const day of ws.days) {
+    if (ws.planned.has(assignmentKey(did, day)) || ws.isDayBlockedForShift(uuid, day)) {
+      if (current.length > 0) {
+        runs.push(current);
+        current = [];
+      }
+      continue;
+    }
+    if (current.length === 0 || addDays(current[current.length - 1]!, 1) === day) {
+      current.push(day);
+    } else {
+      runs.push(current);
+      current = [day];
+    }
+  }
+  if (current.length > 0) runs.push(current);
+  return runs.sort((a, b) => b.length - a.length);
 }
 
 /** Preenche T9/paralelos em dias livres até assignedShiftCount ≈ turnTarget. */
@@ -47,26 +85,31 @@ export function allocateParallelShifts(ws: GenerationWorkspace): ParallelAllocat
 
     for (const c of eligible) {
       const entry = entryByUuid.get(c.uuid);
-      if (!entry || entry.allocatedTurns >= entry.turnTarget) continue;
+      if (!entry) continue;
 
       const did = c.domainId;
       let progress = false;
+      const runs = emptyDayRuns(ws, c.uuid, did);
 
-      for (const day of ws.days) {
-        if (entry.allocatedTurns >= entry.turnTarget) break;
-        if (ws.planned.has(assignmentKey(did, day))) continue;
-        if (ws.hasParallelShiftOnDay(day, code)) continue;
+      for (const run of runs) {
+        for (const day of run) {
+          const allocated = allocatedForParallelCap(ws, c.uuid, code, entry);
+          if (allocated >= entry.turnTarget) break;
+          if (ws.planned.has(assignmentKey(did, day))) continue;
+          if (ws.hasParallelShiftOnDay(day, code)) continue;
 
-        if (ws.tryAssignShift(c.uuid, day, code)) {
-          parallelShiftsAllocated++;
-          byShift[code].days++;
-          assignedEmployees.add(c.uuid);
-          refreshEntry(entry, ws, c.uuid);
-          progress = true;
+          if (ws.tryAssignShift(c.uuid, day, code)) {
+            parallelShiftsAllocated++;
+            byShift[code].days++;
+            assignedEmployees.add(c.uuid);
+            refreshEntry(entry, ws, c.uuid);
+            progress = true;
+          }
         }
+        if (allocatedForParallelCap(ws, c.uuid, code, entry) >= entry.turnTarget) break;
       }
 
-      if (!progress && entry.allocatedTurns < entry.turnTarget) {
+      if (!progress && allocatedForParallelCap(ws, c.uuid, code, entry) < entry.turnTarget) {
         byShift[code].conflicts++;
       }
     }

@@ -44,6 +44,19 @@ export function validateT8Blocks(ctx: ScheduleContext): ValidationIssue[] {
       const nextT8 = dateSet.has(next);
 
       if (!prevT8 && !nextT8) {
+        const emergencyKey = `${empId}|${currentDay}`;
+        if (ctx.emergencyIsolatedT8Keys?.has(emergencyKey)) {
+          issues.push({
+            severity: "MÉDIA",
+            level: "WARNING",
+            type: "RATEIO_T8_EMERGENCY_ISOLATED",
+            date: currentDay,
+            employee: name,
+            detail:
+              `T8 isolado emergencial em ${currentDay} — bloco T8/T8/ND impossível; cobertura preservada.`,
+          });
+          continue;
+        }
         issues.push({
           severity: "MÉDIA",
           type: "T8 ISOLADO",

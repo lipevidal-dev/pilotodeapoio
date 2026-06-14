@@ -201,7 +201,12 @@ describe("Calibração operacional — T8 e fechamento", () => {
   it("15. T8/T8/ND permanece íntegro após geração", () => {
     const input = realisticGenerationInput();
     const result = engine.generate(input);
-    const ctx = generationToScheduleContext(input, result.assignments, result.allocations);
+    const emergency = (
+      result.summary.realMotorReport as {
+        emergencyIsolatedT8Days?: Array<{ employeeUuid: string; date: string }>;
+      }
+    ).emergencyIsolatedT8Days;
+    const ctx = generationToScheduleContext(input, result.assignments, result.allocations, emergency);
     const critical = filterByLevel(validateSchedule(ctx), ["CRITICAL"]);
     expect(critical.filter((c) => ["T8 ISOLADO", "T8 SEM ND", "ND FORA DE T8/T8"].includes(c.ruleCode)).length).toBe(0);
   }, SLOW_MS);

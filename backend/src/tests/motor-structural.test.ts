@@ -21,6 +21,8 @@ function assertNoIsolatedT8(ctx: ReturnType<typeof generationToScheduleContext>)
       .map((a) => a.workDate)
       .sort();
     for (const day of t8Days) {
+      const key = `${emp.id}|${day}`;
+      if (ctx.emergencyIsolatedT8Keys?.has(key)) continue;
       const prev = addDays(day, -1);
       const next = addDays(day, 1);
       const prevT8 = t8Days.includes(prev);
@@ -59,10 +61,17 @@ describe("Motor estrutural — T8/T8/ND bloco indivisível", () => {
     "todo T8 tem par e ND subsequente",
     () => {
       const result = engine.generate(realisticGenerationInput());
+      const input = realisticGenerationInput();
+      const emergency = (
+        result.summary.realMotorReport as {
+          emergencyIsolatedT8Days?: Array<{ employeeUuid: string; date: string }>;
+        }
+      ).emergencyIsolatedT8Days;
       const ctx = generationToScheduleContext(
-        realisticGenerationInput(),
+        input,
         result.assignments,
         result.allocations,
+        emergency,
       );
       assertNoIsolatedT8(ctx);
       expect(validateSchedule(ctx).some((v) => v.type === "T8 SEM ND")).toBe(false);

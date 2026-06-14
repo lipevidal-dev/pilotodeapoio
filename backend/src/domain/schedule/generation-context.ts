@@ -32,6 +32,7 @@ export function generationToScheduleContext(
   input: GenerationInput,
   assignments: GeneratedAssignment[],
   allocations: GeneratedAllocation[],
+  emergencyIsolatedT8?: Array<{ employeeUuid: string; date: string }>,
 ): ScheduleContext {
   const byUuid = new Map(input.employees.map((e) => [e.uuid, e]));
 
@@ -44,7 +45,7 @@ export function generationToScheduleContext(
     requestedOffByEmployeeId[emp.domainId] = list;
   }
 
-  return {
+  const ctx: ScheduleContext = {
     year: input.year,
     month: input.month,
     employees: input.employees.map((e) => ({ ...e.employee, id: e.domainId })),
@@ -71,6 +72,17 @@ export function generationToScheduleContext(
       };
     }),
   };
+
+  if (emergencyIsolatedT8?.length) {
+    ctx.emergencyIsolatedT8Keys = new Set(
+      emergencyIsolatedT8.map(({ employeeUuid, date }) => {
+        const emp = byUuid.get(employeeUuid)!;
+        return `${emp.domainId}|${date}`;
+      }),
+    );
+  }
+
+  return ctx;
 }
 
 export function buildEmployeeMaps<T extends { id: string; name: string; type: string }>(

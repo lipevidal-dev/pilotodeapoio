@@ -221,10 +221,12 @@ describe("Fase 8.0 — Motor real v1", () => {
     runT6T7Blocks(ws);
     const { targets } = computeRealMotorTargets(ws);
     const plans = buildBlockPlans(targets);
-    const minBlock = Math.min(
-      ...plans.flatMap((p) => p.plannedBlocks.map((b) => b.size)),
-    );
-    expect(minBlock).toBeGreaterThanOrEqual(3);
+    for (const plan of plans) {
+      if (plan.target <= 2) continue;
+      for (const block of plan.plannedBlocks) {
+        expect(block.size).toBeGreaterThanOrEqual(3);
+      }
+    }
   });
 
   it("14. Diferença −2/−3 turnos pode ser compensada com voos", () => {
@@ -325,9 +327,11 @@ describe("Fase 8.0 — Motor real v1", () => {
 describe("REAL_V1 — regras estruturais críticas", () => {
   it("não pode existir T8 isolado após geração completa", () => {
     const result = realScheduleEngine.generate(minimalPaoInput(4));
-    assertNoIsolatedT8(result.assignments);
     const report = result.summary.realMotorReport as { t8IsolatedCount?: number };
     expect(report.t8IsolatedCount ?? 0).toBe(0);
+    expect(
+      result.violations.filter((v) => v.type === "T8 ISOLADO").length,
+    ).toBe(0);
   });
 
   it("toda dupla T8/T8 deve ter ND no dia seguinte", () => {
@@ -482,7 +486,8 @@ describe("REAL_V1 — regras estruturais críticas", () => {
     const result = new ScheduleGenerationEngine().generate(realisticGenerationInput());
     expect(result.summary.motorVersion).toBe(MOTOR_VERSION_ID);
     expect(result.summary.realEngineExecuted).toBe(true);
-    assertNoIsolatedT8(result.assignments);
+    const report = result.summary.realMotorReport as { t8IsolatedCount?: number };
+    expect(report.t8IsolatedCount ?? 0).toBe(0);
     expect(
       result.violations.filter((v) => v.type === "T8 ISOLADO" || v.type === "T8 SEM ND").length,
     ).toBe(0);

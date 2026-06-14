@@ -90,6 +90,9 @@ describe("Rateio dinâmico — T9 e turnos futuros", () => {
     expect(t9Preferred.every((e) => e.turnTarget > 0)).toBe(true);
     expect(rateio.demand.perShift.T9).toBeUndefined();
 
+    const { targets } = computeRealMotorTargets(ws);
+    materializeT6T7BlocksStrict(ws, targets);
+    coverResidualT6T7Only(ws);
     allocateParallelShifts(ws);
     const t9Count = ws.toAssignments().filter((a) => a.shiftCode === "T9").length;
     expect(t9Count).toBeGreaterThan(0);

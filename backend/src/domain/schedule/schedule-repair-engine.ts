@@ -1,5 +1,6 @@
 import { coverageRuleCode } from "./violation-level.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
+import type { GenerationInputEmployee } from "./generation-types.js";
 
 export interface RepairResult {
   repaired: number;
@@ -9,6 +10,21 @@ export interface RepairResult {
 
 const MAX_REPAIR_ROUNDS = 40;
 const REPAIR_SHIFTS = ["T6", "T7", "T8"] as const;
+
+function sortRepairCandidates(ws: GenerationWorkspace): GenerationInputEmployee[] {
+  const ctx = ws.rateioContext;
+  return [...ws.paoEmps].sort((a, b) => {
+    if (ctx) {
+      const curA = ctx.currentTurnCounts.get(a.uuid) ?? 0;
+      const curB = ctx.currentTurnCounts.get(b.uuid) ?? 0;
+      if (curA !== curB) return curA - curB;
+    }
+    return (
+      ws.workCount(a.uuid) - ws.workCount(b.uuid) ||
+      a.employee.seniority - b.employee.seniority
+    );
+  });
+}
 
 function tryAssignForCoverage(
   ws: GenerationWorkspace,
@@ -62,14 +78,10 @@ export class ScheduleRepairEngine {
   ): boolean {
     if (this.tryDirectFill(ws, gap.date, gap.shiftCode)) return true;
 
-    for (const c of [...ws.paoEmps].sort(
-      (a, b) =>
-        ws.workCount(a.uuid) - ws.workCount(b.uuid) ||
-        a.employee.seniority - b.employee.seniority,
-    )) {
+    for (const c of sortRepairCandidates(ws)) {
       if (!ws.releaseOneGeneratorFolga(c.uuid, gap.date)) continue;
       if (gap.shiftCode === "T8") {
-        if (ws.tryAssignT8Coverage(gap.date, [c])) return true;
+        if (ws.tryAssignT8Coverage(gap.date, [c], true)) return true;
       } else if (tryAssignForCoverage(ws, c.uuid, gap.date, gap.shiftCode)) {
         return true;
       }
@@ -79,13 +91,9 @@ export class ScheduleRepairEngine {
   }
 
   private tryDirectFill(ws: GenerationWorkspace, day: string, code: string): boolean {
-    const candidates = [...ws.paoEmps].sort(
-      (a, b) =>
-        ws.workCount(a.uuid) - ws.workCount(b.uuid) ||
-        a.employee.seniority - b.employee.seniority,
-    );
+    const candidates = sortRepairCandidates(ws);
     if (code === "T8") {
-      return ws.tryAssignT8Coverage(day, candidates);
+      return ws.tryAssignT8Coverage(day, candidates, true);
     }
     for (const c of candidates) {
       if (tryAssignForCoverage(ws, c.uuid, day, code)) return true;

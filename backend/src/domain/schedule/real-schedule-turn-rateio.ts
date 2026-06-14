@@ -9,6 +9,7 @@ import type { GenerationWorkspace } from "./generation-workspace.js";
 import type { ValidationIssue } from "./types.js";
 import { countWorkdayBreakdown } from "./real-schedule-workdays.js";
 import { countAllocatedOperationalTurns } from "./pao-rateio-shifts.js";
+import { buildScheduleRateioContext } from "./schedule-rateio-context.js";
 
 export interface TurnRateioEntry {
   employeeUuid: string;
@@ -97,20 +98,33 @@ export function computeTurnRateio(ws: GenerationWorkspace): TurnRateioResult {
   const entries: TurnRateioEntry[] = [];
   const targets: IndividualTarget[] = [];
 
+  const ctx = ws.rateioContext ?? buildScheduleRateioContext(ws);
   const sorted = [...ws.paoEmps].sort((a, b) => a.employee.seniority - b.employee.seniority);
+  const mainPoolUuids = sorted
+    .filter((e) => ctx.mainPoolEmployeeIds.has(e.uuid))
+    .map((e) => e.uuid);
   const turnosRateio = demand.totalDemand;
-  const metaTurnosNormal = sorted.length > 0 ? turnosRateio / sorted.length : 0;
-  const turnTargets = distributeIntegerTargets(
-    sorted.map((e) => e.uuid),
-    turnosRateio,
-  );
+  const metaTurnosNormal =
+    mainPoolUuids.length > 0 ? turnosRateio / mainPoolUuids.length : 0;
+  const turnTargets = distributeIntegerTargets(mainPoolUuids, turnosRateio);
+
+  for (const emp of sorted) {
+    if (!ctx.mainPoolEmployeeIds.has(emp.uuid)) {
+      turnTargets.set(
+        emp.uuid,
+        Math.round(ctx.targetTurnCounts.get(emp.uuid) ?? metaTurnosNormal),
+      );
+    }
+  }
 
   for (const emp of sorted) {
     const group = classifyPlanningGroup(ws, emp.uuid);
     const useful = countUsefulOperationalDays(ws, emp.uuid);
-    const allocated = countAllocatedTurns(ws, emp.uuid);
+    const allocated =
+      ctx.currentTurnCounts.get(emp.uuid) ?? countAllocatedTurns(ws, emp.uuid);
     const cap = capByUuid.get(emp.uuid)!;
     const turnTarget = turnTargets.get(emp.uuid) ?? 0;
+    const maxTurns = ctx.maxTurnCounts.get(emp.uuid);
     const requiredT6T7 = Math.max(0, turnTarget - allocated);
 
     const entry: TurnRateioEntry = {
@@ -125,7 +139,11 @@ export function computeTurnRateio(ws: GenerationWorkspace): TurnRateioResult {
       metaTurnosNormal,
       turnDeviation: allocated - turnTarget,
     };
-    entry.reasonForDeviation = deviationReason(entry);
+    if (maxTurns != null && allocated > maxTurns) {
+      entry.reasonForDeviation = `Acima do máximo de rateio (${allocated}/${maxTurns}).`;
+    } else {
+      entry.reasonForDeviation = deviationReason(entry);
+    }
     entries.push(entry);
     targets.push({
       employeeUuid: emp.uuid,
@@ -182,8 +200,15 @@ export function sortPaoForTurnBalance(
   _dayIndex: number,
   entries: TurnRateioEntry[],
 ): GenerationInputEmployee[] {
+  const ctx = ws.rateioContext;
   const byUuid = new Map(entries.map((e) => [e.employeeUuid, e]));
   return sortPaoByAssignedTurnBalance(ws, entries).filter((c) => {
+    if (ctx) {
+      const cur = ctx.currentTurnCounts.get(c.uuid) ?? 0;
+      const max = ctx.maxTurnCounts.get(c.uuid);
+      if (max != null && cur >= max) return false;
+      return true;
+    }
     const entry = byUuid.get(c.uuid);
     if (!entry) return true;
     return entry.allocatedTurns < entry.turnTarget;

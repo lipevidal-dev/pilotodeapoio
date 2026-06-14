@@ -38,6 +38,28 @@ import {
 import { countAllocatedTurns, computeTurnRateio, sortPaoByAssignedTurnBalance } from "./real-schedule-turn-rateio.js";
 import { sortPaoByOperationalPriority } from "./pao-operational-priority.js";
 import {
+  clearNdDayConflicts,
+  hasNdOnGrid,
+  isNdOverrideProtected,
+  isNdPlacementBlocked,
+} from "./schedule-grid-source.js";
+import { isParallelOnlyPreferredPao } from "./employee-t6-t7-shift.js";
+import {
+  buildScheduleRateioContext,
+  logRateioOverflow,
+  recordRateioAssignment,
+  recordRateioUnassignment,
+  syncRateioCountsFromWorkspace,
+  type ScheduleRateioContext,
+} from "./schedule-rateio-context.js";
+import {
+  canAssignShiftWithRateio,
+  toShiftCode,
+} from "./assignment-eligibility.js";
+import {
+  employeeCanStartT8Block,
+} from "./t8-block-limits.js";
+import {
   maxConsecutiveWorkDays,
   workDatesFromWorkspace,
 } from "./operational-audit.js";
@@ -82,6 +104,7 @@ export class GenerationWorkspace {
   };
 
   private coverageGapsCache: Array<{ date: string; shiftCode: string }> | null = null;
+  private readonly employeeT6T7Lock = new Map<string, "T6" | "T7">();
   private readonly t8BlockComplete = new Set<string>();
   private readonly noFlightByUuid = new Map<string, Set<string>>();
   readonly birthdayWarnings: ValidationIssue[] = [];
@@ -97,6 +120,12 @@ export class GenerationWorkspace {
 
   /** Motor dedicado APAO (Gerar escala APAO) — habilita FA + 6x1 sem afetar PAO REAL_V1. */
   apaoMotorEnabled = false;
+
+  /** Fonte única de rateio — min/target/max e contadores de turnos. */
+  rateioContext: ScheduleRateioContext | null = null;
+
+  /** T8 isolado emergencial pós-dedup — preservado em repairIsolatedT8. */
+  private readonly emergencyIsolatedT8Keys = new Set<string>();
 
   constructor(readonly input: GenerationInput) {
     this.shiftMap =
@@ -154,6 +183,49 @@ export class GenerationWorkspace {
     return countAllocatedTurns(this, uuid);
   }
 
+  initRateioContext(): ScheduleRateioContext {
+    this.rateioContext = buildScheduleRateioContext(this);
+    return this.rateioContext;
+  }
+
+  ensureRateioContext(): ScheduleRateioContext {
+    return this.rateioContext ?? this.initRateioContext();
+  }
+
+  markEmergencyIsolatedT8(uuid: string, day: string): void {
+    this.emergencyIsolatedT8Keys.add(`${uuid}|${day}`);
+  }
+
+  isEmergencyIsolatedT8(uuid: string, day: string): boolean {
+    return this.emergencyIsolatedT8Keys.has(`${uuid}|${day}`);
+  }
+
+  listEmergencyIsolatedT8Days(): Array<{ employeeUuid: string; date: string }> {
+    return [...this.emergencyIsolatedT8Keys].map((key) => {
+      const [employeeUuid, date] = key.split("|") as [string, string];
+      return { employeeUuid, date };
+    });
+  }
+
+  syncRateioContext(): void {
+    if (this.rateioContext) {
+      syncRateioCountsFromWorkspace(this, this.rateioContext);
+    }
+  }
+
+  /** Indica se ainda existe PAO no pool principal abaixo do maxTurnCount. */
+  hasPaoBelowMaxForRateio(excludeUuid?: string): boolean {
+    if (!this.rateioContext) return false;
+    const ctx = this.rateioContext;
+    for (const c of this.paoEmps) {
+      if (c.uuid === excludeUuid) continue;
+      const cur = ctx.currentTurnCounts.get(c.uuid) ?? 0;
+      const max = ctx.maxTurnCounts.get(c.uuid);
+      if (max == null || cur < max) return true;
+    }
+    return false;
+  }
+
   /** Turnos elegíveis para o PAO (exclui restrições permanentes). */
   allowedShiftsForEmployee(uuid: string, fallback?: readonly string[]): string[] {
     const shifts = fallback ?? listPaoRateioShiftCodesFromWorkspace(this);
@@ -170,14 +242,16 @@ export class GenerationWorkspace {
     this.noFlightWarnings.length = 0;
     const rateio = computeTurnRateio(this);
     const targetByUuid = new Map(rateio.entries.map((e) => [e.employeeUuid, e.turnTarget]));
-    const prioritized = sortPaoByOperationalPriority(this, 0).filter((c) =>
-      this.isFullMonthNoFlight(c.uuid),
+    const prioritized = sortPaoByOperationalPriority(this, 0).filter(
+      (c) => this.isFullMonthNoFlight(c.uuid) && !isParallelOnlyPreferredPao(this, c.uuid),
     );
 
     for (const c of prioritized) {
       const turnTarget = targetByUuid.get(c.uuid) ?? 0;
+      const maxTurns = this.rateioContext?.maxTurnCounts.get(c.uuid);
       let count = countAllocatedTurns(this, c.uuid);
-      if (count >= turnTarget) continue;
+      const cap = maxTurns != null ? Math.min(turnTarget, maxTurns) : turnTarget;
+      if (count >= cap) continue;
 
       const shiftsForEmployee = this.allowedShiftsForEmployee(c.uuid, shifts);
       if (shiftsForEmployee.length === 0) {
@@ -194,7 +268,7 @@ export class GenerationWorkspace {
       }
 
       for (const day of this.days) {
-        if (count >= turnTarget) break;
+        if (count >= cap) break;
         const did = this.uuidToDomain.get(c.uuid)!;
         if (this.planned.has(assignmentKey(did, day))) continue;
         if (this.allocations.some((a) => a.employeeUuid === c.uuid && a.date === day && a.label === "ND")) {
@@ -367,6 +441,44 @@ export class GenerationWorkspace {
     if (this.isDayBlockedForShift(uuid, day)) return false;
     const did = this.uuidToDomain.get(uuid)!;
     const emp = this.input.employees.find((e) => e.uuid === uuid)!.employee;
+    const shiftCode = toShiftCode(code);
+
+    if (emp.role === "PAO" && shiftCode && this.rateioContext) {
+      const ctx = this.rateioContext;
+      const current = ctx.currentTurnCounts.get(uuid) ?? 0;
+      const max = ctx.maxTurnCounts.get(uuid);
+      const eligibility = canAssignShiftWithRateio({
+        monthDays: this.days.length,
+        day: this.days.indexOf(day) + 1,
+        shift: shiftCode,
+        employeeId: uuid,
+        currentTurnCounts: ctx.currentTurnCounts,
+        maxTurnCounts: ctx.maxTurnCounts,
+        minTurnCounts: ctx.minTurnCounts,
+        targetTurnCounts: ctx.targetTurnCounts,
+        t6Counts: ctx.currentT6Counts,
+        t7Counts: ctx.currentT7Counts,
+        t8Counts: ctx.currentT8Counts,
+        t9Counts: ctx.currentT9Counts,
+        preferredShiftByEmployee: ctx.preferredShiftByEmployee,
+        strictMaxTurnCount: true,
+        allowEmergencyOverflow: coverageEmergency,
+      });
+      if (!eligibility.allowed) {
+        if (!coverageEmergency && !this.hasPaoBelowMaxForRateio(uuid)) {
+          return this.tryAssignShift(uuid, day, code, true);
+        }
+        return false;
+      }
+      if (
+        coverageEmergency &&
+        max !== undefined &&
+        current >= max
+      ) {
+        logRateioOverflow(ctx, uuid, shiftCode, day);
+      }
+    }
+
     if (emp.role === "PAO" && !coverageEmergency) {
       const budget = this.workCount(uuid) + 1 + this.countNd(uuid) + IDEAL_PAO_REST_COUNT;
       if (budget > this.days.length) return false;
@@ -384,16 +496,25 @@ export class GenerationWorkspace {
     const rest12 = has12hRest(did, day, code, continuity, this.shiftMap, this.timedOccupancies);
     if (!rest12.ok) return false;
     this.planned.set(assignmentKey(did, day), code);
+    if (shiftCode && this.rateioContext) {
+      recordRateioAssignment(this.rateioContext, uuid, code);
+    }
     this.coverageGapsCache = null;
     return true;
   }
 
-  unassignShift(uuid: string, day: string): boolean {
-    if (this.isT8BlockProtected(uuid, day)) return false;
+  unassignShift(uuid: string, day: string, opts?: { bypassT8Protection?: boolean }): boolean {
+    if (!opts?.bypassT8Protection && this.isT8BlockProtected(uuid, day)) return false;
     const did = this.uuidToDomain.get(uuid);
     if (!did) return false;
+    const code = this.planned.get(assignmentKey(did, day));
     const ok = this.planned.delete(assignmentKey(did, day));
-    if (ok) this.coverageGapsCache = null;
+    if (ok) {
+      if (code && this.rateioContext) {
+        recordRateioUnassignment(this.rateioContext, uuid, code);
+      }
+      this.coverageGapsCache = null;
+    }
     return ok;
   }
 
@@ -463,6 +584,18 @@ export class GenerationWorkspace {
     return gaps;
   }
 
+  clearCoverageGapsCache(): void {
+    this.coverageGapsCache = null;
+  }
+
+  getEmployeeT6T7Lock(uuid: string): "T6" | "T7" | undefined {
+    return this.employeeT6T7Lock.get(uuid);
+  }
+
+  setEmployeeT6T7Lock(uuid: string, code: "T6" | "T7"): void {
+    this.employeeT6T7Lock.set(uuid, code);
+  }
+
   /** Cobertura T6/T7 e T8 (somente blocos válidos). */
   coverPaoShiftsPrioritized(): number {
     return this.coverT6T7Only() + this.coverT8BlocksOnly();
@@ -508,7 +641,7 @@ export class GenerationWorkspace {
   }
 
   /** Valida bloco T8/T8/ND a partir de startDay (D). */
-  canPlaceT8Block(uuid: string, startDay: string): boolean {
+  canPlaceT8Block(uuid: string, startDay: string, coverageEmergency = false): boolean {
     const did = this.uuidToDomain.get(uuid);
     if (!did || !this.days.includes(startDay)) return false;
 
@@ -517,12 +650,24 @@ export class GenerationWorkspace {
     const d2 = addDays(d0, 2);
     if (!this.days.includes(d1)) return false;
 
-    for (const d of [d0, d1, d2]) {
-      if (this.isDayBlockedForShift(uuid, d)) return false;
-    }
-
     const existing0 = this.shiftOnDay(did, d0);
     const existing1 = this.shiftOnDay(did, d1);
+    if (existing0 !== "T8" && existing1 !== "T8" && !employeeCanStartT8Block(this, uuid, coverageEmergency)) {
+      return false;
+    }
+
+    for (const d of [d0, d1]) {
+      if (this.isDayBlockedForShift(uuid, d)) return false;
+    }
+    if (this.days.includes(d2)) {
+      if (this.isDayBlockedForShift(uuid, d2)) return false;
+      if (this.planned.has(assignmentKey(did, d2)) || this.historyPlanned.has(assignmentKey(did, d2))) {
+        return false;
+      }
+    } else if (isNdPlacementBlocked(this, uuid, d2)) {
+      return false;
+    }
+
     if (existing0 && existing0 !== "T8") return false;
     if (existing1 && existing1 !== "T8") return false;
     if (existing0 === "T8" && existing1 === "T8") return false;
@@ -552,8 +697,8 @@ export class GenerationWorkspace {
   }
 
   /** Aloca bloco completo T8/T8/ND (ND pode cair fora do mês). */
-  tryPlaceT8Block(uuid: string, startDay: string): boolean {
-    if (!this.canPlaceT8Block(uuid, startDay)) return false;
+  tryPlaceT8Block(uuid: string, startDay: string, coverageEmergency = false): boolean {
+    if (!this.canPlaceT8Block(uuid, startDay, coverageEmergency)) return false;
 
     const did = this.uuidToDomain.get(uuid)!;
     const d0 = startDay;
@@ -577,7 +722,7 @@ export class GenerationWorkspace {
   }
 
   /** Completa par T8/T8 quando o primeiro dia já é T8. */
-  tryCompleteT8Pair(uuid: string, secondDay: string): boolean {
+  tryCompleteT8Pair(uuid: string, secondDay: string, coverageEmergency = false): boolean {
     const did = this.uuidToDomain.get(uuid);
     if (!did || !this.days.includes(secondDay)) return false;
 
@@ -588,38 +733,54 @@ export class GenerationWorkspace {
     if (this.isDayBlockedForShift(uuid, secondDay)) return false;
 
     const ndDay = addDays(secondDay, 1);
-    if (this.isDayBlockedForShift(uuid, ndDay)) return false;
+    if (this.days.includes(ndDay) && isNdPlacementBlocked(this, uuid, ndDay)) return false;
     if (this.planned.has(assignmentKey(did, ndDay)) || this.historyPlanned.has(assignmentKey(did, ndDay))) {
       return false;
     }
 
     const emp = this.input.employees.find((e) => e.uuid === uuid)!.employee;
     const continuity = this.mergedPlannedForContinuity();
-    const r = canWork(emp, secondDay, "T8", this.blocked, continuity, this.canWorkOpts);
+    const r = canWork(emp, secondDay, "T8", this.blocked, continuity, {
+      ...this.canWorkOpts,
+      coverageEmergency,
+    });
     if (!r.ok) return false;
     if (!has12hRest(did, secondDay, "T8", continuity, this.shiftMap).ok) return false;
 
-    if (!this.tryAssignShift(uuid, secondDay, "T8")) return false;
-    this.lockDay(uuid, ndDay, "ND");
+    if (!this.tryAssignShift(uuid, secondDay, "T8", coverageEmergency)) return false;
+    if (
+      this.days.includes(ndDay) &&
+      !hasNdOnGrid(this, uuid, ndDay)
+    ) {
+      clearNdDayConflicts(this, uuid, ndDay);
+      this.lockDay(uuid, ndDay, "ND");
+    } else if (!this.days.includes(ndDay)) {
+      clearNdDayConflicts(this, uuid, ndDay);
+      this.lockDay(uuid, ndDay, "ND");
+    }
     this.coverageGapsCache = null;
     return true;
   }
 
   /** Cobertura T8 somente como bloco indivisível T8/T8/ND. */
-  tryAssignT8Coverage(day: string, candidates?: GenerationInputEmployee[]): boolean {
+  tryAssignT8Coverage(day: string, candidates?: GenerationInputEmployee[], coverageEmergency = false): boolean {
     const dayIndex = Math.max(0, this.days.indexOf(day));
-    const pool = candidates ?? sortPaoByOperationalPriority(this, dayIndex);
+    const pool = (candidates ?? sortPaoByOperationalPriority(this, dayIndex)).filter(
+      (c) =>
+        !isParallelOnlyPreferredPao(this, c.uuid) &&
+        (coverageEmergency || employeeCanStartT8Block(this, c.uuid, false)),
+    );
 
     for (const c of pool) {
       if (this.tryCompleteT8Pair(c.uuid, day)) return true;
     }
     for (const c of pool) {
-      if (this.tryPlaceT8Block(c.uuid, day)) return true;
+      if (this.tryPlaceT8Block(c.uuid, day, coverageEmergency)) return true;
     }
     const prev = addDays(day, -1);
     if (this.days.includes(prev)) {
       for (const c of pool) {
-        if (this.tryPlaceT8Block(c.uuid, prev)) return true;
+        if (this.tryPlaceT8Block(c.uuid, prev, coverageEmergency)) return true;
       }
     }
     return false;
@@ -1026,7 +1187,7 @@ export class GenerationWorkspace {
 
   /** Remove ND gerado se não faz parte de bloco T8/T8 ativo. */
   releaseGeneratorNd(uuid: string, day: string): boolean {
-    if (this.isLockedByAdmin(uuid, day)) return false;
+    if (isNdOverrideProtected(this, uuid, day)) return false;
     const did = this.uuidToDomain.get(uuid)!;
     const d1 = addDays(day, -2);
     const d2 = addDays(day, -1);
@@ -1092,18 +1253,20 @@ export class GenerationWorkspace {
       const prev = lastVacationByEmployee.get(v.employeeUuid);
       if (!prev || v.date > prev) lastVacationByEmployee.set(v.employeeUuid, v.date);
     }
-    for (const ret of this.input.vacationReturnDays ?? []) {
-      const did = this.uuidToDomain.get(ret.employeeUuid);
-      if (!did || !this.days.includes(ret.date)) continue;
-      if (this.blocked.has(assignmentKey(did, ret.date))) continue;
-      this.lockDay(ret.employeeUuid, ret.date, "FOLGA");
-    }
-    for (const [uuid, lastDay] of lastVacationByEmployee) {
-      const returnDay = addDays(lastDay, 1);
-      if (!this.days.includes(returnDay)) continue;
-      const did = this.uuidToDomain.get(uuid);
-      if (!did || this.blocked.has(assignmentKey(did, returnDay))) continue;
-      this.lockDay(uuid, returnDay, "FOLGA");
+    if (this.allowsCommonFolgaAutoAllocation()) {
+      for (const ret of this.input.vacationReturnDays ?? []) {
+        const did = this.uuidToDomain.get(ret.employeeUuid);
+        if (!did || !this.days.includes(ret.date)) continue;
+        if (this.blocked.has(assignmentKey(did, ret.date))) continue;
+        this.lockDay(ret.employeeUuid, ret.date, "FOLGA");
+      }
+      for (const [uuid, lastDay] of lastVacationByEmployee) {
+        const returnDay = addDays(lastDay, 1);
+        if (!this.days.includes(returnDay)) continue;
+        const did = this.uuidToDomain.get(uuid);
+        if (!did || this.blocked.has(assignmentKey(did, returnDay))) continue;
+        this.lockDay(uuid, returnDay, "FOLGA");
+      }
     }
     for (const fp of this.input.approvedDayOff) {
       this.lockDay(fp.employeeUuid, fp.date, "FOLGA PEDIDA");
@@ -1158,6 +1321,7 @@ export class GenerationWorkspace {
 
   /** Folga obrigatória no dia seguinte a FANI (continuidade entre meses). */
   applyPostFaniRestDays(): void {
+    if (!this.allowsCommonFolgaAutoAllocation()) return;
     for (const ge of this.input.employees) {
       const did = this.uuidToDomain.get(ge.uuid);
       if (!did) continue;
@@ -1246,17 +1410,6 @@ export class GenerationWorkspace {
     this.coverageGapsCache = null;
   }
 
-  private clearGeneratorLabelOnDay(uuid: string, day: string, exceptLabel?: string): void {
-    const did = this.uuidToDomain.get(uuid)!;
-    const key = assignmentKey(did, day);
-    const blocked = this.blocked.get(key);
-    if (blocked && blocked !== exceptLabel && !this.isLockedByAdmin(uuid, day)) {
-      this.blocked.delete(key);
-      const idx = this.allocations.findIndex((a) => a.employeeUuid === uuid && a.date === day);
-      if (idx >= 0) this.allocations.splice(idx, 1);
-    }
-  }
-
   ensureNdForT8Pairs(): void {
     for (const c of this.paoEmps) {
       const did = c.domainId;
@@ -1264,18 +1417,34 @@ export class GenerationWorkspace {
         const d2 = addDays(ndDay, -1);
         const d1 = addDays(ndDay, -2);
         if (this.shiftOnDay(did, d1) !== "T8" || this.shiftOnDay(did, d2) !== "T8") continue;
-        if (this.planned.has(assignmentKey(did, ndDay))) continue;
-        this.clearGeneratorLabelOnDay(c.uuid, ndDay, "ND");
-        const hasNd =
-          this.allocations.some(
-            (a) => a.employeeUuid === c.uuid && a.date === ndDay && a.label === "ND",
-          ) || this.blocked.get(assignmentKey(did, ndDay)) === "ND";
-        if (!hasNd) {
+
+        if (isNdPlacementBlocked(this, c.uuid, ndDay)) continue;
+
+        clearNdDayConflicts(this, c.uuid, ndDay);
+
+        if (!hasNdOnGrid(this, c.uuid, ndDay)) {
           this.lockDay(c.uuid, ndDay, "ND");
         }
       }
     }
     this.coverageGapsCache = null;
+  }
+
+  /** T9/paralelo no dia ND após T8/T8 — remove turno conflitante e garante ND. */
+  reconcileNdAfterParallelShifts(): void {
+    for (const c of this.paoEmps) {
+      const did = c.domainId;
+      for (const day of this.days) {
+        const d2 = addDays(day, 1);
+        if (!this.days.includes(d2)) continue;
+        if (this.shiftOnDay(did, day) !== "T8" || this.shiftOnDay(did, d2) !== "T8") continue;
+        const ndDay = addDays(d2, 1);
+        if (!this.days.includes(ndDay)) continue;
+        if (isNdPlacementBlocked(this, c.uuid, ndDay)) continue;
+        clearNdDayConflicts(this, c.uuid, ndDay);
+      }
+    }
+    this.ensureNdForT8Pairs();
   }
 
   /** Remove T8 isolado — não recria turno sem bloco válido. */
@@ -1289,6 +1458,7 @@ export class GenerationWorkspace {
         const prevT8 = this.shiftOnDay(did, prev) === "T8";
         const nextT8 = this.shiftOnDay(did, next) === "T8";
         if (!prevT8 && !nextT8) {
+          if (this.isEmergencyIsolatedT8(c.uuid, day)) continue;
           this.unassignShift(c.uuid, day);
         }
       }
@@ -2143,21 +2313,31 @@ export class GenerationWorkspace {
     if (!code || code === "T8") return false;
     if (this.isT8BlockProtected(uuid, day)) return false;
 
+    if (this.rateioContext) {
+      recordRateioUnassignment(this.rateioContext, uuid, code);
+    }
     this.planned.delete(assignmentKey(did, day));
     if (this.hasPaoCoverage(day, code)) {
       this.coverageGapsCache = null;
       return true;
     }
 
+    const ctx = this.rateioContext;
     const substitutes = [...this.paoEmps]
       .filter((c) => c.uuid !== uuid)
-      .sort(
-        (a, b) =>
+      .sort((a, b) => {
+        if (ctx) {
+          const curA = ctx.currentTurnCounts.get(a.uuid) ?? 0;
+          const curB = ctx.currentTurnCounts.get(b.uuid) ?? 0;
+          if (curA !== curB) return curA - curB;
+        }
+        return (
           maxConsecutiveWorkDays(workDatesFromWorkspace(this, a.uuid)) -
             maxConsecutiveWorkDays(workDatesFromWorkspace(this, b.uuid)) ||
           this.workCount(a.uuid) - this.workCount(b.uuid) ||
-          a.employee.seniority - b.employee.seniority,
-      );
+          a.employee.seniority - b.employee.seniority
+        );
+      });
 
     for (const other of substitutes) {
       if (this.wouldExceedMaxConsecAfterDay(other.uuid, day)) continue;
@@ -2168,6 +2348,9 @@ export class GenerationWorkspace {
     }
 
     this.planned.set(assignmentKey(did, day), code);
+    if (this.rateioContext) {
+      recordRateioAssignment(this.rateioContext, uuid, code);
+    }
     return false;
   }
 
@@ -2232,6 +2415,11 @@ export class GenerationWorkspace {
   }
 
   toScheduleContext(): ScheduleContext {
-    return generationToScheduleContext(this.input, this.toAssignments(), this.allocations);
+    return generationToScheduleContext(
+      this.input,
+      this.toAssignments(),
+      this.allocations,
+      this.listEmergencyIsolatedT8Days(),
+    );
   }
 }

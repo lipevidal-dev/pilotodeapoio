@@ -1,6 +1,7 @@
 import type { IndividualTarget, EmployeeBlockPlan } from "./demand-planning-types.js";
 import {
   idealBlockSizeForTarget,
+  idealBlockSpacing,
   plannedBlockCountForTarget,
   targetToBlocksV3,
 } from "./motor-v3-planning.js";

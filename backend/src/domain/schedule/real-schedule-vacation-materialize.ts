@@ -11,6 +11,7 @@ import {
   vacationPatternWorkTarget,
 } from "./real-schedule-vacation-pattern.js";
 import { wouldExceedT6T7BlockMax } from "./t6-t7-block-coverage.js";
+import { resolveEmployeeT6T7Code } from "./employee-t6-t7-shift.js";
 import type { ValidationIssue } from "./types.js";
 
 export type VacationFortnight = "FIRST_HALF" | "SECOND_HALF" | null;
@@ -54,16 +55,6 @@ export function detectVacationFortnight(
   return null;
 }
 
-function pickShiftForRun(ws: GenerationWorkspace, days: string[]): "T6" | "T7" {
-  let t6Need = 0;
-  let t7Need = 0;
-  for (const day of days) {
-    if (!ws.hasPaoCoverage(day, "T6")) t6Need++;
-    if (!ws.hasPaoCoverage(day, "T7")) t7Need++;
-  }
-  return t7Need > t6Need ? "T7" : "T6";
-}
-
 function shiftOnDay(ws: GenerationWorkspace, uuid: string, day: string): string | undefined {
   return ws.toAssignments().find((a) => a.employeeUuid === uuid && a.date === day)?.shiftCode;
 }
@@ -75,7 +66,7 @@ function materializeWorkRun(
 ): number {
   if (days.length === 0) return 0;
 
-  const code = pickShiftForRun(ws, days);
+  const code = resolveEmployeeT6T7Code(ws, uuid, days);
   let placed = 0;
 
   for (const day of days) {
@@ -139,7 +130,7 @@ export function materializeVacationFortnightPatterns(
           workRuns.push(currentRun);
           currentRun = [];
         }
-        if (ws.isPaoDayEmpty(c.uuid, day) && !isVacationDay(ws, c.uuid, day)) {
+        if (!ws.realV1ManualCommonFolga && ws.isPaoDayEmpty(c.uuid, day) && !isVacationDay(ws, c.uuid, day)) {
           ws.lockDay(c.uuid, day, "FOLGA");
           folgasPlaced++;
         }

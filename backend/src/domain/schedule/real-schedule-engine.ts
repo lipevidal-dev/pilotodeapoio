@@ -6,6 +6,7 @@ import { buildGenerationInsights } from "./generation-insights.js";
 import { buildExtendedSummary } from "./generation-summary.js";
 import { GenerationWorkspace } from "./generation-workspace.js";
 import { blockOptimizer } from "./block-optimizer.js";
+import { finalizeT8NdBlocks } from "./schedule-grid-source.js";
 import { operationalBalancer } from "./operational-balancer.js";
 import {
   preferIdealFolgaCount,
@@ -14,6 +15,7 @@ import {
 } from "./real-schedule-folgas.js";
 import { allocateFlightsForWorkdayDeficit } from "./real-schedule-flights.js";
 import { deduplicatePaoShiftCoverage } from "./pao-shift-dedup.js";
+import { repairT8GapsAfterDedup } from "./repair-t8-gaps-after-dedup.js";
 import { coverResidualT6T7Only } from "./real-schedule-residual.js";
 import { computeRealMotorTargets } from "./real-schedule-targets.js";
 import { materializeT6T7BlocksStrict } from "./real-schedule-blocks.js";
@@ -50,6 +52,17 @@ export class RealScheduleEngine {
     );
 
     ws.planFolgaSocial();
+
+    ws.initRateioContext();
+    const mainMax = [...ws.rateioContext!.mainPoolEmployeeIds]
+      .map((id) => ws.rateioContext!.maxTurnCounts.get(id))
+      .find((v) => v != null);
+    stepNotes.push(
+      `[1d] Rateio unificado: pool principal=${ws.rateioContext!.mainPoolEmployeeIds.size}, ` +
+        `T8=${ws.rateioContext!.t8PoolEmployeeIds.size}, T9=${ws.rateioContext!.t9PoolEmployeeIds.size}` +
+        (mainMax != null ? `; max turnos principal=${mainMax}` : "") +
+        ".",
+    );
 
     const t8 = allocateT8BlocksStrict(ws);
     stepNotes.push(
@@ -139,6 +152,8 @@ export class RealScheduleEngine {
         .join(", ") || "nenhum"}.`,
     );
 
+    ws.reconcileNdAfterParallelShifts();
+
     if (ws.apaoMotorEnabled) {
       ws.assignApaoWithPao();
       ws.allocateApaoRestDays();
@@ -215,6 +230,7 @@ export class RealScheduleEngine {
     const ws = new GenerationWorkspace(input);
     const engineSuggestions: string[] = [];
 
+    ws.realV1ManualCommonFolga = true;
     ws.applyHardBlocks();
     const motorReport = this.execute(ws);
 
@@ -297,7 +313,36 @@ export class RealScheduleEngine {
     ws.repairIsolatedT8();
     ws.cleanupOrphanNd();
     ws.ensureNdForT8Pairs();
+    ws.reconcileNdAfterParallelShifts();
     ws.revalidateCoverageAfterBalance();
+
+    finalizeT8NdBlocks(ws);
+
+    const dupesAfterOptimizer = deduplicatePaoShiftCoverage(ws);
+    if (dupesAfterOptimizer > 0) {
+      motorReport.stepNotes.push(
+        `[12b] Turnos PAO duplicados pós-optimizer: ${dupesAfterOptimizer} removido(s).`,
+      );
+    }
+
+    let lastRepair = { blocksPlaced: 0, emergencyIsolated: 0, gapsRemaining: 0, warnings: [] as typeof motorReport.warnings };
+    for (let round = 0; round < 3; round++) {
+      const dupesRemoved = deduplicatePaoShiftCoverage(ws);
+      lastRepair = repairT8GapsAfterDedup(ws);
+      finalizeT8NdBlocks(ws);
+      if (round === 0 && (dupesAfterOptimizer > 0 || dupesRemoved > 0 || lastRepair.emergencyIsolated > 0)) {
+        motorReport.stepNotes.push(
+          `[12c-${round}] Pós-dedup: dupes=${dupesRemoved}; blocos T8=${lastRepair.blocksPlaced}; ` +
+            `T8 isolado emerg.=${lastRepair.emergencyIsolated}; gaps T8=${lastRepair.gapsRemaining}.`,
+        );
+      }
+      if (dupesRemoved === 0 && lastRepair.gapsRemaining === 0) break;
+    }
+    if (lastRepair.warnings.length > 0) {
+      motorReport.emergencyIsolatedT8Count = lastRepair.emergencyIsolated;
+    }
+    motorReport.emergencyIsolatedT8Days = ws.listEmergencyIsolatedT8Days();
+
     motorReport.structuralMetrics = buildStructuralMetrics(
       ws,
       ws.toAssignments(),
@@ -325,7 +370,7 @@ export class RealScheduleEngine {
       ...engineViolations,
       ...gate.issues,
     ].filter((i) => {
-      const k = `${i.type}|${i.date}|${i.employee}|${i.detail}`;
+      const k = `${i.type}|${i.date}|${i.employee}`;
       if (seen.has(k)) return false;
       seen.add(k);
       return true;
@@ -337,6 +382,9 @@ export class RealScheduleEngine {
     }
 
     const coverageGaps = ws.listCoverageGaps().length;
+    if (coverageGaps === 0 && balanceReport.warnings.length > 0) {
+      balanceReport.warnings = balanceReport.warnings.filter((w) => w.type !== "COBERTURA");
+    }
     if (coverageGaps > 0) {
       engineSuggestions.push(
         `${coverageGaps} furo(s) de cobertura — revise equipe, bloqueios e blocos T8/T8/ND.`,
@@ -414,17 +462,14 @@ function closeStructurePreservingGaps(
     const repair = repairEngine.repair(ws, []);
     totalRepaired += repair.repaired;
     ws.repairIsolatedT8();
-    ws.cleanupOrphanNd();
-    ws.ensureNdForT8Pairs();
+    finalizeT8NdBlocks(ws);
     const gapsAfter = ws.listCoverageGaps().length;
     if (gapsAfter >= gapsBefore && repair.repaired === 0) break;
   }
 
   if (useCompleteAgenda && ws.listCoverageGaps().length > 0) {
     ws.completePaoAgenda();
-    ws.repairIsolatedT8();
-    ws.cleanupOrphanNd();
-    ws.ensureNdForT8Pairs();
+    finalizeT8NdBlocks(ws);
   }
 
   if (totalRepaired > 0 || rounds > 1 || ws.listCoverageGaps().length > 0) {

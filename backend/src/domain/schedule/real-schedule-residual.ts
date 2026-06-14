@@ -3,6 +3,7 @@ import { MIN_MONTHLY_FOLGAS } from "./real-schedule-types.js";
 import { computeTurnRateio, sortPaoForTurnBalance } from "./real-schedule-turn-rateio.js";
 import { idealBlockSizeForTarget } from "./motor-v3-planning.js";
 import { wouldExceedT6T7BlockMax } from "./t6-t7-block-coverage.js";
+import { isParallelOnlyPreferredPao, isT8PreferredPao, employeeDominantT6T7OrResolve } from "./employee-t6-t7-shift.js";
 
 function shouldReserveDaysForFolgas(ws: GenerationWorkspace, uuid: string): boolean {
   const rest = ws.countRest(uuid);
@@ -40,12 +41,26 @@ function tryPlaceResidualBlock(
 ): boolean {
   if (startDi + size > ws.days.length) return false;
 
+  const gapDays = ws.days.slice(startDi, startDi + size);
+
   for (let i = 0; i < size; i++) {
     const day = ws.days[startDi + i]!;
     if (!gapNeedsCode(ws, day, code)) return false;
   }
 
-  for (const c of candidates) {
+  const ordered = [...candidates].sort((a, b) => {
+    const codeA = employeeDominantT6T7OrResolve(ws, a.uuid, gapDays);
+    const codeB = employeeDominantT6T7OrResolve(ws, b.uuid, gapDays);
+    const matchA = codeA === code ? 0 : 1;
+    const matchB = codeB === code ? 0 : 1;
+    return matchA - matchB;
+  });
+
+  for (const c of ordered) {
+    if (isParallelOnlyPreferredPao(ws, c.uuid)) continue;
+    if (isT8PreferredPao(ws, c.uuid)) continue;
+    const employeeCode = employeeDominantT6T7OrResolve(ws, c.uuid, gapDays);
+    if (employeeCode !== code) continue;
     if (shouldReserveDaysForFolgas(ws, c.uuid)) continue;
 
     let placed = 0;
@@ -112,9 +127,14 @@ export function coverResidualT6T7Only(ws: GenerationWorkspace): ResidualT6T7Resu
       if (placed) continue;
 
       for (const c of candidates) {
+        if (isParallelOnlyPreferredPao(ws, c.uuid)) continue;
+        if (isT8PreferredPao(ws, c.uuid)) continue;
         if (shouldReserveDaysForFolgas(ws, c.uuid)) continue;
-        if (wouldExceedT6T7BlockMax(ws, c.uuid, day, code)) continue;
-        if (ws.tryAssignShift(c.uuid, day, code) || ws.tryAssignShift(c.uuid, day, code, true)) {
+        const gapDay = ws.days[di]!;
+        const employeeCode = employeeDominantT6T7OrResolve(ws, c.uuid, [gapDay]);
+        if (employeeCode !== code) continue;
+        if (wouldExceedT6T7BlockMax(ws, c.uuid, gapDay, code)) continue;
+        if (ws.tryAssignShift(c.uuid, gapDay, code, true)) {
           unitCoverageApplied++;
           break;
         }

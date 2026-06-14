@@ -101,7 +101,6 @@ export function targetToBlocksV3(yf: number): number[] {
   if (yf <= 0) return [];
   if (yf <= 2) return [yf];
 
-  const bf = idealBlockSizeForTarget(yf);
   const zf = plannedBlockCountForTarget(yf);
 
   if (zf === 1) {
@@ -159,6 +158,7 @@ export function findSpacedConsecutiveSlot(
   blockIndex: number,
   totalBlocks: number,
   initialAvailableDays: string[],
+  preferredStarts?: readonly string[],
 ): string | null {
   if (size <= 0) return null;
 
@@ -202,9 +202,12 @@ export function findSpacedConsecutiveSlot(
   }
 
   if (candidates.length === 0) return null;
-  candidates.sort(
-    (a, b) => a.dist - b.dist || a.order - b.order || a.start.localeCompare(b.start),
-  );
+  candidates.sort((a, b) => {
+    const prefA = preferredStarts?.includes(a.start) ? 0 : 1;
+    const prefB = preferredStarts?.includes(b.start) ? 0 : 1;
+    if (prefA !== prefB) return prefA - prefB;
+    return a.dist - b.dist || a.order - b.order || a.start.localeCompare(b.start);
+  });
   return candidates[0]!.start;
 }
 

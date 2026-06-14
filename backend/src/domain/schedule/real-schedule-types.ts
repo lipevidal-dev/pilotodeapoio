@@ -94,6 +94,8 @@ export interface RealMotorReport {
   t8CoverageGaps: number;
   t8IsolatedCount: number;
   t8PairsWithoutNdCount: number;
+  emergencyIsolatedT8Count?: number;
+  emergencyIsolatedT8Days?: Array<{ employeeUuid: string; date: string }>;
   vacationFortnightProcessed: number;
   vacationBelowPattern: VacationFortnightBelowPattern[];
   t6T7BlocksPlaced: number;

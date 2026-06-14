@@ -9,7 +9,7 @@ import {
 import { targetToBlocks } from "../domain/schedule/demand-planning-blocks.js";
 import { materializeBlockPlans } from "../domain/schedule/demand-planning-materialize.js";
 import { buildBlockPlans } from "../domain/schedule/demand-planning-blocks.js";
-import { freshWorkspace, minimalPaoInput, paoUuid } from "./schedule-slices/slice-helpers.js";
+import { freshWorkspace, minimalPaoInput } from "./schedule-slices/slice-helpers.js";
 import { computeIndividualTargets } from "../domain/schedule/demand-planning-targets.js";
 import { calculateOperationalDemand } from "../domain/schedule/demand-planning-demand.js";
 

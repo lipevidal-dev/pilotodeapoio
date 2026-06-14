@@ -44,6 +44,8 @@ export interface ScheduleContext {
   previousMonthAssignments?: ScheduleAssignment[];
   /** Datas reais de folga pedida (requested-day-offs) por employeeId */
   requestedOffByEmployeeId?: Record<number, string[]>;
+  /** T8 isolado emergencial pós-dedup (`employeeId|day`) — auditar como WARNING, não CRITICAL. */
+  emergencyIsolatedT8Keys?: Set<string>;
 }
 
 export type PlannedMap = Map<string, string>;

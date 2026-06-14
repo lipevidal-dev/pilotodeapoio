@@ -1,10 +1,12 @@
 import { validateSchedule } from "../rules/engine.js";
+import { wouldExceedT6T7BlockMax } from "./t6-t7-block-coverage.js";
 import { addDays } from "../rules/dates.js";
 import { assignmentKey } from "./types.js";
 import { normalizeOperationalLabel } from "./operational-labels.js";
 import type { GeneratedAllocation } from "./generation-types.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import { idealBlockSizeForTarget } from "./motor-v3-planning.js";
+import { syncRateioCountsFromWorkspace } from "./schedule-rateio-context.js";
 
 const MOVABLE_SHIFT_CODES = new Set(["T6", "T7"]);
 
@@ -215,7 +217,7 @@ function restoreSnapshot(ws: GenerationWorkspace, snap: WorkspaceSnapshot): void
   }
   ws.allocations.length = 0;
   ws.allocations.push(...snap.allocations.map((a) => ({ ...a })));
-  ws.coverageGapsCache = null;
+  ws.clearCoverageGapsCache();
 }
 
 function getMovableShift(ws: GenerationWorkspace, uuid: string, day: string): string | null {
@@ -228,8 +230,39 @@ function getMovableShift(ws: GenerationWorkspace, uuid: string, day: string): st
   return code;
 }
 
+function hasMixedT6T7(ws: GenerationWorkspace, uuid: string): boolean {
+  const codes = new Set<string>();
+  for (const a of ws.toAssignments()) {
+    if (a.employeeUuid !== uuid) continue;
+    const code = a.shiftCode.toUpperCase();
+    if (code === "T6" || code === "T7") codes.add(code);
+  }
+  return codes.size > 1;
+}
+
+function preservesShiftHomogeneity(ws: GenerationWorkspace): boolean {
+  for (const emp of ws.paoEmps) {
+    if (hasMixedT6T7(ws, emp.uuid)) return false;
+  }
+  return true;
+}
+
+function violatesRateioMax(ws: GenerationWorkspace): boolean {
+  const ctx = ws.rateioContext;
+  if (!ctx) return false;
+  syncRateioCountsFromWorkspace(ws, ctx);
+  for (const emp of ws.paoEmps) {
+    const total = ctx.currentTurnCounts.get(emp.uuid) ?? 0;
+    const max = ctx.maxTurnCounts.get(emp.uuid);
+    if (max != null && total > max) return true;
+  }
+  return false;
+}
+
 function isMoveValid(ws: GenerationWorkspace): boolean {
   if (ws.listCoverageGaps().length > 0) return false;
+  if (!preservesShiftHomogeneity(ws)) return false;
+  if (violatesRateioMax(ws)) return false;
   ws.ensureNdForT8Pairs();
   ws.revalidateCoverageAfterBalance();
   const issues = validateSchedule(ws.toScheduleContext());
@@ -248,9 +281,22 @@ function tryMoveShift(
 
   const code = getMovableShift(ws, uuid, fromDay);
   if (!code) return false;
+  if (
+    (code === "T6" || code === "T7") &&
+    wouldExceedT6T7BlockMax(ws, uuid, toDay, code)
+  ) {
+    return false;
+  }
 
   if (!ws.tryRemoveShiftPreservingCoverage(uuid, fromDay)) return false;
   if (!ws.tryAssignShift(uuid, toDay, code)) return false;
+  if (
+    (code === "T6" || code === "T7") &&
+    wouldExceedT6T7BlockMax(ws, uuid, toDay, code)
+  ) {
+    ws.tryAssignShift(uuid, fromDay, code);
+    return false;
+  }
   return isMoveValid(ws);
 }
 

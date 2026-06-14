@@ -1,6 +1,7 @@
 import { buildBlockPlans } from "./demand-planning-blocks.js";
 import { materializeBlockPlans } from "./demand-planning-materialize.js";
 import type { IndividualTarget } from "./demand-planning-types.js";
+import { isParallelOnlyPreferredPao, isT8PreferredPao } from "./employee-t6-t7-shift.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import { analyzeT6T7BlockCoverage } from "./coverage-block-metrics.js";
 import type { GeneratedAssignment } from "./generation-types.js";
@@ -21,7 +22,12 @@ export function materializeT6T7BlocksStrict(
   ws: GenerationWorkspace,
   targets: IndividualTarget[],
 ): MaterializeBlocksStrictResult {
-  const eligible = targets.filter((t) => t.group !== "VACATION" && t.target > 0);
+  const eligible = targets.filter((t) => {
+    if (t.group === "VACATION" || t.target <= 0) return false;
+    if (isParallelOnlyPreferredPao(ws, t.employeeUuid)) return false;
+    if (isT8PreferredPao(ws, t.employeeUuid)) return false;
+    return true;
+  });
   const plans = buildBlockPlans(eligible);
   const result = materializeBlockPlans(ws, plans);
   const coverage = analyzeT6T7BlockCoverage(ws.toAssignments(), ws.days);

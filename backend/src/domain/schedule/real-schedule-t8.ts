@@ -1,7 +1,31 @@
 import { addDays } from "../rules/dates.js";
 import { sortPaoByOperationalPriority } from "./pao-operational-priority.js";
+import {
+  employeeCanStartT8Block,
+} from "./t8-block-limits.js";
+import type { GenerationInputEmployee } from "./generation-types.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import type { ValidationIssue } from "./types.js";
+import { sortPaoByRateioPriority } from "./schedule-rateio-context.js";
+import { auditT8NdFromGridSource, finalizeT8NdBlocks } from "./schedule-grid-source.js";
+
+export function sortT8Candidates(
+  ws: GenerationWorkspace,
+  dayIndex: number,
+  coverageEmergency = false,
+): GenerationInputEmployee[] {
+  const ctx = ws.ensureRateioContext();
+  const base = sortPaoByOperationalPriority(ws, dayIndex).filter((c) =>
+    employeeCanStartT8Block(ws, c.uuid, coverageEmergency),
+  );
+  return sortPaoByRateioPriority(
+    ws,
+    ctx,
+    "T8",
+    base.map((c) => ({ uuid: c.uuid, seniority: c.employee.seniority })),
+    { allowEmergency: coverageEmergency },
+  ).map((c) => base.find((b) => b.uuid === c.uuid)!);
+}
 
 export interface StructuralT8Audit {
   isolatedT8Count: number;
@@ -40,60 +64,15 @@ function countT8Blocks(ws: GenerationWorkspace): number {
   return blocks;
 }
 
-/** Audita T8 isolado e duplas T8/T8 sem ND obrigatório. */
+/** Audita T8 isolado e duplas T8/T8 sem ND obrigatório (fonte unificada da grade). */
 export function auditStructuralT8(ws: GenerationWorkspace): StructuralT8Audit {
-  const warnings: ValidationIssue[] = [];
-  let isolatedT8Count = 0;
-  let pairsWithoutNdCount = 0;
-  let t8BlocksCount = 0;
-
-  for (const c of ws.paoEmps) {
-    const name = c.employee.name;
-
-    for (const day of ws.days) {
-      if (shiftCodeOnDay(ws, c.uuid, day) !== "T8") continue;
-
-      const prev = addDays(day, -1);
-      const next = addDays(day, 1);
-      const prevT8 = ws.days.includes(prev) && shiftCodeOnDay(ws, c.uuid, prev) === "T8";
-      const nextT8 = ws.days.includes(next) && shiftCodeOnDay(ws, c.uuid, next) === "T8";
-
-      if (!prevT8 && !nextT8) {
-        isolatedT8Count++;
-        warnings.push({
-          severity: "ALTA",
-          level: "CRITICAL",
-          type: "T8 ISOLADO",
-          date: day,
-          employee: name,
-          detail: `T8 isolado em ${day} — bloco T8/T8/ND obrigatório.`,
-        });
-        continue;
-      }
-
-      if (nextT8 && !prevT8) {
-        t8BlocksCount++;
-        const ndDay = addDays(next, 1);
-        const hasNd = ws.allocations.some(
-          (a) => a.employeeUuid === c.uuid && a.date === ndDay && a.label === "ND",
-        );
-
-        if (!hasNd) {
-          pairsWithoutNdCount++;
-          warnings.push({
-            severity: "ALTA",
-            level: "CRITICAL",
-            type: "T8 SEM ND",
-            date: ndDay,
-            employee: name,
-            detail: `Dupla T8/T8 (${day}/${next}) sem ND em ${ndDay}.`,
-          });
-        }
-      }
-    }
-  }
-
-  return { isolatedT8Count, pairsWithoutNdCount, t8BlocksCount, warnings };
+  const audit = auditT8NdFromGridSource(ws);
+  return {
+    isolatedT8Count: audit.isolatedT8Count,
+    pairsWithoutNdCount: audit.pairsWithoutNdCount,
+    t8BlocksCount: audit.t8BlocksCount,
+    warnings: audit.warnings,
+  };
 }
 
 /**
@@ -102,13 +81,25 @@ export function auditStructuralT8(ws: GenerationWorkspace): StructuralT8Audit {
  */
 export function allocateT8BlocksStrict(ws: GenerationWorkspace): T8AllocationResult {
   let blocksBefore = countT8Blocks(ws);
+  let blockIndex = 0;
 
   for (let di = 0; di < ws.days.length; di++) {
     const day = ws.days[di]!;
     if (ws.hasPaoCoverage(day, "T8")) continue;
 
-    const rotated = sortPaoByOperationalPriority(ws, di);
-    ws.tryAssignT8Coverage(day, rotated);
+    const rotated = sortT8Candidates(ws, di);
+    let placed = false;
+    for (let attempt = 0; attempt < rotated.length; attempt++) {
+      const c = rotated[(blockIndex + attempt) % rotated.length]!;
+      if (ws.tryAssignT8Coverage(day, [c])) {
+        placed = true;
+        blockIndex++;
+        break;
+      }
+    }
+    if (!placed) {
+      ws.tryAssignT8Coverage(day, rotated);
+    }
   }
 
   ws.repairIsolatedT8();
@@ -126,12 +117,18 @@ export function allocateT8BlocksStrict(ws: GenerationWorkspace): T8AllocationRes
 /** Fecha furos T8 restantes sem criar T8 isolado. */
 export function closeT8CoverageGaps(ws: GenerationWorkspace): number {
   let closed = 0;
-  for (const day of ws.days) {
+  for (let di = 0; di < ws.days.length; di++) {
+    const day = ws.days[di]!;
     if (ws.hasPaoCoverage(day, "T8")) continue;
-    if (ws.tryAssignT8Coverage(day)) closed++;
+    const rotated = sortT8Candidates(ws, di, false);
+    if (ws.tryAssignT8Coverage(day, rotated)) {
+      closed++;
+      continue;
+    }
+    const emergency = sortT8Candidates(ws, di, true);
+    if (ws.tryAssignT8Coverage(day, emergency, true)) closed++;
   }
   ws.repairIsolatedT8();
-  ws.cleanupOrphanNd();
-  ws.ensureNdForT8Pairs();
+  finalizeT8NdBlocks(ws);
   return closed;
 }

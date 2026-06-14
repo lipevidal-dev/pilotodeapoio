@@ -1,5 +1,11 @@
 import { PAO_COVERAGE_SHIFTS } from "../rules/constants.js";
+import { listParallelShiftCodes } from "../shift/coverage-type.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
+
+function shiftCodesToDedupe(ws: GenerationWorkspace): string[] {
+  const parallel = listParallelShiftCodes(ws.input.shifts);
+  return [...PAO_COVERAGE_SHIFTS, ...parallel.filter((c) => !PAO_COVERAGE_SHIFTS.includes(c as typeof PAO_COVERAGE_SHIFTS[number]))];
+}
 
 /** Remove PAOs extras no mesmo turno/dia — mantém o de maior senioridade (menor número). */
 export function deduplicatePaoShiftCoverage(ws: GenerationWorkspace): number {
@@ -8,7 +14,7 @@ export function deduplicatePaoShiftCoverage(ws: GenerationWorkspace): number {
     ws.toAssignments().map((a) => [`${a.employeeUuid}|${a.date}`, a.shiftCode] as const),
   );
   for (const day of ws.days) {
-    for (const code of PAO_COVERAGE_SHIFTS) {
+    for (const code of shiftCodesToDedupe(ws)) {
       const onShift: Array<{ uuid: string; seniority: number; name: string }> = [];
       for (const c of ws.paoEmps) {
         if (byCell.get(`${c.uuid}|${day}`) === code) {
@@ -24,7 +30,7 @@ export function deduplicatePaoShiftCoverage(ws: GenerationWorkspace): number {
         (a, b) => a.seniority - b.seniority || a.name.localeCompare(b.name, "pt-BR"),
       );
       for (let i = 1; i < onShift.length; i++) {
-        if (ws.unassignShift(onShift[i]!.uuid, day)) {
+        if (ws.unassignShift(onShift[i]!.uuid, day, { bypassT8Protection: true })) {
           removed++;
           byCell.delete(`${onShift[i]!.uuid}|${day}`);
         }
