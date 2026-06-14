@@ -7,6 +7,11 @@ import type { GeneratedAllocation } from "./generation-types.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import { idealBlockSizeForTarget } from "./motor-v3-planning.js";
 import { syncRateioCountsFromWorkspace } from "./schedule-rateio-context.js";
+import {
+  captureOptimizationSnapshot,
+  restoreOptimizationSnapshot,
+  validateOptimizationState,
+} from "./workspace-optimization-transaction.js";
 
 const MOVABLE_SHIFT_CODES = new Set(["T6", "T7"]);
 
@@ -259,8 +264,17 @@ function violatesRateioMax(ws: GenerationWorkspace): boolean {
   return false;
 }
 
-function isMoveValid(ws: GenerationWorkspace): boolean {
-  if (ws.listCoverageGaps().length > 0) return false;
+function isMoveValid(
+  ws: GenerationWorkspace,
+  baseline?: ReturnType<typeof captureOptimizationSnapshot>,
+): boolean {
+  if (baseline) {
+    const gate = validateOptimizationState(ws, baseline);
+    if (!gate.ok) return false;
+  } else if (ws.listCoverageGaps().length > 0) {
+    return false;
+  }
+
   if (!preservesShiftHomogeneity(ws)) return false;
   if (violatesRateioMax(ws)) return false;
   ws.ensureNdForT8Pairs();
@@ -288,16 +302,25 @@ function tryMoveShift(
     return false;
   }
 
+  const baseline = captureOptimizationSnapshot(ws);
+
   if (!ws.tryRemoveShiftPreservingCoverage(uuid, fromDay)) return false;
-  if (!ws.tryAssignShift(uuid, toDay, code)) return false;
+  if (!ws.tryAssignShift(uuid, toDay, code)) {
+    restoreOptimizationSnapshot(ws, baseline);
+    return false;
+  }
   if (
     (code === "T6" || code === "T7") &&
     wouldExceedT6T7BlockMax(ws, uuid, toDay, code)
   ) {
-    ws.tryAssignShift(uuid, fromDay, code);
+    restoreOptimizationSnapshot(ws, baseline);
     return false;
   }
-  return isMoveValid(ws);
+  if (!isMoveValid(ws, baseline)) {
+    restoreOptimizationSnapshot(ws, baseline);
+    return false;
+  }
+  return true;
 }
 
 function trySwapShifts(
@@ -311,11 +334,26 @@ function trySwapShifts(
   const codeB = getMovableShift(ws, uuidB, dayB);
   if (!codeA || !codeB || codeA !== codeB) return false;
 
+  const baseline = captureOptimizationSnapshot(ws);
+
   if (!ws.tryRemoveShiftPreservingCoverage(uuidA, dayA)) return false;
-  if (!ws.tryRemoveShiftPreservingCoverage(uuidB, dayB)) return false;
-  if (!ws.tryAssignShift(uuidA, dayB, codeA)) return false;
-  if (!ws.tryAssignShift(uuidB, dayA, codeB)) return false;
-  return isMoveValid(ws);
+  if (!ws.tryRemoveShiftPreservingCoverage(uuidB, dayB)) {
+    restoreOptimizationSnapshot(ws, baseline);
+    return false;
+  }
+  if (!ws.tryAssignShift(uuidA, dayB, codeA)) {
+    restoreOptimizationSnapshot(ws, baseline);
+    return false;
+  }
+  if (!ws.tryAssignShift(uuidB, dayA, codeB)) {
+    restoreOptimizationSnapshot(ws, baseline);
+    return false;
+  }
+  if (!isMoveValid(ws, baseline)) {
+    restoreOptimizationSnapshot(ws, baseline);
+    return false;
+  }
+  return true;
 }
 
 function employeeName(ws: GenerationWorkspace, uuid: string): string {

@@ -20,10 +20,12 @@ import {
   buildPaoBelowTargetDiagnostics,
   formatPaoBelowTargetDiagnostics,
 } from "../src/domain/schedule/pao-below-target-diagnostics.js";
+import { buildIsolatedT8UnresolvedReport } from "../src/domain/schedule/optimize-emergency-isolated-t8.js";
 import { findWorkBlocks } from "../src/domain/schedule/block-optimizer.js";
 import { auditStructuralT8 } from "../src/domain/schedule/real-schedule-t8.js";
 import { countT8BlocksForEmployee } from "../src/domain/schedule/t8-block-limits.js";
 import { assignmentKey } from "../src/domain/schedule/types.js";
+import { addDays } from "../src/domain/rules/dates.js";
 
 const YEAR = 2026;
 const MONTH = 7;
@@ -85,6 +87,20 @@ async function main() {
     auditWs.lockDay(al.employeeUuid, al.date, al.label, false);
   }
   auditWs.initRateioContext();
+  for (const a of result.assignments) {
+    if (a.shiftCode !== "T8") continue;
+    const prev = addDays(a.date, -1);
+    const next = addDays(a.date, 1);
+    const prevT8 = result.assignments.some(
+      (x) => x.employeeUuid === a.employeeUuid && x.date === prev && x.shiftCode === "T8",
+    );
+    const nextT8 = result.assignments.some(
+      (x) => x.employeeUuid === a.employeeUuid && x.date === next && x.shiftCode === "T8",
+    );
+    if (!prevT8 && !nextT8) {
+      auditWs.markEmergencyIsolatedT8(a.employeeUuid, a.date);
+    }
+  }
 
   console.log("===== AUDITORIA JULHO/2026 MOTOR V3 =====\n");
   console.log("Funcionários PAO:");
@@ -105,8 +121,10 @@ async function main() {
     console.log(`${c.employee.name} | ${blocks} | ${t8Total} | ${breaks}`);
   }
   console.log(
-    `T8 isolados=${t8Audit.isolatedT8Count}; pares sem ND=${t8Audit.pairsWithoutNdCount}`,
+    `T8 isolados=${t8Audit.isolatedT8Count}; emergenciais=${auditWs.listEmergencyIsolatedT8Days().length}; pares sem ND=${t8Audit.pairsWithoutNdCount}`,
   );
+
+  console.log("\n" + buildIsolatedT8UnresolvedReport(auditWs));
 
   let preserved = 0;
   let overwritten = 0;

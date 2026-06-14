@@ -20,6 +20,8 @@ import {
   repairAllCoverageGapsFinal,
   validateNoCoverageGaps,
 } from "./repair-all-coverage-gaps-final.js";
+import { optimizeEmergencyIsolatedT8 } from "./optimize-emergency-isolated-t8.js";
+import { captureOptimizationSnapshot, restoreOptimizationSnapshot } from "./workspace-optimization-transaction.js";
 import { coverResidualT6T7Only } from "./real-schedule-residual.js";
 import { computeRealMotorTargets } from "./real-schedule-targets.js";
 import { materializeT6T7BlocksStrict } from "./real-schedule-blocks.js";
@@ -435,34 +437,80 @@ function runFinalCoveragePipeline(
   warnings: RealMotorReport["warnings"];
   gapViolations: RealMotorReport["warnings"];
   emergencyIsolated: number;
+  t8Optimization?: ReturnType<typeof optimizeEmergencyIsolatedT8>;
 } {
   const notes: string[] = [];
   const warnings: RealMotorReport["warnings"] = [];
+  const ctx = ws.ensureRateioContext();
 
   finalizeT8NdBlocks(ws);
-  const dupes = deduplicatePaoShiftCoverage(ws);
+  const dupes1 = deduplicatePaoShiftCoverage(ws);
   const t8Repair = repairT8GapsAfterDedup(ws);
   finalizeT8NdBlocks(ws);
-  const finalRepair = repairAllCoverageGapsFinal(ws, ws.ensureRateioContext());
+  let repair1 = repairAllCoverageGapsFinal(ws, ctx);
   finalizeT8NdBlocks(ws);
-  deduplicatePaoShiftCoverage(ws);
-  const gapViolations = validateNoCoverageGaps(ws);
 
-  warnings.push(...t8Repair.warnings, ...finalRepair.warnings);
-  const emergencyIsolated = t8Repair.emergencyIsolated + finalRepair.t8EmergencyIsolated;
+  const preOptimizeSnapshot = captureOptimizationSnapshot(ws);
+  let t8Optimization = optimizeEmergencyIsolatedT8(ws, ctx);
+
+  let repair2 = repairAllCoverageGapsFinal(ws, ctx);
+  finalizeT8NdBlocks(ws);
+  const dupes2 = deduplicatePaoShiftCoverage(ws);
+  let repair3 = repairAllCoverageGapsFinal(ws, ctx);
+  finalizeT8NdBlocks(ws);
+
+  let gapViolations = validateNoCoverageGaps(ws);
+
+  if (gapViolations.length > 0) {
+    restoreOptimizationSnapshot(ws, preOptimizeSnapshot);
+    finalizeT8NdBlocks(ws);
+    deduplicatePaoShiftCoverage(ws);
+    repair1 = repairAllCoverageGapsFinal(ws, ctx);
+    finalizeT8NdBlocks(ws);
+    gapViolations = validateNoCoverageGaps(ws);
+
+    t8Optimization = {
+      isolatedBefore: t8Optimization.isolatedBefore,
+      isolatedAfter: t8Optimization.isolatedBefore,
+      converted: 0,
+      rolledBack: true,
+      rollbackReason: gapViolations[0]?.detail ?? "COBERTURA_GAP_POS_OTIMIZACAO",
+      actions: [],
+      unresolved: [],
+    };
+    notes.push(
+      `[13c] Otimização T8 revertida — gap(s) persistiram após reparo pós-otimização.`,
+    );
+  }
+
+  warnings.push(...t8Repair.warnings, ...repair1.warnings, ...repair2.warnings, ...repair3.warnings);
+
+  const emergencyIsolated = t8Repair.emergencyIsolated + repair1.t8EmergencyIsolated +
+    repair2.t8EmergencyIsolated + repair3.t8EmergencyIsolated;
+
+  if (t8Optimization.converted > 0 && !t8Optimization.rolledBack) {
+    notes.push(
+      `[13b] T8 isolado: ${t8Optimization.isolatedBefore}→${t8Optimization.isolatedAfter} ` +
+        `(${t8Optimization.converted} convertido(s) em bloco).`,
+    );
+  }
 
   notes.push(
-    `[13] Pipeline cobertura final: dedup=${dupes}; T8 blocos=${t8Repair.blocksPlaced}; ` +
-      `T8 emerg=${t8Repair.emergencyIsolated}; reparo T6=${finalRepair.t6Filled} T7=${finalRepair.t7Filled}; ` +
-      `T8 bloco=${finalRepair.t8BlocksPlaced} T8 emerg=${finalRepair.t8EmergencyIsolated}; ` +
-      `overflow=${finalRepair.overflowEvents}; gaps=${finalRepair.gapsRemaining}.`,
+    `[13] Pipeline cobertura final: dedup=${dupes1 + dupes2}; T8 blocos=${t8Repair.blocksPlaced}; ` +
+      `T8 emerg=${t8Repair.emergencyIsolated}; reparo1 T6=${repair1.t6Filled} T7=${repair1.t7Filled} ` +
+      `T8=${repair1.t8BlocksPlaced}+${repair1.t8EmergencyIsolated}; ` +
+      `reparo pós-otim=${repair2.t6Filled + repair2.t7Filled + repair2.t8BlocksPlaced + repair2.t8EmergencyIsolated}; ` +
+      `reparo pós-dedup=${repair3.t6Filled + repair3.t7Filled + repair3.t8BlocksPlaced + repair3.t8EmergencyIsolated}; ` +
+      `T8 otim=${t8Optimization.isolatedBefore}→${t8Optimization.isolatedAfter}` +
+      (t8Optimization.rolledBack ? " (revertida)" : "") +
+      `; gaps=${gapViolations.length}.`,
   );
 
   if (gapViolations.length > 0) {
     notes.push(`[13] ATENÇÃO: ${gapViolations.length} furo(s) após reparo final.`);
   }
 
-  return { notes, warnings, gapViolations, emergencyIsolated };
+  return { notes, warnings, gapViolations, emergencyIsolated, t8Optimization };
 }
 
 function closeStructurePreservingGaps(
