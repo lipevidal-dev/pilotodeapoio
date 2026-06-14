@@ -1,3 +1,4 @@
+import type { BlockOptimizerReport } from "./block-optimizer.js";
 import type { OperationalBalanceReport } from "./operational-balancer.js";
 import type { IndividualTarget } from "./demand-planning-types.js";
 import type { OperationalDemand } from "./demand-planning-types.js";
@@ -111,6 +112,7 @@ export interface RealMotorReport {
     { days: number; employees: string[]; conflicts: number }
   >;
   balanceReport?: OperationalBalanceReport;
+  blockOptimizerReport?: BlockOptimizerReport;
   stepNotes: string[];
   warnings: ValidationIssue[];
 }

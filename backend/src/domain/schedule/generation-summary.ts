@@ -12,6 +12,7 @@ import {
   type OperationalTotals,
 } from "./operational-summary.js";
 import type { ValidationIssue } from "./types.js";
+import type { BlockOptimizerMetrics } from "./block-optimizer.js";
 import { analyzeT6T7BlockCoverage } from "./coverage-block-metrics.js";
 
 export interface ExtendedGenerationSummary extends GenerationSummary {
@@ -50,6 +51,7 @@ export interface ExtendedGenerationSummary extends GenerationSummary {
   enginePath?: string;
   realEngineExecuted?: boolean;
   realMotorReport?: Record<string, unknown>;
+  blockOptimizerMetrics?: BlockOptimizerMetrics;
 }
 
 export function buildExtendedSummary(
@@ -65,6 +67,7 @@ export function buildExtendedSummary(
     generationMs?: number;
     impossibleScenario?: boolean;
     mainBlockingReasons?: string[];
+    blockOptimizerMetrics?: BlockOptimizerMetrics;
   },
 ): ExtendedGenerationSummary {
   const critical = filterByLevel(violations, ["CRITICAL"]);

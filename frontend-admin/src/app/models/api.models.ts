@@ -235,6 +235,14 @@ export interface GenerationSummary {
   enginePath?: string;
   realEngineExecuted?: boolean;
   realMotorReport?: Record<string, unknown>;
+  blockOptimizerMetrics?: {
+    turnosIsolados: number;
+    blocosDe2: number;
+    tamanhoMedioBlocos: number;
+    desvioPadraoBlocos: number;
+    espacamentoMedioBlocos: number;
+    blockOptimizerScore: number;
+  };
   [key: string]: unknown;
 }
 

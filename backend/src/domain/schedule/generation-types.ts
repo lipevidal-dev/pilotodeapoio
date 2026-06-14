@@ -10,6 +10,7 @@ import type {
   OperationalTotals,
 } from "./operational-summary.js";
 import type { OperationalBalanceReport } from "./operational-balancer.js";
+import type { BlockOptimizerMetrics } from "./block-optimizer.js";
 export interface GenerationInputEmployee {
   uuid: string;
   domainId: number;
@@ -114,6 +115,7 @@ export interface GenerationSummary {
   enginePath?: string;
   realEngineExecuted?: boolean;
   realMotorReport?: Record<string, unknown>;
+  blockOptimizerMetrics?: BlockOptimizerMetrics;
 }
 
 export interface GenerationResult {
