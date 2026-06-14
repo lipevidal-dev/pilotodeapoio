@@ -46,6 +46,8 @@ export interface IndividualTarget {
 export interface PlannedBlock {
   size: number;
   shiftCode?: "T6" | "T7";
+  /** Data de início resolvida pelo planejamento de viabilidade V3. */
+  startDate?: string;
 }
 
 export interface ExecutedBlock {

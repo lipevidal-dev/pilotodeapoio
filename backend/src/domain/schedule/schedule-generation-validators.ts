@@ -1,6 +1,7 @@
 import { auditStructuralT8 } from "./real-schedule-t8.js";
 import { countRateioTurns, isRateioTurnShiftCode } from "./pao-rateio-shifts.js";
 import { countWorkedDays } from "./real-schedule-workdays.js";
+import { normalizeOperationalLabel } from "./operational-labels.js";
 import type { GenerationInput, GenerationResult, GeneratedAssignment } from "./generation-types.js";
 import {
   buildWorkspaceFromGenerationResult,
@@ -14,6 +15,10 @@ import {
 import type { ScheduleGenerationState } from "./schedule-generation-state.js";
 import type { ValidationIssue } from "./types.js";
 import { assignmentKey } from "./types.js";
+import {
+  validateRateioMinimums,
+  type RateioMinimumValidation,
+} from "./enforce-minimum-turn-targets.js";
 
 export interface PipelineValidationResult {
   stage: string;
@@ -178,10 +183,13 @@ export function validatePreAllocationsPreserved(ws: GenerationWorkspace): Valida
     const did = ws.uuidToDomain.get(lock.employeeUuid);
     if (did == null) continue;
     const shift = ws.planned.get(assignmentKey(did, lock.date));
+    const label = normalizeOperationalLabel(lock.label).toUpperCase();
     const alloc = ws.allocations.find(
-      (a) => a.employeeUuid === lock.employeeUuid && a.date === lock.date,
+      (a) =>
+        a.employeeUuid === lock.employeeUuid &&
+        a.date === lock.date &&
+        normalizeOperationalLabel(a.label).toUpperCase() === label,
     );
-    const label = lock.label.toUpperCase();
     const isShift = isRateioTurnShiftCode(label);
     if (isShift) {
       if (shift?.toUpperCase() !== label) {
@@ -195,11 +203,11 @@ export function validatePreAllocationsPreserved(ws: GenerationWorkspace): Valida
           ),
         );
       }
-    } else if (!alloc || alloc.label.toUpperCase() !== label) {
+    } else if (!alloc) {
       issues.push(
         issue(
           "PREALLOC_ALLOC_MISSING",
-          `esperado ${label}, encontrado ${alloc?.label ?? "vazio"}`,
+          `esperado ${label}, encontrado vazio`,
           lock.employeeUuid,
           lock.date,
           "CRÍTICA",
@@ -243,6 +251,37 @@ export function validateT8NdStructure(ws: GenerationWorkspace): ValidationIssue[
 }
 
 /** Min/target/max proporcional — receptores abaixo do mínimo. */
+export function validateRateioMinimumIssues(
+  ws: GenerationWorkspace,
+): { validation: RateioMinimumValidation; issues: ValidationIssue[] } {
+  const validation = validateRateioMinimums(ws);
+  const issues: ValidationIssue[] = [];
+  for (const row of validation.issues) {
+    if (row.hasValidTransfer) {
+      issues.push(
+        issue(
+          "RATEIO_MIN_UNENFORCED",
+          `turnos=${row.current} min=${row.min}; transferência viável: ${row.transferHint ?? "?"}`,
+          row.name,
+          "",
+          "CRÍTICA",
+        ),
+      );
+    } else {
+      issues.push(
+        issue(
+          "BELOW_PROPORTIONAL_MIN_JUSTIFIED",
+          `turnos=${row.current} min=${row.min} (sem transferência viável)`,
+          row.name,
+          "",
+          "ALTA",
+        ),
+      );
+    }
+  }
+  return { validation, issues };
+}
+
 export function validateProportionalBounds(
   ws: GenerationWorkspace,
   ctx: ScheduleRateioContext | null,
@@ -397,6 +436,7 @@ export function validateAfterV4Enforce(
   ws: GenerationWorkspace,
 ): PipelineValidationResult {
   const issues: ValidationIssue[] = runCommonValidations(ws, state, true);
+  issues.push(...validateRateioMinimumIssues(ws).issues);
   issues.push(...validateProportionalBounds(ws, state.rateioContext));
   issues.push(...validateT8NdStructure(ws));
   return finalize("AFTER_V4_ENFORCE", issues);
@@ -409,6 +449,7 @@ export function validateBeforeSave(
 ): PipelineValidationResult {
   const issues: ValidationIssue[] = runCommonValidations(ws, state, true);
   issues.push(...validatePreAllocationsPreserved(ws));
+  issues.push(...validateRateioMinimumIssues(ws).issues);
   issues.push(...validateProportionalBounds(ws, state.rateioContext));
   issues.push(...validateT8NdStructure(ws));
   return finalize("BEFORE_SAVE", issues);

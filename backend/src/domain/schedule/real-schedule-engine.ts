@@ -23,7 +23,12 @@ import {
 import { optimizeEmergencyIsolatedT8 } from "./optimize-emergency-isolated-t8.js";
 import { captureOptimizationSnapshot, restoreOptimizationSnapshot } from "./workspace-optimization-transaction.js";
 import { coverResidualT6T7Only } from "./real-schedule-residual.js";
-import { enforceProportionalTurnTargets } from "./enforce-minimum-turn-targets.js";
+import {
+  enforceMinimumTurnTargets,
+  enforceProportionalTurnTargets,
+  finalizeMinimumTurnTargetsForSave,
+  validateRateioMinimums,
+} from "./enforce-minimum-turn-targets.js";
 import { computeRealMotorTargets } from "./real-schedule-targets.js";
 import { materializeT6T7BlocksStrict } from "./real-schedule-blocks.js";
 import { buildStructuralMetrics } from "./real-schedule-audit.js";
@@ -347,6 +352,56 @@ export class RealScheduleEngine {
 
     const finalCoverage = runFinalCoveragePipeline(ws);
 
+    ws.syncRateioContext();
+    const finalEnforcement = enforceProportionalTurnTargets(ws);
+    const unenforcedMin = finalEnforcement.rateioMinimums.issues.filter((i) => i.hasValidTransfer);
+    if (
+      finalEnforcement.minimum.transfers > 0 ||
+      finalEnforcement.target.transfers > 0 ||
+      finalEnforcement.minimumAfterTarget.transfers > 0 ||
+      unenforcedMin.length > 0
+    ) {
+      motorReport.stepNotes.push(
+        `[14] Enforce final pós-cobertura: min ${finalEnforcement.minimum.belowMinBefore}→${finalEnforcement.minimum.belowMinAfter} ` +
+          `(${finalEnforcement.minimum.transfers} transf); target ${finalEnforcement.target.transfers} transf; ` +
+          `min pós-target ${finalEnforcement.minimumAfterTarget.transfers} transf; ` +
+          `pendências min com transf viável=${unenforcedMin.length}.`,
+      );
+    }
+
+    if (ws.listCoverageGaps().length > 0) {
+      const ctxFinal = ws.ensureRateioContext();
+      repairAllCoverageGapsFinal(ws, ctxFinal);
+      finalizeT8NdBlocks(ws);
+      ws.syncRateioContext();
+      enforceProportionalTurnTargets(ws);
+    }
+
+    const tailMinValidation = validateRateioMinimums(ws);
+    if (tailMinValidation.issues.some((i) => i.hasValidTransfer)) {
+      for (let clamp = 0; clamp < 32; clamp++) {
+        if (!validateRateioMinimums(ws).issues.some((i) => i.hasValidTransfer)) break;
+        const clampReport = enforceMinimumTurnTargets(ws);
+        ws.syncRateioContext();
+        if (clampReport.transfers === 0) break;
+      }
+    }
+
+    const tailMinAfterClamp = validateRateioMinimums(ws);
+    if (tailMinAfterClamp.issues.some((i) => i.hasValidTransfer)) {
+      motorReport.warnings.push({
+        severity: "ALTA",
+        level: "WARNING",
+        type: "RATEIO_MIN_UNENFORCED",
+        date: "",
+        employee: tailMinValidation.issues.map((i) => i.name).join(", "),
+        detail: tailMinValidation.issues
+          .filter((i) => i.hasValidTransfer)
+          .map((i) => `${i.name}: ${i.transferHint ?? "transferência viável"}`)
+          .join("; "),
+      });
+    }
+
     motorReport.structuralMetrics = buildStructuralMetrics(
       ws,
       ws.toAssignments(),
@@ -363,8 +418,9 @@ export class RealScheduleEngine {
       engineSuggestions.push(w.detail);
     }
 
-    const assignments = ws.toAssignments();
-    const ctx = ws.toScheduleContext();
+    const saveWs = finalizeMinimumTurnTargetsForSave(ws, input);
+    const assignments = saveWs.toAssignments();
+    const ctx = saveWs.toScheduleContext();
     const engineViolations = validateSchedule(ctx);
     const gate = runFinalCoverageGate(ctx);
 
@@ -390,7 +446,7 @@ export class RealScheduleEngine {
       folgasPerPao[c.employee.name] = ws.countRest(c.uuid);
     }
 
-    const coverageGaps = ws.listCoverageGaps().length;
+    const coverageGaps = saveWs.listCoverageGaps().length;
     if (coverageGaps === 0 && balanceReport.warnings.length > 0) {
       balanceReport.warnings = balanceReport.warnings.filter((w) => w.type !== "COBERTURA");
     }
@@ -422,9 +478,9 @@ export class RealScheduleEngine {
     );
     const generationMs = Math.round(performance.now() - startedAt);
 
-    const summary = buildExtendedSummary(ws, violations, {
+    const summary = buildExtendedSummary(saveWs, violations, {
       totalAssignments: assignments.length,
-      totalAllocations: ws.allocations.length,
+      totalAllocations: saveWs.allocations.length,
       paoCount: ws.paoEmps.length,
       apaoCount: ws.apaoEmps.length,
       folgasPerPao,
@@ -444,7 +500,7 @@ export class RealScheduleEngine {
 
     return {
       assignments,
-      allocations: ws.allocations,
+      allocations: saveWs.allocations,
       violations,
       summary,
       success: summary.valid,
@@ -453,7 +509,7 @@ export class RealScheduleEngine {
   }
 }
 
-function runFinalCoveragePipeline(
+export function runFinalCoveragePipeline(
   ws: GenerationWorkspace,
 ): {
   notes: string[];
@@ -539,7 +595,7 @@ function runFinalCoveragePipeline(
   return { notes, warnings, gapViolations, emergencyIsolated, t8Optimization };
 }
 
-function closeStructurePreservingGaps(
+export function closeStructurePreservingGaps(
   ws: GenerationWorkspace,
   repairEngine: ScheduleRepairEngine,
   stepNotes: string[],
@@ -584,3 +640,45 @@ function stepNotesBalance(
 }
 
 export const realScheduleEngine = new RealScheduleEngine();
+
+/** Workspace no ponto imediatamente anterior ao enforceProportionalTurnTargets [11d]. */
+export function prepareWorkspaceThroughPreV4Enforce(
+  input: GenerationInput,
+  engine: RealScheduleEngine = realScheduleEngine,
+): GenerationWorkspace {
+  const ws = new GenerationWorkspace(input);
+  ws.realV1ManualCommonFolga = true;
+  ws.applyHardBlocks();
+  const motorReport = engine.execute(ws);
+
+  operationalBalancer.balance(ws, [
+    ...ws.birthdayWarnings,
+    ...ws.noFlightWarnings,
+    ...ws.monoFolgaWarnings,
+    ...motorReport.warnings,
+  ]);
+
+  const stepNotes: string[] = [];
+  if (ws.listCoverageGaps().length > 0) {
+    closeStructurePreservingGaps(ws, new ScheduleRepairEngine(), stepNotes, "[10]", true);
+  }
+  ws.correctMonoFolgasPedidas();
+  ws.repairIsolatedT8();
+  ws.cleanupOrphanNd();
+  ws.ensureNdForT8Pairs();
+  motorReport.structuralMetrics = buildStructuralMetrics(
+    ws,
+    ws.toAssignments(),
+    motorReport.vacationBelowPattern,
+  );
+
+  ws.correctMonoFolgasPedidas();
+  const dupesRemoved = deduplicatePaoShiftCoverage(ws);
+  if (dupesRemoved > 0) {
+    closeStructurePreservingGaps(ws, new ScheduleRepairEngine(), stepNotes, "[11c]", true);
+  }
+
+  ws.correctMonoFolgasPedidas();
+  ws.syncRateioContext();
+  return ws;
+}

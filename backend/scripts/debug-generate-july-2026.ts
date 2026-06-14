@@ -30,7 +30,20 @@ import {
   auditV4Transfers,
 } from "../src/domain/schedule/enforce-minimum-turn-targets.js";
 import { formatV4TransferAudit } from "../src/domain/schedule/v4-transfer-audit.js";
-import { formatV3BlockMaterializeAudit } from "../src/domain/schedule/v3-block-materialize-audit.js";
+import { formatV3BlockMaterializeAudit, formatV3BlockMaterializeDiscardTrace } from "../src/domain/schedule/v3-block-materialize-audit.js";
+import {
+  auditV3PipelineTurnBalance,
+  formatV3PipelineTurnBalanceTable,
+  prepareWorkspaceForV3PipelineAudit,
+} from "../src/domain/schedule/v3-pipeline-turn-balance.js";
+import {
+  formatRateioMinimumValidation,
+  validateRateioMinimums,
+} from "../src/domain/schedule/enforce-minimum-turn-targets.js";
+import {
+  formatPostV4EnforceTurnTrace,
+  runPostV4EnforceTurnTrace,
+} from "../src/domain/schedule/v4-post-enforce-turn-trace.js";
 import type { RealMotorReport } from "../src/domain/schedule/real-schedule-types.js";
 import { addDays } from "../src/domain/rules/dates.js";
 
@@ -118,12 +131,17 @@ async function main() {
   console.log("\n" + formatPaoBelowTargetDiagnostics(buildPaoBelowTargetDiagnostics(auditWs)));
 
   auditWs.syncRateioContext();
+  console.log("\n" + formatRateioMinimumValidation(validateRateioMinimums(auditWs)));
+
   console.log("\n" + formatV4TransferAudit(auditV4Transfers(auditWs)));
+
+  console.log("\n" + formatPostV4EnforceTurnTrace(runPostV4EnforceTurnTrace(input)));
 
   const motorReport = result.realMotorReport as RealMotorReport | undefined;
   const v3Audit = motorReport?.v3BlockMaterializeAudit;
   if (v3Audit) {
     console.log("\n" + formatV3BlockMaterializeAudit(v3Audit));
+    console.log("\n" + formatV3BlockMaterializeDiscardTrace(v3Audit, ["Lucas"]));
     const focus = ["Antonio", "Gustavo", "Lucas", "Davi", "Palombino"];
     const focused = v3Audit.employees.filter((e) =>
       focus.some((n) => e.employeeName.toLowerCase().includes(n.toLowerCase())),
@@ -139,6 +157,21 @@ async function main() {
   } else {
     console.log("\n(v3BlockMaterializeAudit ausente no motorReport)");
   }
+
+  const balanceWs = prepareWorkspaceForV3PipelineAudit(input);
+  const turnBalance = auditV3PipelineTurnBalance(balanceWs);
+  console.log(
+    "\n" +
+      formatV3PipelineTurnBalanceTable(turnBalance, [
+        "Antonio",
+        "Gustavo",
+        "Helio",
+        "Lucas",
+        "Davi",
+        "Palombino",
+      ]),
+  );
+  console.log("\n" + formatV3BlockMaterializeDiscardTrace(turnBalance.v3BlockMaterializeAudit, ["Lucas"]));
 
   console.log("\nCobertura:");
   console.log(formatCoverageTable(auditWs));

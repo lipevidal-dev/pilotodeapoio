@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildBlockPlans } from "../domain/schedule/demand-planning-blocks.js";
+import { realScheduleEngine } from "../domain/schedule/real-schedule-engine.js";
 import { GenerationWorkspace } from "../domain/schedule/generation-workspace.js";
 import { enforceProportionalTurnTargets } from "../domain/schedule/enforce-minimum-turn-targets.js";
-import { isParallelOnlyPreferredPao, isT8PreferredPao } from "../domain/schedule/employee-t6-t7-shift.js";
-import { realScheduleEngine } from "../domain/schedule/real-schedule-engine.js";
 import { materializeT6T7BlocksStrict } from "../domain/schedule/real-schedule-blocks.js";
 import { coverResidualT6T7Only } from "../domain/schedule/real-schedule-residual.js";
 import { computeRealMotorTargets } from "../domain/schedule/real-schedule-targets.js";
@@ -48,25 +46,22 @@ describe("Pipeline jul/2026 — validação estrutural integrada", () => {
     materializeVacationFortnightPatterns(ws);
     const { targets } = computeRealMotorTargets(ws);
 
-    const eligible = targets.filter((t) => {
-      if (t.group === "VACATION" || t.target <= 0) return false;
-      if (isParallelOnlyPreferredPao(ws, t.employeeUuid)) return false;
-      if (isT8PreferredPao(ws, t.employeeUuid)) return false;
-      return true;
-    });
-    const blockPlan = buildBlockPlans(eligible);
+    const blocks = materializeT6T7BlocksStrict(ws, targets);
+    expect(blocks.feasibility.discardedTurns).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(blocks.feasibility.plannedTurns - blocks.feasibility.materializedTurns),
+    ).toBeLessThanOrEqual(1);
 
     const afterPlanning = refreshScheduleGenerationState(ws, {
       stage: "BLOCK_PLANNING",
-      blockPlan,
+      blockPlan: blocks.blockPlans,
     });
     const planningResult = validateAfterPlanning(afterPlanning, ws);
     expect(planningResult.criticalCount).toBe(0);
 
-    const blocks = materializeT6T7BlocksStrict(ws, targets);
     const afterMaterialization = refreshScheduleGenerationState(ws, {
       stage: "MATERIALIZATION",
-      blockPlan,
+      blockPlan: blocks.blockPlans,
       v3BlockMaterializeAudit: blocks.v3BlockMaterializeAudit,
     });
     const materializationResult = validateAfterMaterialization(afterMaterialization, ws);
@@ -75,19 +70,19 @@ describe("Pipeline jul/2026 — validação estrutural integrada", () => {
     coverResidualT6T7Only(ws);
     const afterResidual = refreshScheduleGenerationState(ws, {
       stage: "RESIDUAL",
-      blockPlan,
+      blockPlan: blocks.blockPlans,
       v3BlockMaterializeAudit: blocks.v3BlockMaterializeAudit,
     });
     const residualResult = validateAfterResidual(afterResidual, ws);
 
     ws.syncRateioContext();
     enforceProportionalTurnTargets(ws);
-    const afterV4 = refreshScheduleGenerationState(ws, { stage: "V4_ENFORCE", blockPlan });
+    const afterV4 = refreshScheduleGenerationState(ws, { stage: "V4_ENFORCE", blockPlan: blocks.blockPlans });
     const v4Result = validateAfterV4Enforce(afterV4, ws);
 
     const beforeSave = refreshScheduleGenerationState(ws, {
       stage: "FINAL_AUDIT",
-      blockPlan,
+      blockPlan: blocks.blockPlans,
       motorReport: fullResult.summary.realMotorReport,
     });
     const saveResult = validateBeforeSave(beforeSave, ws);

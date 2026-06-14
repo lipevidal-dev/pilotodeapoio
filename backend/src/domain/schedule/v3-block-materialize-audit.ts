@@ -8,6 +8,7 @@ import {
 import { wouldExceedT6T7BlockMax } from "./t6-t7-block-coverage.js";
 import { assignmentKey } from "./types.js";
 import { resolveEmployeeT6T7Code, blockDaysFromStart } from "./employee-t6-t7-shift.js";
+import type { TryAssignShiftRejectReason } from "./try-assign-shift-detailed.js";
 
 export type V3BlockDiscardReason =
   | "BLOCK_SPACING"
@@ -21,6 +22,22 @@ export interface V3DiscardedBlockRecord {
   plannedSize: number;
   reason: V3BlockDiscardReason;
   detail?: string;
+  /** Data retornada por findSpacedConsecutiveSlot (null se slot não encontrado). */
+  attemptedStartDate: string | null;
+  /** Maior sequência consecutiva livre no calendário no momento do descarte. */
+  maxConsecutiveFree: number;
+  /** Tamanho do bloco (= sequência requerida). */
+  requiredSequence: number;
+  /** Retorno literal de findSpacedConsecutiveSlot. */
+  findSpacedConsecutiveSlotResult: string | null;
+  /** Retorno de tryPlaceBlock: código T6/T7, null se falhou, NOT_CALLED se slot ausente. */
+  tryPlaceBlockResult: string | null;
+  /** Primeiro passo que falhou dentro de tryPlaceBlock. */
+  tryPlaceBlockFailureStep?: string;
+  /** Motivo canônico quando tryAssignShift recusa. */
+  tryAssignRejectReason?: TryAssignShiftRejectReason;
+  /** Detalhe textual do motivo (canWork, 12h, rateio, etc.). */
+  tryAssignRejectDetails?: string;
 }
 
 export interface V3MaterializedBlockRecord {
@@ -70,6 +87,48 @@ function maxConsecutiveAvailable(ws: GenerationWorkspace, uuid: string): number 
     }
   }
   return max;
+}
+
+/** Maior sequência consecutiva livre — exportado para trace de descarte. */
+export function measureMaxConsecutiveFreeDays(ws: GenerationWorkspace, uuid: string): number {
+  return maxConsecutiveAvailable(ws, uuid);
+}
+
+export interface V3BlockDiscardTraceInput {
+  attemptedStartDate: string | null;
+  findSpacedConsecutiveSlotResult: string | null;
+  tryPlaceBlockResult: string | null;
+  tryPlaceBlockFailureStep?: string;
+  tryAssignRejectReason?: TryAssignShiftRejectReason;
+  tryAssignRejectDetails?: string;
+}
+
+export function buildBlockDiscardTrace(
+  ws: GenerationWorkspace,
+  uuid: string,
+  blockSize: number,
+  input: V3BlockDiscardTraceInput,
+): Pick<
+  V3DiscardedBlockRecord,
+  | "attemptedStartDate"
+  | "maxConsecutiveFree"
+  | "requiredSequence"
+  | "findSpacedConsecutiveSlotResult"
+  | "tryPlaceBlockResult"
+  | "tryPlaceBlockFailureStep"
+  | "tryAssignRejectReason"
+  | "tryAssignRejectDetails"
+> {
+  return {
+    attemptedStartDate: input.attemptedStartDate,
+    maxConsecutiveFree: measureMaxConsecutiveFreeDays(ws, uuid),
+    requiredSequence: blockSize,
+    findSpacedConsecutiveSlotResult: input.findSpacedConsecutiveSlotResult,
+    tryPlaceBlockResult: input.tryPlaceBlockResult,
+    tryPlaceBlockFailureStep: input.tryPlaceBlockFailureStep,
+    tryAssignRejectReason: input.tryAssignRejectReason,
+    tryAssignRejectDetails: input.tryAssignRejectDetails,
+  };
 }
 
 function canPlaceForAudit(ws: GenerationWorkspace, uuid: string, day: string): boolean {
@@ -230,17 +289,25 @@ export class V3BlockMaterializeAuditCollector {
   }
 
   recordDiscarded(
+    ws: GenerationWorkspace,
     blockIndex: number,
     plannedSize: number,
     reason: V3BlockDiscardReason,
-    detail?: string,
+    detail: string | undefined,
+    trace: V3BlockDiscardTraceInput,
   ): void {
     const row = this.row();
     if (!row) return;
     row.discardedBlocks++;
     row.discardedShifts += plannedSize;
     row.discardReasons[reason] = (row.discardReasons[reason] ?? 0) + 1;
-    row.discarded.push({ blockIndex, plannedSize, reason, detail });
+    row.discarded.push({
+      blockIndex,
+      plannedSize,
+      reason,
+      detail,
+      ...buildBlockDiscardTrace(ws, this.currentUuid!, plannedSize, trace),
+    });
   }
 
   buildReport(): V3BlockMaterializeAudit {
@@ -318,12 +385,80 @@ export function formatV3BlockMaterializeAudit(audit: V3BlockMaterializeAudit): s
       lines.push(
         `  bloco #${d.blockIndex + 1} size=${d.plannedSize} → ${d.reason}${d.detail ? ` (${d.detail})` : ""}`,
       );
+      lines.push(
+        `    slot=${d.findSpacedConsecutiveSlotResult ?? "null"} | tryPlace=${d.tryPlaceBlockResult ?? "null"} | maxSeq=${d.maxConsecutiveFree} req=${d.requiredSequence}${d.tryPlaceBlockFailureStep ? ` | falha=${d.tryPlaceBlockFailureStep}` : ""}${d.tryAssignRejectReason ? ` | reason=${d.tryAssignRejectReason}` : ""}${d.tryAssignRejectDetails ? ` (${d.tryAssignRejectDetails})` : ""}`,
+      );
     }
     for (const m of e.materialized) {
       lines.push(
         `  OK bloco #${m.blockIndex + 1} size=${m.plannedSize} @ ${m.startDate} ${m.shiftCode}`,
       );
     }
+  }
+
+  return lines.join("\n");
+}
+
+function matchesFocusName(name: string, focusNames: string[]): boolean {
+  const lower = name.toLowerCase();
+  return focusNames.some((f) => lower.includes(f.toLowerCase()));
+}
+
+/** Trace detalhado de cada bloco descartado em materializeT6T7BlocksStrict. */
+export function formatV3BlockMaterializeDiscardTrace(
+  audit: V3BlockMaterializeAudit,
+  focusNames?: string[],
+): string {
+  const lines: string[] = [
+    "===== V3 MATERIALIZE DISCARD TRACE =====",
+    "materializeT6T7BlocksStrict — blocos descartados",
+    "",
+    "Func | Bloco | Size | Data tentativa | Motivo | MaiorSeqLivre | SeqReq | findSpacedConsecutiveSlot | tryPlaceBlock | Falha tryPlace | reason | details",
+  ];
+
+  const employees = focusNames?.length
+    ? audit.employees.filter((e) => matchesFocusName(e.employeeName, focusNames))
+    : audit.employees.filter((e) => e.discardedBlocks > 0);
+
+  for (const e of employees) {
+    if (e.discarded.length === 0) continue;
+    lines.push("");
+    lines.push(
+      `${e.employeeName}: planTurnos=${e.plannedShifts} matTurnos=${e.materializedShifts} descTurnos=${e.discardedShifts}`,
+    );
+    for (const d of e.discarded) {
+      lines.push(
+        [
+          e.employeeName,
+          `#${d.blockIndex + 1}`,
+          d.plannedSize,
+          d.attemptedStartDate ?? "—",
+          `${d.reason}${d.detail ? ` (${d.detail})` : ""}`,
+          d.maxConsecutiveFree,
+          d.requiredSequence,
+          d.findSpacedConsecutiveSlotResult ?? "null",
+          d.tryPlaceBlockResult ?? "null",
+          d.tryPlaceBlockFailureStep ?? "—",
+          d.tryAssignRejectReason ?? "—",
+          d.tryAssignRejectDetails ?? "—",
+        ].join(" | "),
+      );
+      if (d.tryPlaceBlockFailureStep?.includes("tryAssignShift")) {
+        lines.push(
+          `  → ${d.tryPlaceBlockFailureStep}${d.tryAssignRejectReason ? ` | reason=${d.tryAssignRejectReason}` : ""}${d.tryAssignRejectDetails ? ` (${d.tryAssignRejectDetails})` : ""}`,
+        );
+      }
+    }
+    for (const m of e.materialized) {
+      lines.push(
+        `  OK #${m.blockIndex + 1} size=${m.plannedSize} @ ${m.startDate} ${m.shiftCode}`,
+      );
+    }
+  }
+
+  if (employees.every((e) => e.discarded.length === 0)) {
+    lines.push("");
+    lines.push(focusNames?.length ? "(nenhum descarte para foco informado)" : "(nenhum bloco descartado)");
   }
 
   return lines.join("\n");

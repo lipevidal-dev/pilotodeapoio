@@ -5,6 +5,7 @@ import type { IndividualTarget } from "../domain/schedule/demand-planning-types.
 import {
   V3BlockMaterializeAuditCollector,
   formatV3BlockMaterializeAudit,
+  formatV3BlockMaterializeDiscardTrace,
 } from "../domain/schedule/v3-block-materialize-audit.js";
 import { freshWorkspace, minimalPaoInput, paoUuid } from "./schedule-slices/slice-helpers.js";
 
@@ -67,6 +68,15 @@ describe("V3 block materialize audit", () => {
     if (row.discardedBlocks > 0) {
       expect(Object.keys(row.discardReasons).length).toBeGreaterThan(0);
       expect(row.discarded.every((d) => d.reason.length > 0)).toBe(true);
+      for (const d of row.discarded) {
+        expect(d.requiredSequence).toBe(d.plannedSize);
+        expect(d.maxConsecutiveFree).toBeGreaterThanOrEqual(0);
+        expect(d.findSpacedConsecutiveSlotResult).toBeNull();
+        expect(d.tryPlaceBlockResult).toBe("NOT_CALLED");
+      }
+      const trace = formatV3BlockMaterializeDiscardTrace(collector.buildReport());
+      expect(trace).toContain("DISCARD TRACE");
+      expect(trace).toContain("findSpacedConsecutiveSlot");
     }
   });
 });

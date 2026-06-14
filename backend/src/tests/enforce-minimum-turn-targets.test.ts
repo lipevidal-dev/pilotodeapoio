@@ -3,6 +3,7 @@ import { GenerationWorkspace } from "../domain/schedule/generation-workspace.js"
 import {
   enforceMinimumTurnTargets,
   enforceProportionalTurnTargets,
+  validateRateioMinimums,
 } from "../domain/schedule/enforce-minimum-turn-targets.js";
 import { assignmentKey } from "../domain/schedule/types.js";
 import { freshWorkspace, minimalPaoInput, paoUuid } from "./schedule-slices/slice-helpers.js";
@@ -68,5 +69,31 @@ describe("enforceMinimumTurnTargets", () => {
 
     expect(report.transfers).toBeGreaterThan(0);
     expect(ctx.currentTurnCounts.get(receiver) ?? 0).toBeGreaterThan(beforeReceiver);
+  });
+
+  it("libera folga do receptor e transfere T7 same-day", () => {
+    const input = minimalPaoInput(4);
+    const donor = paoUuid(3);
+    const receiver = paoUuid(0);
+    const day = "2026-06-05";
+    const ws = freshWorkspace(input);
+    ws.applyHardBlocks();
+
+    for (const d of MONTH_DAYS) {
+      assign(ws, donor, d, "T7");
+      assign(ws, paoUuid(1), d, "T6");
+      assign(ws, paoUuid(2), d, "T8");
+    }
+
+    ws.initRateioContext();
+    ws.syncRateioContext();
+    ws.lockDay(receiver, day, "FOLGA");
+
+    const report = enforceMinimumTurnTargets(ws);
+    ws.syncRateioContext();
+
+    expect(report.transfers).toBeGreaterThan(0);
+    expect(validateRateioMinimums(ws).issues.filter((i) => i.hasValidTransfer)).toHaveLength(0);
+    expect(ws.rateioContext!.currentTurnCounts.get(receiver) ?? 0).toBeGreaterThan(0);
   });
 });

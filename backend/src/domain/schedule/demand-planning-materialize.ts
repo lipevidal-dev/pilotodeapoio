@@ -20,7 +20,8 @@ import {
   classifyPlacementDiscardReason,
   type V3BlockMaterializeAuditCollector,
 } from "./v3-block-materialize-audit.js";
-
+import type { TryAssignShiftRejectReason } from "./try-assign-shift-detailed.js";
+import { assignmentKey } from "./types.js";
 export interface MaterializeBlockPlansOptions {
   audit?: V3BlockMaterializeAuditCollector;
 }
@@ -46,12 +47,18 @@ function pickCodesToTry(
   return [resolveEmployeeT6T7Code(ws, uuid, blockDays)];
 }
 
-function tryPlaceBlock(
+export function tryPlaceBlock(
   ws: GenerationWorkspace,
   uuid: string,
   start: string,
   size: number,
   blockDays: string[],
+  failureOut?: {
+    step: string;
+    rejectReason?: TryAssignShiftRejectReason;
+    rejectDetails?: string;
+  },
+  opts?: { dryRun?: boolean },
 ): T6T7ShiftCode | null {
   for (const code of pickCodesToTry(ws, uuid, blockDays)) {
     let placed = true;
@@ -59,22 +66,64 @@ function tryPlaceBlock(
       const day = addDays(start, i);
       if (wouldExceedT6T7BlockMax(ws, uuid, day, code)) {
         placed = false;
+        if (failureOut) {
+          failureOut.step = `wouldExceedT6T7BlockMax(${day}, ${code})`;
+          failureOut.rejectReason = "T6T7_BLOCK_MAX";
+          failureOut.rejectDetails = `excederia bloco T6/T7 max em ${day} (${code})`;
+        }
         break;
       }
       if (!ws.tryAssignShift(uuid, day, code)) {
         placed = false;
+        if (failureOut) {
+          const diag = ws.tryAssignShiftDetailed(uuid, day, code);
+          failureOut.step = `tryAssignShift(${day}, ${code}) → false`;
+          failureOut.rejectReason = diag.reason ?? "UNKNOWN";
+          failureOut.rejectDetails = diag.details;
+        }
         break;
       }
     }
     if (placed) {
-      confirmEmployeeT6T7Lock(ws, uuid, code);
+      if (!opts?.dryRun) {
+        confirmEmployeeT6T7Lock(ws, uuid, code);
+      }
+      if (opts?.dryRun) {
+        for (let i = 0; i < size; i++) {
+          ws.unassignShift(uuid, addDays(start, i));
+        }
+      }
       return code;
     }
     for (let i = 0; i < size; i++) {
       ws.unassignShift(uuid, addDays(start, i));
     }
   }
+  if (failureOut && !failureOut.step) {
+    failureOut.step = "tryPlaceBlock: nenhum código T6/T7 colocável";
+  }
   return null;
+}
+
+function isBlockAlreadyPlaced(
+  ws: GenerationWorkspace,
+  uuid: string,
+  start: string,
+  size: number,
+  expectedCode?: "T6" | "T7",
+): T6T7ShiftCode | null {
+  const did = ws.uuidToDomain.get(uuid);
+  if (!did) return null;
+  let code: T6T7ShiftCode | null = null;
+  for (let i = 0; i < size; i++) {
+    const day = addDays(start, i);
+    const shift = ws.planned.get(assignmentKey(did, day));
+    if (shift !== "T6" && shift !== "T7") return null;
+    if (code == null) code = shift;
+    else if (code !== shift) return null;
+  }
+  if (expectedCode && code !== expectedCode) return null;
+  return code;
 }
 
 /** Etapa 6 V3 — Materializa blocos com espaçamento Xf e turno homogêneo por funcionário. */
@@ -105,15 +154,17 @@ export function materializeBlockPlans(
     let blockIndex = 0;
     const monoAnchors = blockAnchorDaysAfterMonoFolgaPedida(ws, plan.employeeUuid);
     for (const block of plan.plannedBlocks) {
-      const start = findSpacedConsecutiveSlot(
-        ws,
-        plan.employeeUuid,
-        block.size,
-        blockIndex,
-        zf,
-        initialAvailable,
-        blockIndex === 0 ? monoAnchors : undefined,
-      );
+      const start =
+        block.startDate ??
+        findSpacedConsecutiveSlot(
+          ws,
+          plan.employeeUuid,
+          block.size,
+          blockIndex,
+          zf,
+          initialAvailable,
+          blockIndex === 0 ? monoAnchors : undefined,
+        );
       blockIndex++;
 
       if (!start) {
@@ -124,12 +175,49 @@ export function materializeBlockPlans(
           block.size,
           blockIndex - 1,
         );
-        audit?.recordDiscarded(blockIndex - 1, block.size, reason, detail);
+        audit?.recordDiscarded(ws, blockIndex - 1, block.size, reason, detail, {
+          attemptedStartDate: null,
+          findSpacedConsecutiveSlotResult: null,
+          tryPlaceBlockResult: "NOT_CALLED",
+        });
+        continue;
+      }
+
+      const existingCode = isBlockAlreadyPlaced(
+        ws,
+        plan.employeeUuid,
+        start,
+        block.size,
+        block.shiftCode,
+      );
+      if (existingCode) {
+        block.shiftCode = existingCode;
+        placedShifts += block.size;
+        plan.executedBlocks.push({
+          startDate: start,
+          size: block.size,
+          shiftCode: existingCode,
+          endDate: addDays(start, block.size - 1),
+        });
+        placedBlocks++;
+        audit?.recordMaterialized(blockIndex - 1, block.size, start, existingCode);
         continue;
       }
 
       const blockDays = blockDaysFromStart(start, block.size);
-      const code = tryPlaceBlock(ws, plan.employeeUuid, start, block.size, blockDays);
+      const placementFailure: {
+        step: string;
+        rejectReason?: TryAssignShiftRejectReason;
+        rejectDetails?: string;
+      } = { step: "" };
+      const code = tryPlaceBlock(
+        ws,
+        plan.employeeUuid,
+        start,
+        block.size,
+        blockDays,
+        audit ? placementFailure : undefined,
+      );
 
       if (!code) {
         failedBlocks++;
@@ -139,7 +227,14 @@ export function materializeBlockPlans(
           start,
           block.size,
         );
-        audit?.recordDiscarded(blockIndex - 1, block.size, reason, detail);
+        audit?.recordDiscarded(ws, blockIndex - 1, block.size, reason, detail, {
+          attemptedStartDate: start,
+          findSpacedConsecutiveSlotResult: start,
+          tryPlaceBlockResult: null,
+          tryPlaceBlockFailureStep: placementFailure.step || undefined,
+          tryAssignRejectReason: placementFailure.rejectReason,
+          tryAssignRejectDetails: placementFailure.rejectDetails,
+        });
         continue;
       }
 

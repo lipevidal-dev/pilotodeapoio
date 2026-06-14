@@ -45,6 +45,10 @@ import {
 } from "./schedule-grid-source.js";
 import { isParallelOnlyPreferredPao } from "./employee-t6-t7-shift.js";
 import {
+  evaluateTryAssignShiftDetailed,
+  type TryAssignShiftDetailedResult,
+} from "./try-assign-shift-detailed.js";
+import {
   buildScheduleRateioContext,
   logRateioOverflow,
   recordRateioAssignment,
@@ -361,6 +365,16 @@ export class GenerationWorkspace {
     return merged;
   }
 
+  /** Planejado + histórico — uso em diagnósticos (read-only). */
+  getContinuityPlanned(): PlannedMap {
+    return this.mergedPlannedForContinuity();
+  }
+
+  /** Bloqueios + histórico — uso em diagnósticos (read-only). */
+  getContinuityBlocked(): BlockedMap {
+    return this.mergedBlockedForContinuity();
+  }
+
   private consecutiveDaysBeforeMonth(uuid: string): number {
     const did = this.uuidToDomain.get(uuid);
     if (!did || this.days.length === 0) return 0;
@@ -506,6 +520,16 @@ export class GenerationWorkspace {
     }
     this.coverageGapsCache = null;
     return true;
+  }
+
+  /** Diagnóstico read-only — mesma ordem de checagens que tryAssignShift. */
+  tryAssignShiftDetailed(
+    uuid: string,
+    day: string,
+    code: string,
+    coverageEmergency = false,
+  ): TryAssignShiftDetailedResult {
+    return evaluateTryAssignShiftDetailed(this, uuid, day, code, coverageEmergency);
   }
 
   unassignShift(uuid: string, day: string, opts?: { bypassT8Protection?: boolean }): boolean {
