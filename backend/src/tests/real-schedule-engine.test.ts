@@ -213,8 +213,8 @@ describe("Fase 8.0 — Motor real v1", () => {
   });
 
   it("13. T6/T7 gerados em blocos", () => {
-    expect(targetToBlocks(20)).toEqual([4, 4, 4, 4, 4]);
-    expect(targetToBlocks(15)).toEqual([3, 4, 4, 4]);
+    expect(targetToBlocks(20)).toEqual([5, 5, 5, 5]);
+    expect(targetToBlocks(15)).toEqual([5, 5, 5]);
     const ws = freshWorkspace(minimalPaoInput(4));
     ws.applyHardBlocks();
     runT8First(ws);

@@ -1,40 +1,17 @@
 import { addDays } from "../rules/dates.js";
-import { assignmentKey } from "./types.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import type { EmployeeBlockPlan } from "./demand-planning-types.js";
+import {
+  findSpacedConsecutiveSlot,
+  idealBlockSpacing,
+  listEmployeeAvailableDays,
+} from "./motor-v3-planning.js";
 import { wouldExceedT6T7BlockMax } from "./t6-t7-block-coverage.js";
 
 export interface MaterializeResult {
   placedBlocks: number;
   failedBlocks: number;
   placedShifts: number;
-}
-
-function canPlaceWorkDay(ws: GenerationWorkspace, uuid: string, day: string): boolean {
-  if (ws.isDayBlockedForShift(uuid, day)) return false;
-  const did = ws.uuidToDomain.get(uuid);
-  if (!did) return false;
-  return !ws.planned.has(assignmentKey(did, day));
-}
-
-function findEarliestConsecutiveSlot(
-  ws: GenerationWorkspace,
-  uuid: string,
-  size: number,
-): string | null {
-  for (let di = 0; di <= ws.days.length - size; di++) {
-    const start = ws.days[di]!;
-    let ok = true;
-    for (let j = 0; j < size; j++) {
-      const day = ws.days[di + j]!;
-      if (!canPlaceWorkDay(ws, uuid, day)) {
-        ok = false;
-        break;
-      }
-    }
-    if (ok) return start;
-  }
-  return null;
 }
 
 function pickShiftCodeForBlock(
@@ -52,7 +29,7 @@ function pickShiftCodeForBlock(
   return t7Need > t6Need ? "T7" : "T6";
 }
 
-/** Etapa 6 — Materializa blocos no calendário (continuidade visual). */
+/** Etapa 6 V3 — Materializa blocos com espaçamento matemático Xf entre blocos. */
 export function materializeBlockPlans(
   ws: GenerationWorkspace,
   plans: EmployeeBlockPlan[],
@@ -62,8 +39,22 @@ export function materializeBlockPlans(
   let placedShifts = 0;
 
   for (const plan of plans) {
+    const initialAvailable = listEmployeeAvailableDays(ws, plan.employeeUuid);
+    const zf = plan.plannedBlocks.length;
+    plan.blockSpacing = idealBlockSpacing(initialAvailable.length, zf);
+
+    let blockIndex = 0;
     for (const block of plan.plannedBlocks) {
-      const start = findEarliestConsecutiveSlot(ws, plan.employeeUuid, block.size);
+      const start = findSpacedConsecutiveSlot(
+        ws,
+        plan.employeeUuid,
+        block.size,
+        blockIndex,
+        zf,
+        initialAvailable,
+      );
+      blockIndex++;
+
       if (!start) {
         failedBlocks++;
         continue;

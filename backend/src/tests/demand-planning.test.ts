@@ -81,7 +81,7 @@ describe("Fase 7.3 — Planejamento por demanda", () => {
   });
 
   it("6. Conversão de metas em blocos", () => {
-    expect(targetToBlocks(20)).toEqual([4, 4, 4, 4, 4]);
+    expect(targetToBlocks(20)).toEqual([5, 5, 5, 5]);
     expect(targetToBlocks(9)).toEqual([3, 3, 3]);
     expect(targetToBlocks(8)).toEqual([4, 4]);
     expect(targetToBlocks(7)).toEqual([4, 3]);

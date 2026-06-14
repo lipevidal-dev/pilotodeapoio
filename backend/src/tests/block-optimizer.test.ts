@@ -10,14 +10,11 @@ import {
 import { freshWorkspace, minimalPaoInput, paoUuid } from "./schedule-slices/slice-helpers.js";
 
 describe("Block Optimizer — scoring", () => {
-  it("computeBlocoIdeal segue tabela de metas", () => {
-    expect(computeBlocoIdeal(10)).toBe(3);
-    expect(computeBlocoIdeal(12)).toBe(3);
-    expect(computeBlocoIdeal(13)).toBe(4);
-    expect(computeBlocoIdeal(18)).toBe(4);
-    expect(computeBlocoIdeal(19)).toBe(5);
-    expect(computeBlocoIdeal(25)).toBe(5);
-    expect(computeBlocoIdeal(26)).toBe(6);
+  it("computeBlocoIdeal segue tabela V3 de metas", () => {
+    expect(computeBlocoIdeal(10)).toBe(4);
+    expect(computeBlocoIdeal(12)).toBe(4);
+    expect(computeBlocoIdeal(13)).toBe(5);
+    expect(computeBlocoIdeal(20)).toBe(5);
   });
 
   it("scoreBlockSize penaliza isolados, blocos de 2 e distância do ideal", () => {

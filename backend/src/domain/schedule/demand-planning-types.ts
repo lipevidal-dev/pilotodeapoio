@@ -61,6 +61,12 @@ export interface EmployeeBlockPlan {
   group: PlanningGroup;
   seniority: number;
   target: number;
+  /** Bf — tamanho ideal do bloco (Motor V3). */
+  idealBlockSize?: number;
+  /** Zf — quantidade planejada de blocos (Motor V3). */
+  plannedBlockCount?: number;
+  /** Xf — espaçamento ideal entre blocos (Motor V3). */
+  blockSpacing?: number;
   plannedBlocks: PlannedBlock[];
   executedBlocks: ExecutedBlock[];
 }

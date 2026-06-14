@@ -82,7 +82,7 @@ export class RealScheduleEngine {
 
     const blocks = materializeT6T7BlocksStrict(ws, targets);
     stepNotes.push(
-      `[5] Blocos T6/T7: ${blocks.placedBlocks} bloco(s), ${blocks.placedShifts} turno(s); unitários parciais=${blocks.unitPlacements}.`,
+      `[5] Blocos T6/T7 V3: ${blocks.placedBlocks} bloco(s), ${blocks.placedShifts} turno(s); unitários parciais=${blocks.unitPlacements}; tamanhos=${blocks.blockSizesPlaced.join(",") || "n/a"}.`,
     );
     if (blocks.failedBlocks > 0) {
       stepNotes.push(`[5] ${blocks.failedBlocks} bloco(s) não materializados (meta flexível −2/−3).`);

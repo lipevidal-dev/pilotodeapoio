@@ -14,7 +14,7 @@ export interface MaterializeBlocksStrictResult {
 }
 
 /**
- * Materializa T6/T7 em blocos consecutivos (3–5 dias via targetToBlocks).
+ * Materializa T6/T7 em blocos consecutivos (Motor V3: Bf=4/5, espaçamento Xf).
  * PAOs VACATION já materializados são excluídos (padrão 3/2 aplicado antes).
  */
 export function materializeT6T7BlocksStrict(

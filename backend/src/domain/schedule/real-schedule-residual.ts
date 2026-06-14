@@ -1,6 +1,7 @@
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import { MIN_MONTHLY_FOLGAS } from "./real-schedule-types.js";
 import { computeTurnRateio, sortPaoForTurnBalance } from "./real-schedule-turn-rateio.js";
+import { idealBlockSizeForTarget } from "./motor-v3-planning.js";
 import { wouldExceedT6T7BlockMax } from "./t6-t7-block-coverage.js";
 
 function shouldReserveDaysForFolgas(ws: GenerationWorkspace, uuid: string): boolean {
@@ -17,8 +18,14 @@ export interface ResidualT6T7Result {
   gapsAfter: number;
 }
 
-/** Prioridade de bloco: 4 → 5 → 3 (6 excede máximo operacional de 5). */
-const BLOCK_TRY_SIZES = [4, 5, 3] as const;
+/** Prioridade de bloco V3: Bf=5 → Bf=4 → 3. */
+function residualBlockSizesForEmployee(ws: GenerationWorkspace, uuid: string): readonly number[] {
+  const rateio = computeTurnRateio(ws);
+  const entry = rateio.entries.find((e) => e.employeeUuid === uuid);
+  const yf = entry?.turnTarget ?? 20;
+  const bf = idealBlockSizeForTarget(yf);
+  return bf === 5 ? ([5, 4, 3] as const) : ([4, 5, 3] as const);
+}
 
 function gapNeedsCode(ws: GenerationWorkspace, day: string, code: "T6" | "T7"): boolean {
   return !ws.hasPaoCoverage(day, code);
@@ -89,7 +96,11 @@ export function coverResidualT6T7Only(ws: GenerationWorkspace): ResidualT6T7Resu
       const candidates = sortPaoForTurnBalance(ws, di, rateio.entries);
       let placed = false;
 
-      for (const size of BLOCK_TRY_SIZES) {
+      const blockSizes = candidates.length > 0
+        ? residualBlockSizesForEmployee(ws, candidates[0]!.uuid)
+        : ([5, 4, 3] as const);
+
+      for (const size of blockSizes) {
         if (tryPlaceResidualBlock(ws, di, code, size, candidates)) {
           blockCoverageApplied += size;
           di += size;

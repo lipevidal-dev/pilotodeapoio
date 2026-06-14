@@ -4,6 +4,7 @@ import { assignmentKey } from "./types.js";
 import { normalizeOperationalLabel } from "./operational-labels.js";
 import type { GeneratedAllocation } from "./generation-types.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
+import { idealBlockSizeForTarget } from "./motor-v3-planning.js";
 
 const MOVABLE_SHIFT_CODES = new Set(["T6", "T7"]);
 
@@ -61,10 +62,7 @@ type MoveCandidate =
   | { type: "swap"; uuidA: string; dayA: string; uuidB: string; dayB: string };
 
 export function computeBlocoIdeal(metaDiasTrabalhados: number): number {
-  if (metaDiasTrabalhados <= 12) return 3;
-  if (metaDiasTrabalhados <= 18) return 4;
-  if (metaDiasTrabalhados <= 25) return 5;
-  return 6;
+  return idealBlockSizeForTarget(metaDiasTrabalhados);
 }
 
 export function isBlockWorkDay(ws: GenerationWorkspace, uuid: string, day: string): boolean {
