@@ -35,7 +35,7 @@ import {
   correctMonoFolgasPedidas,
   type MonoFolgaAuditResult,
 } from "./mono-folga-pedida.js";
-import { countAllocatedTurns, computeTurnRateio, sortPaoByAssignedTurnBalance } from "./real-schedule-turn-rateio.js";
+import { countAllocatedTurns, computeTurnRateio, sortPaoByAssignedTurnBalance, sortPaoForCoverageCandidates } from "./real-schedule-turn-rateio.js";
 import { sortPaoByOperationalPriority } from "./pao-operational-priority.js";
 import {
   clearNdDayConflicts,
@@ -205,6 +205,10 @@ export class GenerationWorkspace {
       const [employeeUuid, date] = key.split("|") as [string, string];
       return { employeeUuid, date };
     });
+  }
+
+  clearEmergencyIsolatedT8(uuid: string, day: string): void {
+    this.emergencyIsolatedT8Keys.delete(`${uuid}|${day}`);
   }
 
   syncRateioContext(): void {
@@ -618,11 +622,22 @@ export class GenerationWorkspace {
   /** Cobertura T8 apenas via bloco T8/T8/ND indivisível. */
   coverT8BlocksOnly(): number {
     let gaps = 0;
+    this.ensureRateioContext();
+    const rateioEntries = computeTurnRateio(this).entries;
     for (let di = 0; di < this.days.length; di++) {
       const day = this.days[di];
       if (this.hasPaoCoverage(day, "T8")) continue;
-      const rotated = sortPaoByOperationalPriority(this, di);
-      if (!this.tryAssignT8Coverage(day, rotated)) gaps++;
+      const rotated = sortPaoForCoverageCandidates(this, di, rateioEntries).filter((c) =>
+        employeeCanStartT8Block(this, c.uuid, false),
+      );
+      if (!this.tryAssignT8Coverage(day, rotated)) {
+        const emergencyPool = sortPaoForCoverageCandidates(this, di, rateioEntries).filter(
+          (c) =>
+            !isParallelOnlyPreferredPao(this, c.uuid) &&
+            employeeCanStartT8Block(this, c.uuid, true),
+        );
+        if (!this.tryAssignT8Coverage(day, emergencyPool, true)) gaps++;
+      }
     }
     this.coverageGapsCache = null;
     return gaps;
@@ -765,11 +780,16 @@ export class GenerationWorkspace {
   /** Cobertura T8 somente como bloco indivisível T8/T8/ND. */
   tryAssignT8Coverage(day: string, candidates?: GenerationInputEmployee[], coverageEmergency = false): boolean {
     const dayIndex = Math.max(0, this.days.indexOf(day));
-    const pool = (candidates ?? sortPaoByOperationalPriority(this, dayIndex)).filter(
-      (c) =>
-        !isParallelOnlyPreferredPao(this, c.uuid) &&
-        (coverageEmergency || employeeCanStartT8Block(this, c.uuid, false)),
-    );
+    const defaultPool = (() => {
+      this.ensureRateioContext();
+      const entries = computeTurnRateio(this).entries;
+      return sortPaoForCoverageCandidates(this, dayIndex, entries).filter(
+        (c) =>
+          !isParallelOnlyPreferredPao(this, c.uuid) &&
+          (coverageEmergency || employeeCanStartT8Block(this, c.uuid, false)),
+      );
+    })();
+    const pool = candidates ?? defaultPool;
 
     for (const c of pool) {
       if (this.tryCompleteT8Pair(c.uuid, day)) return true;

@@ -16,6 +16,10 @@ import {
 import { allocateFlightsForWorkdayDeficit } from "./real-schedule-flights.js";
 import { deduplicatePaoShiftCoverage } from "./pao-shift-dedup.js";
 import { repairT8GapsAfterDedup } from "./repair-t8-gaps-after-dedup.js";
+import {
+  repairAllCoverageGapsFinal,
+  validateNoCoverageGaps,
+} from "./repair-all-coverage-gaps-final.js";
 import { coverResidualT6T7Only } from "./real-schedule-residual.js";
 import { computeRealMotorTargets } from "./real-schedule-targets.js";
 import { materializeT6T7BlocksStrict } from "./real-schedule-blocks.js";
@@ -316,32 +320,7 @@ export class RealScheduleEngine {
     ws.reconcileNdAfterParallelShifts();
     ws.revalidateCoverageAfterBalance();
 
-    finalizeT8NdBlocks(ws);
-
-    const dupesAfterOptimizer = deduplicatePaoShiftCoverage(ws);
-    if (dupesAfterOptimizer > 0) {
-      motorReport.stepNotes.push(
-        `[12b] Turnos PAO duplicados pós-optimizer: ${dupesAfterOptimizer} removido(s).`,
-      );
-    }
-
-    let lastRepair = { blocksPlaced: 0, emergencyIsolated: 0, gapsRemaining: 0, warnings: [] as typeof motorReport.warnings };
-    for (let round = 0; round < 3; round++) {
-      const dupesRemoved = deduplicatePaoShiftCoverage(ws);
-      lastRepair = repairT8GapsAfterDedup(ws);
-      finalizeT8NdBlocks(ws);
-      if (round === 0 && (dupesAfterOptimizer > 0 || dupesRemoved > 0 || lastRepair.emergencyIsolated > 0)) {
-        motorReport.stepNotes.push(
-          `[12c-${round}] Pós-dedup: dupes=${dupesRemoved}; blocos T8=${lastRepair.blocksPlaced}; ` +
-            `T8 isolado emerg.=${lastRepair.emergencyIsolated}; gaps T8=${lastRepair.gapsRemaining}.`,
-        );
-      }
-      if (dupesRemoved === 0 && lastRepair.gapsRemaining === 0) break;
-    }
-    if (lastRepair.warnings.length > 0) {
-      motorReport.emergencyIsolatedT8Count = lastRepair.emergencyIsolated;
-    }
-    motorReport.emergencyIsolatedT8Days = ws.listEmergencyIsolatedT8Days();
+    const finalCoverage = runFinalCoveragePipeline(ws);
 
     motorReport.structuralMetrics = buildStructuralMetrics(
       ws,
@@ -350,6 +329,10 @@ export class RealScheduleEngine {
     );
     motorReport.t8IsolatedCount = motorReport.structuralMetrics.isolatedT8Count;
     motorReport.t8PairsWithoutNdCount = motorReport.structuralMetrics.pairsWithoutNdCount;
+    motorReport.emergencyIsolatedT8Count = finalCoverage.emergencyIsolated;
+    motorReport.emergencyIsolatedT8Days = ws.listEmergencyIsolatedT8Days();
+    motorReport.stepNotes.push(...finalCoverage.notes);
+    motorReport.warnings.push(...finalCoverage.warnings);
 
     for (const w of balanceReport.warnings) {
       engineSuggestions.push(w.detail);
@@ -369,6 +352,7 @@ export class RealScheduleEngine {
       ...balanceReport.warnings,
       ...engineViolations,
       ...gate.issues,
+      ...finalCoverage.gapViolations,
     ].filter((i) => {
       const k = `${i.type}|${i.date}|${i.employee}`;
       if (seen.has(k)) return false;
@@ -442,6 +426,43 @@ export class RealScheduleEngine {
       suggestions: insights.suggestions,
     };
   }
+}
+
+function runFinalCoveragePipeline(
+  ws: GenerationWorkspace,
+): {
+  notes: string[];
+  warnings: RealMotorReport["warnings"];
+  gapViolations: RealMotorReport["warnings"];
+  emergencyIsolated: number;
+} {
+  const notes: string[] = [];
+  const warnings: RealMotorReport["warnings"] = [];
+
+  finalizeT8NdBlocks(ws);
+  const dupes = deduplicatePaoShiftCoverage(ws);
+  const t8Repair = repairT8GapsAfterDedup(ws);
+  finalizeT8NdBlocks(ws);
+  const finalRepair = repairAllCoverageGapsFinal(ws, ws.ensureRateioContext());
+  finalizeT8NdBlocks(ws);
+  deduplicatePaoShiftCoverage(ws);
+  const gapViolations = validateNoCoverageGaps(ws);
+
+  warnings.push(...t8Repair.warnings, ...finalRepair.warnings);
+  const emergencyIsolated = t8Repair.emergencyIsolated + finalRepair.t8EmergencyIsolated;
+
+  notes.push(
+    `[13] Pipeline cobertura final: dedup=${dupes}; T8 blocos=${t8Repair.blocksPlaced}; ` +
+      `T8 emerg=${t8Repair.emergencyIsolated}; reparo T6=${finalRepair.t6Filled} T7=${finalRepair.t7Filled}; ` +
+      `T8 bloco=${finalRepair.t8BlocksPlaced} T8 emerg=${finalRepair.t8EmergencyIsolated}; ` +
+      `overflow=${finalRepair.overflowEvents}; gaps=${finalRepair.gapsRemaining}.`,
+  );
+
+  if (gapViolations.length > 0) {
+    notes.push(`[13] ATENÇÃO: ${gapViolations.length} furo(s) após reparo final.`);
+  }
+
+  return { notes, warnings, gapViolations, emergencyIsolated };
 }
 
 function closeStructurePreservingGaps(

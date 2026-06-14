@@ -54,26 +54,6 @@ function runT6T7Blocks(ws: ReturnType<typeof freshWorkspace>) {
   coverResidualT6T7Only(ws);
 }
 
-function assertNoIsolatedT8(assignments: ReturnType<ReturnType<typeof freshWorkspace>["toAssignments"]>) {
-  const byPao = new Map<string, string[]>();
-  for (const a of assignments) {
-    if (a.shiftCode !== "T8") continue;
-    const list = byPao.get(a.employeeUuid) ?? [];
-    list.push(a.date);
-    byPao.set(a.employeeUuid, list);
-  }
-  for (const [uuid, days] of byPao) {
-    for (const day of days) {
-      const prev = addDays(day, -1);
-      const next = addDays(day, 1);
-      expect(
-        days.includes(prev) || days.includes(next),
-        `T8 isolado ${day} para ${uuid}`,
-      ).toBe(true);
-    }
-  }
-}
-
 describe("Fase 8.0 — Motor real v1", () => {
   it("1. Demanda 30 dias = 90", () => {
     expect(calculateOperationalDemand(30).totalDemand).toBe(90);

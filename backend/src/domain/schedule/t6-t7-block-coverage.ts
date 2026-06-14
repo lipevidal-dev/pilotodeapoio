@@ -2,7 +2,7 @@ import { addDays } from "../rules/dates.js";
 import type { GenerationInputEmployee } from "./generation-types.js";
 import { blockLimitsForShift, type T6T7ShiftCode } from "./coverage-block-config.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
-import { sortPaoByOperationalPriority } from "./pao-operational-priority.js";
+import { computeTurnRateio, sortPaoForCoverageCandidates } from "./real-schedule-turn-rateio.js";
 
 /** Tamanho do bloco T6/T7 se o turno for alocado em `day` (inclui dias já planejados). */
 export function projectedT6T7BlockLength(
@@ -47,7 +47,9 @@ function sortCoverageCandidates(
   ws: GenerationWorkspace,
   dayIndex: number,
 ): GenerationInputEmployee[] {
-  return sortPaoByOperationalPriority(ws, dayIndex);
+  ws.ensureRateioContext();
+  const entries = computeTurnRateio(ws).entries;
+  return sortPaoForCoverageCandidates(ws, dayIndex, entries);
 }
 
 function coverShiftByBlocks(ws: GenerationWorkspace, code: T6T7ShiftCode): number {
@@ -108,7 +110,8 @@ function coverShiftByBlocks(ws: GenerationWorkspace, code: T6T7ShiftCode): numbe
       }
       if (!placed) {
         for (const c of candidates) {
-          if (ws.tryAssignShift(c.uuid, day, code)) {
+          if (wouldExceedT6T7BlockMax(ws, c.uuid, day, code)) continue;
+          if (ws.tryAssignShift(c.uuid, day, code, true)) {
             placed = true;
             break;
           }

@@ -7,6 +7,9 @@ import type { IndividualTarget, OperationalDemand, PlanningGroup } from "./deman
 import type { GenerationInputEmployee } from "./generation-types.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import type { ValidationIssue } from "./types.js";
+import {
+  minTurnDeficit,
+} from "./schedule-rateio-context.js";
 import { countWorkdayBreakdown } from "./real-schedule-workdays.js";
 import { countAllocatedOperationalTurns } from "./pao-rateio-shifts.js";
 import { buildScheduleRateioContext } from "./schedule-rateio-context.js";
@@ -194,23 +197,59 @@ export function sortPaoByAssignedTurnBalance(
   });
 }
 
-/** Ordena PAOs abaixo da meta para cobertura residual. */
-export function sortPaoForTurnBalance(
+/** Ordena candidatos para cobertura — prioriza abaixo do mínimo/meta, sem excluir PAOs no max. */
+export function sortPaoForCoverageCandidates(
   ws: GenerationWorkspace,
   _dayIndex: number,
-  entries: TurnRateioEntry[],
+  entries?: TurnRateioEntry[],
 ): GenerationInputEmployee[] {
   const ctx = ws.rateioContext;
-  const byUuid = new Map(entries.map((e) => [e.employeeUuid, e]));
-  return sortPaoByAssignedTurnBalance(ws, entries).filter((c) => {
-    if (ctx) {
-      const cur = ctx.currentTurnCounts.get(c.uuid) ?? 0;
-      const max = ctx.maxTurnCounts.get(c.uuid);
-      if (max != null && cur >= max) return false;
-      return true;
+  const rateioEntries = entries ?? computeTurnRateio(ws).entries;
+  const byUuid = new Map(rateioEntries.map((e) => [e.employeeUuid, e]));
+
+  const coverageTier = (uuid: string): number => {
+    if (!ctx) {
+      const dev = byUuid.get(uuid)?.turnDeviation ?? 0;
+      return dev < 0 ? 0 : 1;
     }
-    const entry = byUuid.get(c.uuid);
-    if (!entry) return true;
-    return entry.allocatedTurns < entry.turnTarget;
+    const cur = ctx.currentTurnCounts.get(uuid) ?? 0;
+    const min = ctx.minTurnCounts.get(uuid) ?? 0;
+    const max = ctx.maxTurnCounts.get(uuid);
+    if (cur < min) return 0;
+    const dev = byUuid.get(uuid)?.turnDeviation ?? 0;
+    if (dev < 0) return 1;
+    if (max == null || cur < max) return 2;
+    return 3;
+  };
+
+  return [...ws.paoEmps].sort((a, b) => {
+    const tierA = coverageTier(a.uuid);
+    const tierB = coverageTier(b.uuid);
+    if (tierA !== tierB) return tierA - tierB;
+
+    if (ctx && tierA === 0) {
+      const deficitA = minTurnDeficit(ctx, a.uuid);
+      const deficitB = minTurnDeficit(ctx, b.uuid);
+      if (deficitA !== deficitB) return deficitB - deficitA;
+    }
+
+    const devA = byUuid.get(a.uuid)?.turnDeviation ?? 0;
+    const devB = byUuid.get(b.uuid)?.turnDeviation ?? 0;
+    if (devA !== devB) return devA - devB;
+
+    const curA = ctx?.currentTurnCounts.get(a.uuid) ?? 0;
+    const curB = ctx?.currentTurnCounts.get(b.uuid) ?? 0;
+    if (curA !== curB) return curA - curB;
+
+    return a.employee.seniority - b.employee.seniority;
   });
+}
+
+/** @deprecated Prefer sortPaoForCoverageCandidates — não filtra PAOs no max. */
+export function sortPaoForTurnBalance(
+  ws: GenerationWorkspace,
+  dayIndex: number,
+  entries: TurnRateioEntry[],
+): GenerationInputEmployee[] {
+  return sortPaoForCoverageCandidates(ws, dayIndex, entries);
 }

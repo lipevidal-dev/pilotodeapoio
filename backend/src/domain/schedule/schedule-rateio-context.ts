@@ -204,6 +204,16 @@ export function isBelowMaxTurns(ctx: ScheduleRateioContext, employeeId: string):
   return currentTurnCount(ctx, employeeId) < max;
 }
 
+export function isBelowMinTurns(ctx: ScheduleRateioContext, employeeId: string): boolean {
+  const min = ctx.minTurnCounts.get(employeeId) ?? 0;
+  return currentTurnCount(ctx, employeeId) < min;
+}
+
+export function minTurnDeficit(ctx: ScheduleRateioContext, employeeId: string): number {
+  const min = ctx.minTurnCounts.get(employeeId) ?? 0;
+  return Math.max(0, min - currentTurnCount(ctx, employeeId));
+}
+
 /** Ordena PAOs: abaixo do max, menor currentTurnCount, preferência do turno, senioridade. */
 export function sortPaoByRateioPriority(
   _ws: GenerationWorkspace,
@@ -221,6 +231,14 @@ export function sortPaoByRateioPriority(
       return isBelowMaxTurns(ctx, c.uuid);
     })
     .sort((a, b) => {
+      const belowMinA = isBelowMinTurns(ctx, a.uuid) ? 0 : 1;
+      const belowMinB = isBelowMinTurns(ctx, b.uuid) ? 0 : 1;
+      if (belowMinA !== belowMinB) return belowMinA - belowMinB;
+
+      const deficitA = minTurnDeficit(ctx, a.uuid);
+      const deficitB = minTurnDeficit(ctx, b.uuid);
+      if (deficitA !== deficitB) return deficitB - deficitA;
+
       const curA = currentTurnCount(ctx, a.uuid);
       const curB = currentTurnCount(ctx, b.uuid);
       if (curA !== curB) return curA - curB;

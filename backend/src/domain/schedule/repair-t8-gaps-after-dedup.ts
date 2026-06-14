@@ -1,6 +1,7 @@
 import { addDays } from "../rules/dates.js";
 import { isNdOverrideProtected } from "./schedule-grid-source.js";
-import { sortT8Candidates } from "./real-schedule-t8.js";
+import { computeTurnRateio, sortPaoForCoverageCandidates } from "./real-schedule-turn-rateio.js";
+import { isParallelOnlyPreferredPao } from "./employee-t6-t7-shift.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import type { ValidationIssue } from "./types.js";
 
@@ -42,6 +43,13 @@ function canPlaceT8BlockAt(
   return ws.canPlaceT8Block(uuid, startDay, true);
 }
 
+function t8RepairCandidates(ws: GenerationWorkspace, dayIndex: number) {
+  const entries = computeTurnRateio(ws).entries;
+  return sortPaoForCoverageCandidates(ws, dayIndex, entries).filter(
+    (c) => !isParallelOnlyPreferredPao(ws, c.uuid),
+  );
+}
+
 /** Tenta fechar gap T8 no dia D montando bloco T8/T8/ND válido. */
 export function tryRepairT8GapWithBlock(
   ws: GenerationWorkspace,
@@ -50,7 +58,7 @@ export function tryRepairT8GapWithBlock(
   if (ws.hasPaoCoverage(gapDay, "T8")) return true;
 
   const dayIndex = Math.max(0, ws.days.indexOf(gapDay));
-  const candidates = sortT8Candidates(ws, dayIndex, true);
+  const candidates = t8RepairCandidates(ws, dayIndex);
 
   for (const c of candidates) {
     const uuid = c.uuid;
@@ -85,9 +93,18 @@ function tryEmergencyIsolatedT8(
   if (ws.hasPaoCoverage(gapDay, "T8")) return true;
 
   const dayIndex = Math.max(0, ws.days.indexOf(gapDay));
-  const candidates = sortT8Candidates(ws, dayIndex, true);
+  const candidates = t8RepairCandidates(ws, dayIndex);
 
-  for (const c of candidates) {
+  const tryPool = [
+    ...candidates,
+    ...ws.paoEmps.filter(
+      (c) =>
+        !isParallelOnlyPreferredPao(ws, c.uuid) &&
+        !candidates.some((x) => x.uuid === c.uuid),
+    ),
+  ];
+
+  for (const c of tryPool) {
     if (wouldDuplicateT8Coverage(ws, c.uuid, gapDay)) continue;
     if (ws.isDayBlockedForShift(c.uuid, gapDay)) continue;
     if (!ws.tryAssignShift(c.uuid, gapDay, "T8", true)) continue;

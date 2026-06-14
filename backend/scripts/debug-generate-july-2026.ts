@@ -16,6 +16,10 @@ import {
   formatCoverageTable,
   formatTurnRateioAuditTable,
 } from "../src/domain/schedule/turn-rateio-audit.js";
+import {
+  buildPaoBelowTargetDiagnostics,
+  formatPaoBelowTargetDiagnostics,
+} from "../src/domain/schedule/pao-below-target-diagnostics.js";
 import { findWorkBlocks } from "../src/domain/schedule/block-optimizer.js";
 import { auditStructuralT8 } from "../src/domain/schedule/real-schedule-t8.js";
 import { countT8BlocksForEmployee } from "../src/domain/schedule/t8-block-limits.js";
@@ -85,6 +89,8 @@ async function main() {
   console.log("===== AUDITORIA JULHO/2026 MOTOR V3 =====\n");
   console.log("Funcionários PAO:");
   console.log(formatTurnRateioAuditTable(buildTurnRateioAudit(auditWs, auditWs.rateioContext!)));
+
+  console.log("\n" + formatPaoBelowTargetDiagnostics(buildPaoBelowTargetDiagnostics(auditWs)));
 
   console.log("\nCobertura:");
   console.log(formatCoverageTable(auditWs));
