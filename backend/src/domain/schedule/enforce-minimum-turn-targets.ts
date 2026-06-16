@@ -27,6 +27,7 @@ import {
 } from "./v4-transfer-audit.js";
 import { capturePersistenceFocus } from "./persistence-focus-trace.js";
 import { rejectTransferIfWouldDropDonorBelowMin } from "./v5-minimum-lock.js";
+import { canTransferV58WorkBlock } from "./v5-work-block-quality.js";
 
 const TRANSFERABLE_SHIFTS: ShiftCode[] = ["T6", "T7", "T8"];
 const MIN_PHASE_SHIFTS: ShiftCode[] = ["T6", "T7"];
@@ -460,6 +461,10 @@ function trySameDayTransfer(
   const minLockReject = rejectTransferIfWouldDropDonorBelowMin(ws, donorUuid, day, shift);
   if (minLockReject) {
     return reject(minLockReject as TransferRejectionCode);
+  }
+
+  if (!canTransferV58WorkBlock(ws, donorUuid, receiverUuid, day, shift)) {
+    return reject("V58_WORK_BLOCK", "transferência criaria bloco inválido");
   }
 
   const bypassT8 = shift === "T8";

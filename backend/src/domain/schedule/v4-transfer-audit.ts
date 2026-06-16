@@ -14,6 +14,7 @@ export type TransferRejectionCode =
   | "RECEIVER_NO_GAIN"
   | "DONOR_BELOW_MIN_AFTER"
   | "DONOR_MINIMUM_LOCK"
+  | "V58_WORK_BLOCK"
   | "COVERAGE_GAPS_AFTER";
 
 export type TransferPhase = "min" | "target";

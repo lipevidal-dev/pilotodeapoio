@@ -1,6 +1,10 @@
 import type { GenerationInput, GenerationResult } from "./generation-types.js";
 import { GenerationWorkspace } from "./generation-workspace.js";
 import { validateRateioMinimums } from "./enforce-minimum-turn-targets.js";
+import {
+  listInvalidV58WorkBlocks,
+  validateNoIsolatedWorkShifts,
+} from "./v5-work-block-quality.js";
 import { countRateioTurns } from "./pao-rateio-shifts.js";
 import { buildTurnPreferenceValidation } from "./preference-scoring.js";
 import { assignmentKey } from "./types.js";
@@ -88,6 +92,17 @@ export function assertV57July2026Criteria(
   }
   if (rateioMin.issues.some((i) => i.hasValidTransfer)) {
     failures.push("validateRateioMinimums: transferência viável pendente");
+  }
+
+  const isolatedBlocks = listInvalidV58WorkBlocks(ws);
+  if (isolatedBlocks.some((b) => (b.effectiveSize ?? b.size) === 1 && b.size === 1)) {
+    failures.push(`blocos isolados (size=1): ${isolatedBlocks.filter((b) => b.size === 1).length}`);
+  }
+  if (isolatedBlocks.some((b) => (b.effectiveSize ?? b.size) < 3 && b.size === 2)) {
+    failures.push(`blocos inválidos (size=2): ${isolatedBlocks.filter((b) => b.size === 2).length}`);
+  }
+  if (validateNoIsolatedWorkShifts(ws).length > 0) {
+    failures.push(`validateNoIsolatedWorkShifts: ${validateNoIsolatedWorkShifts(ws).length} CRITICAL`);
   }
 
   return { ok: failures.length === 0, failures };

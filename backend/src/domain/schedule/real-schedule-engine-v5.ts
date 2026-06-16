@@ -14,6 +14,10 @@ import {
   finalizeT8NdBlocksForV5PreRepair,
 } from "./schedule-grid-source.js";
 import { validateRateioMinimums } from "./enforce-minimum-turn-targets.js";
+import {
+  clearV58WorkBlockAudit,
+  validateNoIsolatedWorkShifts,
+} from "./v5-work-block-quality.js";
 import { materializeVacationFortnightPatterns } from "./real-schedule-vacation-materialize.js";
 import { allocateParallelShifts } from "./real-schedule-parallel.js";
 import {
@@ -84,6 +88,7 @@ export class RealScheduleEngineV5 {
     clearV5PreferenceLockTracking(ws);
     clearV55MinimumOpportunityAudit(ws);
     clearV56MinimumLockAudit(ws);
+    clearV58WorkBlockAudit(ws);
 
     const warnings: ValidationIssue[] = [];
     const stepNotes: string[] = [];
@@ -228,6 +233,7 @@ export class RealScheduleEngineV5 {
     const engineViolations = validateSchedule(scheduleCtx);
     const gate = runFinalCoverageGate(scheduleCtx);
     const gapViolations = validateNoCoverageGaps(ws);
+    const isolatedWorkViolations = validateNoIsolatedWorkShifts(ws);
     const rateioMin = validateRateioMinimums(ws);
 
     if (rateioMin.issues.some((i) => i.hasValidTransfer)) {
@@ -250,6 +256,7 @@ export class RealScheduleEngineV5 {
       ...engineViolations,
       ...gate.issues,
       ...gapViolations,
+      ...isolatedWorkViolations,
     ].filter((i) => {
       const k = `${i.type}|${i.date}|${i.employee}|${i.detail}`;
       if (seen.has(k)) return false;

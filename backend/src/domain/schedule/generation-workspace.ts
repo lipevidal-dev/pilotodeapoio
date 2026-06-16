@@ -90,6 +90,12 @@ import {
   logV5LockedPreferenceRemoval,
 } from "./v5-preference-lock-final.js";
 import type { V56MinimumLockAuditEntry } from "./v5-minimum-lock.js";
+import {
+  canAssignV58WorkBlock,
+  canUnassignV58WorkBlock,
+  type UnassignV58WorkBlockOpts,
+  type V58WorkBlockAuditEntry,
+} from "./v5-work-block-quality.js";
 
 export const GENERATOR_REST_LABELS = new Set([
   "FOLGA",
@@ -175,6 +181,10 @@ export class GenerationWorkspace {
   /** V5.6 — guarda anti-sub-mínimo downstream (após V5.5). */
   v56MinimumLockEnabled = false;
   readonly v56MinimumLockAudit: V56MinimumLockAuditEntry[] = [];
+
+  /** V5.8 — blocos de turno mínimo 3 dias (T6/T7/T8/T9). */
+  v58WorkBlockGuardEnabled = false;
+  readonly v58WorkBlockAudit: V58WorkBlockAuditEntry[] = [];
 
   /** Diagnóstico persistência — snapshots pós-enforce / pré-save. */
   readonly persistenceFocusSnapshots: PersistenceFocusSnapshot[] = [];
@@ -511,6 +521,7 @@ export class GenerationWorkspace {
     }
     if (this.isDayBlockedForShift(uuid, day)) return false;
     if (!canAssignV5LockedPreference(this, uuid, day, code)) return false;
+    if (!canAssignV58WorkBlock(this, uuid, day, code)) return false;
     const did = this.uuidToDomain.get(uuid)!;
     const emp = this.input.employees.find((e) => e.uuid === uuid)!.employee;
     const shiftCode = toShiftCode(code);
@@ -594,7 +605,7 @@ export class GenerationWorkspace {
   unassignShift(
     uuid: string,
     day: string,
-    opts?: { bypassT8Protection?: boolean } & UnassignAssignmentGuardOpts,
+    opts?: { bypassT8Protection?: boolean } & UnassignAssignmentGuardOpts & UnassignV58WorkBlockOpts,
   ): boolean {
     const did = this.uuidToDomain.get(uuid);
     if (!did) return false;
@@ -603,6 +614,7 @@ export class GenerationWorkspace {
 
     if (!opts?.bypassT8Protection && this.isT8BlockProtected(uuid, day)) return false;
     if (!canUnassignAllAssignmentGuards(this, uuid, day, code, opts)) return false;
+    if (!canUnassignV58WorkBlock(this, uuid, day, code, opts)) return false;
 
     const ok = this.planned.delete(assignmentKey(did, day));
     if (ok) {
