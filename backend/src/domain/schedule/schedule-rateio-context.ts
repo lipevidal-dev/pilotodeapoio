@@ -6,6 +6,8 @@ import {
   computeProportionalTurnTargets,
 } from "./pao-turn-availability.js";
 import { isRateioTurnShiftCode } from "./pao-rateio-shifts.js";
+import { buildSeniorityWeightIndex, preferenceScoreForShift, targetTurnDeficit } from "./preference-scoring.js";
+import { buildPaoPoolSeniorityIndex, comparePaoPoolRank, type PaoPoolSeniorityInfo } from "./pao-pool-seniority.js";
 
 export type { ShiftCode };
 
@@ -28,10 +30,10 @@ export interface ScheduleRateioContext {
 
   preferredShiftByEmployee: Map<string, ShiftCode | null>;
 
-  /** Meta de dias T8 por PAO (cobertura mensal / pool T8). */
-  targetT8DaysPerEmployee: Map<string, number>;
-
-  /** Disponibilidade calendário para meta proporcional. */
+  /** Peso de senioridade 1.0–1.5 para preferência ponderada. */
+  seniorityWeightByEmployee: Map<string, number>;
+  /** Posição relativa no pool PAO (APAO excluído). */
+  paoPoolSeniorityByEmployee: Map<string, PaoPoolSeniorityInfo>;
   availableDaysByEmployee: Map<string, number>;
   relativeAvailabilityByEmployee: Map<string, number>;
   poolAverageAvailableDays: number;
@@ -98,15 +100,13 @@ export function buildScheduleRateioContext(ws: GenerationWorkspace): ScheduleRat
   const targetTurnCounts = new Map<string, number>();
   const maxTurnCounts = new Map<string, number>();
   const preferredShiftByEmployee = new Map<string, ShiftCode | null>();
-  const targetT8DaysPerEmployee = new Map<string, number>();
+  const seniorityWeightByEmployee = buildSeniorityWeightIndex(ws);
+  const paoPoolSeniorityByEmployee = buildPaoPoolSeniorityIndex(ws);
   const availableDaysByEmployee = new Map<string, number>();
   const relativeAvailabilityByEmployee = new Map<string, number>();
 
-  const t8TargetDays = allUuids.length > 0 ? daysInMonth / allUuids.length : 0;
-
   for (const uuid of allUuids) {
     preferredShiftByEmployee.set(uuid, resolvePreferredShift(ws, uuid));
-    targetT8DaysPerEmployee.set(uuid, t8TargetDays);
 
     const src = mainPoolEmployeeIds.has(uuid) ? mainTargets : allTargets;
     minTurnCounts.set(uuid, src.minTurnCounts.get(uuid) ?? 0);
@@ -133,7 +133,8 @@ export function buildScheduleRateioContext(ws: GenerationWorkspace): ScheduleRat
     currentT8Counts: emptyCounts(allUuids),
     currentT9Counts: emptyCounts(allUuids),
     preferredShiftByEmployee,
-    targetT8DaysPerEmployee,
+    seniorityWeightByEmployee,
+    paoPoolSeniorityByEmployee,
     availableDaysByEmployee,
     relativeAvailabilityByEmployee,
     poolAverageAvailableDays,
@@ -243,9 +244,9 @@ export function minTurnDeficit(ctx: ScheduleRateioContext, employeeId: string): 
   return Math.max(0, min - currentTurnCount(ctx, employeeId));
 }
 
-/** Ordena PAOs: abaixo do max, menor currentTurnCount, preferência do turno, senioridade. */
+/** Ordena PAOs: abaixo do min, déficit target, preferência×senioridade, turnos, senioridade. */
 export function sortPaoByRateioPriority(
-  _ws: GenerationWorkspace,
+  ws: GenerationWorkspace,
   ctx: ScheduleRateioContext,
   shift: ShiftCode,
   candidates: readonly { uuid: string; seniority: number }[],
@@ -264,25 +265,22 @@ export function sortPaoByRateioPriority(
       const belowMinB = isBelowMinTurns(ctx, b.uuid) ? 0 : 1;
       if (belowMinA !== belowMinB) return belowMinA - belowMinB;
 
-      const deficitA = minTurnDeficit(ctx, a.uuid);
-      const deficitB = minTurnDeficit(ctx, b.uuid);
-      if (deficitA !== deficitB) return deficitB - deficitA;
+      const targetDefA = targetTurnDeficit(ctx, a.uuid);
+      const targetDefB = targetTurnDeficit(ctx, b.uuid);
+      if (targetDefA !== targetDefB) return targetDefB - targetDefA;
+
+      const prefA = preferenceScoreForShift(ws, ctx, a.uuid, shift);
+      const prefB = preferenceScoreForShift(ws, ctx, b.uuid, shift);
+      if (prefA !== prefB) return prefB - prefA;
 
       const curA = currentTurnCount(ctx, a.uuid);
       const curB = currentTurnCount(ctx, b.uuid);
       if (curA !== curB) return curA - curB;
 
-      const prefA = ctx.preferredShiftByEmployee.get(a.uuid);
-      const prefB = ctx.preferredShiftByEmployee.get(b.uuid);
-      const matchA = prefA === shift ? 0 : 1;
-      const matchB = prefB === shift ? 0 : 1;
-      if (matchA !== matchB) return matchA - matchB;
-
-      const t8A = ctx.currentT8Counts.get(a.uuid) ?? 0;
-      const t8B = ctx.currentT8Counts.get(b.uuid) ?? 0;
-      if (shift === "T8" && t8A !== t8B) return t8A - t8B;
-
-      return a.seniority - b.seniority;
+      if (a.seniority !== b.seniority) return a.seniority - b.seniority;
+      const rankCmp = comparePaoPoolRank(ctx.paoPoolSeniorityByEmployee, a.uuid, b.uuid);
+      if (rankCmp !== 0) return rankCmp;
+      return a.uuid.localeCompare(b.uuid);
     });
 }
 

@@ -27,13 +27,14 @@ describe("canAssignShiftWithRateio", () => {
     expect(r.scorePenalty).toBeGreaterThan(1000);
   });
 
-  it("prioriza turno preferido", () => {
+  it("prioriza turno preferido com peso de senioridade", () => {
     const r = canAssignShiftWithRateio({
       ...base,
       currentTurnCounts: new Map([["pao-1", 5]]),
       preferredShiftByEmployee: new Map([["pao-1", "T6"]]),
+      seniorityWeightByEmployee: new Map([["pao-1", 1.5]]),
     });
     expect(r.allowed).toBe(true);
-    expect(r.scorePenalty).toBeLessThan(0);
+    expect(r.scorePenalty).toBeLessThan(-40);
   });
 });

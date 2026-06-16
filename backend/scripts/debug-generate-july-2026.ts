@@ -2,7 +2,7 @@
  * Auditoria julho/2026 com dados locais (Prisma).
  * Uso: npm run build && npx tsx scripts/debug-generate-july-2026.ts
  */
-import { RealScheduleEngine } from "../src/domain/schedule/real-schedule-engine.js";
+import { realScheduleEngineV5 } from "../src/domain/schedule/real-schedule-engine-v5.js";
 import { CalendarRepository } from "../src/infrastructure/repositories/calendar.repository.js";
 import { PreAllocationRepository } from "../src/infrastructure/repositories/pre-allocation.repository.js";
 import { ScheduleRepository } from "../src/infrastructure/repositories/schedule.repository.js";
@@ -27,25 +27,36 @@ import { auditStructuralT8 } from "../src/domain/schedule/real-schedule-t8.js";
 import { countT8BlocksForEmployee } from "../src/domain/schedule/t8-block-limits.js";
 import { assignmentKey } from "../src/domain/schedule/types.js";
 import {
-  auditV4Transfers,
+  formatRateioMinimumValidation,
+  validateRateioMinimums,
 } from "../src/domain/schedule/enforce-minimum-turn-targets.js";
-import { formatV4TransferAudit } from "../src/domain/schedule/v4-transfer-audit.js";
 import { formatV3BlockMaterializeAudit, formatV3BlockMaterializeDiscardTrace } from "../src/domain/schedule/v3-block-materialize-audit.js";
 import {
   auditV3PipelineTurnBalance,
   formatV3PipelineTurnBalanceTable,
   prepareWorkspaceForV3PipelineAudit,
 } from "../src/domain/schedule/v3-pipeline-turn-balance.js";
-import {
-  formatRateioMinimumValidation,
-  validateRateioMinimums,
-} from "../src/domain/schedule/enforce-minimum-turn-targets.js";
-import {
-  formatPostV4EnforceTurnTrace,
-  runPostV4EnforceTurnTrace,
-} from "../src/domain/schedule/v4-post-enforce-turn-trace.js";
 import type { RealMotorReport } from "../src/domain/schedule/real-schedule-types.js";
 import { addDays } from "../src/domain/rules/dates.js";
+import {
+  buildTurnPreferenceValidation,
+  formatTurnPreferenceValidation,
+} from "../src/domain/schedule/preference-scoring.js";
+import {
+  buildPreferenceDeniedAudit,
+  buildSeniorityPreferenceVerdicts,
+  formatPreferenceDeniedAudit,
+  formatSeniorityPreferenceVerdicts,
+} from "../src/domain/schedule/preference-denied-audit.js";
+import {
+  formatPreferenceRepairTraceReport,
+  type PreferenceCheckpoint,
+} from "../src/domain/schedule/preference-repair-impact-audit.js";
+import { formatInterPhasePreferredRemovalAudit } from "../src/domain/schedule/v5-preferred-phase-guard.js";
+import { formatV5FillPreferenceDilutionAudit } from "../src/domain/schedule/v5-fill-preference.js";
+import { formatV5RepairPreferenceSwapAudit } from "../src/domain/schedule/v5-repair-preference-swap.js";
+import { formatV5PreferenceLockAudit } from "../src/domain/schedule/v5-preference-lock-final.js";
+import { assertV57July2026Criteria } from "../src/domain/schedule/v5-july-2026-criteria.js";
 
 const YEAR = 2026;
 const MONTH = 7;
@@ -54,7 +65,7 @@ async function main() {
   const scheduleRepo = new ScheduleRepository();
   const calendarRepo = new CalendarRepository();
   const preAllocRepo = new PreAllocationRepository();
-  const engine = new RealScheduleEngine();
+  const engine = realScheduleEngineV5;
 
   const employees = await scheduleRepo.listActiveEmployees();
   const shifts = await scheduleRepo.listShifts(true);
@@ -122,23 +133,109 @@ async function main() {
     }
   }
 
-  console.log("===== AUDITORIA JULHO/2026 MOTOR V4 =====\n");
+  console.log("===== AUDITORIA JULHO/2026 MOTOR V5 =====\n");
   const rateioAudits = buildTurnRateioAudit(auditWs, auditWs.rateioContext!);
   console.log(formatProportionalMetaTable(rateioAudits));
   console.log("\nFuncionários PAO:");
   console.log(formatTurnRateioAuditTable(rateioAudits));
+
+  auditWs.syncRateioContext();
+  const prefValidation = buildTurnPreferenceValidation(auditWs, auditWs.rateioContext!);
+  console.log("\n" + formatTurnPreferenceValidation(prefValidation));
+
+  const prefDenied = buildPreferenceDeniedAudit(auditWs, auditWs.rateioContext!);
+  console.log("\n" + formatPreferenceDeniedAudit(prefDenied));
+  console.log("\n" + formatSeniorityPreferenceVerdicts(buildSeniorityPreferenceVerdicts(prefDenied)));
+
+  const motorReport = result.summary.realMotorReport as RealMotorReport & {
+    v5PreferenceCheckpoints?: PreferenceCheckpoint[];
+  };
+  if (motorReport?.v5PreferenceCheckpoints?.length) {
+    console.log(
+      "\n" +
+        formatPreferenceRepairTraceReport(motorReport.v5PreferenceCheckpoints, {
+          focusNames: ["Davi", "Gustavo", "Alexandre", "Lucas", "Palombino", "Antonio"],
+        }),
+    );
+  } else {
+    console.log("\n(v5PreferenceCheckpoints ausente — gere com motor V5 atualizado)");
+  }
+
+  const interPhaseSection = motorReport?.stepNotes?.find((n) =>
+    n.includes("REMOÇÃO DE PREFERÊNCIA ENTRE FASES"),
+  );
+  if (interPhaseSection) {
+    console.log("\n" + interPhaseSection);
+  } else {
+    console.log("\n" + formatInterPhasePreferredRemovalAudit(new GenerationWorkspace(input)));
+  }
+
+  const fillDilutionSection = motorReport?.stepNotes?.find((n) =>
+    n.includes("FILL DILUIÇÃO DE PREFERÊNCIA"),
+  );
+  if (fillDilutionSection) {
+    console.log("\n" + fillDilutionSection);
+  } else {
+    console.log("\n" + formatV5FillPreferenceDilutionAudit(new GenerationWorkspace(input)));
+  }
+
+  const lockSection = motorReport?.stepNotes?.find((n) =>
+    n.includes("V5.4 PREFERENCE LOCK FINAL"),
+  );
+  if (lockSection) {
+    console.log("\n" + lockSection);
+  } else {
+    console.log("\n" + formatV5PreferenceLockAudit(new GenerationWorkspace(input)));
+  }
+
+  const swapSection = motorReport?.stepNotes?.find((n) =>
+    n.includes("REPAIR SWAP DE PREFERÊNCIA"),
+  );
+  if (swapSection) {
+    console.log("\n" + swapSection);
+  } else {
+    console.log("\n" + formatV5RepairPreferenceSwapAudit(new GenerationWorkspace(input)));
+  }
+
+  const repairDilutionSection = motorReport?.stepNotes?.find((n) =>
+    n.includes("REPAIR DILUIÇÃO DE PREFERÊNCIA"),
+  );
+  if (repairDilutionSection) {
+    console.log("\n" + repairDilutionSection);
+  } else {
+    console.log("\n" + formatV5RepairPreferenceDilutionAudit(new GenerationWorkspace(input)));
+  }
+
+  const v55Section = motorReport?.stepNotes?.find((n) =>
+    n.includes("V5.5 MINIMUM OPPORTUNITY FILL"),
+  );
+  if (v55Section) {
+    console.log("\n" + v55Section);
+  } else {
+    console.log("\n(V5.5 minimum opportunity fill ausente no motorReport)");
+  }
+
+  const v56Section = motorReport?.stepNotes?.find((n) =>
+    n.includes("V5.6 MINIMUM LOCK"),
+  );
+  if (v56Section) {
+    console.log("\n" + v56Section);
+  } else {
+    console.log("\n(V5.6 minimum lock ausente no motorReport)");
+  }
 
   console.log("\n" + formatPaoBelowTargetDiagnostics(buildPaoBelowTargetDiagnostics(auditWs)));
 
   auditWs.syncRateioContext();
   console.log("\n" + formatRateioMinimumValidation(validateRateioMinimums(auditWs)));
 
-  console.log("\n" + formatV4TransferAudit(auditV4Transfers(auditWs)));
+  const v57Section = motorReport?.stepNotes?.find((n) => n.includes("V5.7 GUARDS"));
+  if (v57Section) {
+    console.log("\n" + v57Section);
+  }
 
-  console.log("\n" + formatPostV4EnforceTurnTrace(runPostV4EnforceTurnTrace(input)));
-
-  const motorReport = result.realMotorReport as RealMotorReport | undefined;
-  const v3Audit = motorReport?.v3BlockMaterializeAudit;
+  const v3MotorReport = result.summary.realMotorReport as RealMotorReport | undefined;
+  const v3Audit = v3MotorReport?.v3BlockMaterializeAudit;
   if (v3Audit) {
     console.log("\n" + formatV3BlockMaterializeAudit(v3Audit));
     console.log("\n" + formatV3BlockMaterializeDiscardTrace(v3Audit, ["Lucas"]));
@@ -228,6 +325,8 @@ async function main() {
   }
 
   console.log("\nResumo motor:");
+  const criteria = assertV57July2026Criteria(input, result);
+  console.log(criteria.ok ? "✓ Critérios V5.7 OK" : `✗ Critérios V5.7: ${criteria.failures.join("; ")}`);
   console.log({
     gaps: auditWs.listCoverageGaps().length,
     critical: result.summary.criticalCount,

@@ -105,3 +105,15 @@
   font-weight: 600;
   color: var(--gol-orange);
 }
+
+.specific-shift-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.specific-shift-field {
+  min-width: 10rem;
+}

@@ -38,6 +38,7 @@ services:
       DB_USER: piloto
       CORS_ORIGINS: http://localhost:4200,http://localhost:4201
       JWT_SECRET: ${JWT_SECRET:-piloto-dev-secret-change-in-prod}
+      SCHEDULE_ENGINE_VERSION: V5
     restart: on-failure:5
 
   admin:

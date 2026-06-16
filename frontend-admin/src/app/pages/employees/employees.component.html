@@ -408,6 +408,112 @@
 
     </section>
 
+
+
+    <section class="restriction-section">
+
+      <h3 class="section-title">Alocar turno em dias específicos</h3>
+
+      <p class="section-hint">Preferência forte na geração — dia do mês ou dia da semana recorrente.</p>
+
+      <div class="restriction-toolbar">
+
+        <p-button
+
+          label="Adicionar regra"
+
+          icon="pi pi-plus"
+
+          severity="secondary"
+
+          [outlined]="true"
+
+          size="small"
+
+          (onClick)="addSpecificShiftRow()"
+
+        />
+
+      </div>
+
+      @for (row of formSpecificShiftRequests; track $index) {
+
+        <div class="specific-shift-row">
+
+          <p-select
+
+            [options]="shiftOptions()"
+
+            [(ngModel)]="row.shiftId"
+
+            optionLabel="label"
+
+            optionValue="value"
+
+            placeholder="Turno"
+
+            class="specific-shift-field"
+
+          />
+
+          <p-selectButton
+
+            [options]="[{ label: 'Dia do mês', value: 'day' }, { label: 'Dia da semana', value: 'weekday' }]"
+
+            [ngModel]="row.dayOfMonth != null ? 'day' : 'weekday'"
+
+            (ngModelChange)="setSpecificShiftMode($index, $event)"
+
+            optionLabel="label"
+
+            optionValue="value"
+
+          />
+
+          @if (row.dayOfMonth != null) {
+
+            <p-inputNumber
+
+              [(ngModel)]="row.dayOfMonth"
+
+              [min]="1"
+
+              [max]="31"
+
+              [useGrouping]="false"
+
+              placeholder="Dia"
+
+            />
+
+          } @else {
+
+            <p-select
+
+              [options]="weekdayOptions"
+
+              [(ngModel)]="row.weekday"
+
+              optionLabel="label"
+
+              optionValue="value"
+
+              placeholder="Dia da semana"
+
+              class="specific-shift-field"
+
+            />
+
+          }
+
+          <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="removeSpecificShiftRow($index)" />
+
+        </div>
+
+      }
+
+    </section>
+
   </div>
 
   <ng-template pTemplate="footer">

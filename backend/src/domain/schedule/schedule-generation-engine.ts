@@ -5,7 +5,7 @@ import { buildGenerationInsights } from "./generation-insights.js";
 import { buildExtendedSummary } from "./generation-summary.js";
 import { GenerationWorkspace } from "./generation-workspace.js";
 import { operationalBalancer } from "./operational-balancer.js";
-import { RealScheduleEngine } from "./real-schedule-engine.js";
+import { generateScheduleWithRouter } from "./schedule-engine-router.js";
 import { ScheduleRepairEngine } from "./schedule-repair-engine.js";
 import type { GenerationInput, GenerationResult } from "./generation-types.js";
 
@@ -149,12 +149,10 @@ export class LegacyScheduleGenerationEngine {
   }
 }
 
-/** Motor principal — Fase 8.0: motor real v1 (demanda/metas/blocos/voos). */
+/** Motor principal — V5 por padrão (cota/senioridade); V4 via SCHEDULE_ENGINE_VERSION=V4. */
 export class ScheduleGenerationEngine {
-  constructor(private readonly realEngine = new RealScheduleEngine()) {}
-
   generate(input: GenerationInput): GenerationResult {
-    return this.realEngine.generate(input);
+    return generateScheduleWithRouter(input);
   }
 }
 

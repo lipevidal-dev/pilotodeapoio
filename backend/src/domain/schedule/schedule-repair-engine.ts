@@ -3,6 +3,8 @@ import type { GenerationWorkspace } from "./generation-workspace.js";
 import type { GenerationInputEmployee } from "./generation-types.js";
 import { countPrimaryRateioTurns } from "./pao-rateio-shifts.js";
 import { currentTurnCount } from "./schedule-rateio-context.js";
+import { sortPaoForT8CoverageCandidates } from "./t8-coverage-priority.js";
+import { sortCandidatesForRestrictedShiftBreak } from "./shift-restriction-sorting.js";
 
 export interface RepairResult {
   repaired: number;
@@ -12,10 +14,21 @@ export interface RepairResult {
 
 const MAX_REPAIR_ROUNDS = 40;
 const REPAIR_SHIFTS = ["T6", "T7", "T8"] as const;
+const COVERAGE_GAP_SHIFT_ORDER: Record<string, number> = { T6: 0, T7: 1, T8: 2 };
 
-function sortRepairCandidates(ws: GenerationWorkspace): GenerationInputEmployee[] {
+function sortCoverageGapsForRepair(
+  gaps: Array<{ date: string; shiftCode: string }>,
+): Array<{ date: string; shiftCode: string }> {
+  return [...gaps].sort(
+    (a, b) =>
+      (COVERAGE_GAP_SHIFT_ORDER[a.shiftCode] ?? 9) -
+        (COVERAGE_GAP_SHIFT_ORDER[b.shiftCode] ?? 9) || a.date.localeCompare(b.date),
+  );
+}
+
+function sortRepairCandidates(ws: GenerationWorkspace, shiftCode: string): GenerationInputEmployee[] {
   const ctx = ws.rateioContext;
-  return [...ws.paoEmps].sort((a, b) => {
+  const sorted = [...ws.paoEmps].sort((a, b) => {
     if (ctx) {
       const curA = currentTurnCount(ctx, a.uuid);
       const curB = currentTurnCount(ctx, b.uuid);
@@ -26,6 +39,7 @@ function sortRepairCandidates(ws: GenerationWorkspace): GenerationInputEmployee[
       a.employee.seniority - b.employee.seniority
     );
   });
+  return sortCandidatesForRestrictedShiftBreak(ws, sorted, shiftCode);
 }
 
 function tryAssignForCoverage(
@@ -46,7 +60,7 @@ export class ScheduleRepairEngine {
     const extraSuggestions: string[] = [];
 
     for (let round = 0; round < MAX_REPAIR_ROUNDS; round++) {
-      const gaps = ws.listCoverageGaps();
+      const gaps = sortCoverageGapsForRepair(ws.listCoverageGaps());
       if (gaps.length === 0) break;
 
       let fixedAny = false;
@@ -80,7 +94,7 @@ export class ScheduleRepairEngine {
   ): boolean {
     if (this.tryDirectFill(ws, gap.date, gap.shiftCode)) return true;
 
-    for (const c of sortRepairCandidates(ws)) {
+    for (const c of sortRepairCandidates(ws, gap.shiftCode)) {
       if (!ws.releaseOneGeneratorFolga(c.uuid, gap.date)) continue;
       if (gap.shiftCode === "T8") {
         if (ws.tryAssignT8Coverage(gap.date, [c], true)) return true;
@@ -93,10 +107,12 @@ export class ScheduleRepairEngine {
   }
 
   private tryDirectFill(ws: GenerationWorkspace, day: string, code: string): boolean {
-    const candidates = sortRepairCandidates(ws);
     if (code === "T8") {
+      const dayIndex = Math.max(0, ws.days.indexOf(day));
+      const candidates = sortPaoForT8CoverageCandidates(ws, dayIndex, true);
       return ws.tryAssignT8Coverage(day, candidates, true);
     }
+    const candidates = sortRepairCandidates(ws, code);
     for (const c of candidates) {
       if (tryAssignForCoverage(ws, c.uuid, day, code)) return true;
     }

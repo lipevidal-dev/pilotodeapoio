@@ -35,7 +35,7 @@ import {
   correctMonoFolgasPedidas,
   type MonoFolgaAuditResult,
 } from "./mono-folga-pedida.js";
-import { computeTurnRateio, sortPaoByAssignedTurnBalance, sortPaoForCoverageCandidates } from "./real-schedule-turn-rateio.js";
+import { computeTurnRateio, sortPaoByAssignedTurnBalance } from "./real-schedule-turn-rateio.js";
 import { sortPaoByOperationalPriority } from "./pao-operational-priority.js";
 import {
   clearNdDayConflicts,
@@ -44,6 +44,8 @@ import {
   isNdPlacementBlocked,
 } from "./schedule-grid-source.js";
 import { isParallelOnlyPreferredPao } from "./employee-t6-t7-shift.js";
+import { sortPaoForT8CoverageCandidates } from "./t8-coverage-priority.js";
+import { isParallelShiftCode } from "./pao-rateio-shifts.js";
 import {
   evaluateTryAssignShiftDetailed,
   type TryAssignShiftDetailedResult,
@@ -67,6 +69,27 @@ import {
   maxConsecutiveWorkDays,
   workDatesFromWorkspace,
 } from "./operational-audit.js";
+import type { PreferredPhaseRemovalLog } from "./v5-preferred-phase-guard.js";
+import type { V5RepairPreferenceDilutionLog } from "./v5-repair-preference.js";
+import type { V5FillPreferenceDilutionLog } from "./v5-fill-preference.js";
+import type { V5RepairPreferenceSwapLog } from "./v5-repair-preference-swap.js";
+import type { V5LockedPreferenceRemovalLog } from "./v5-preference-lock-final.js";
+import type { V6OpportunityAttemptLog } from "./v6-opportunity-allocation.js";
+import type { PersistenceFocusSnapshot } from "./persistence-focus-trace.js";
+import type { V55MinimumOpportunityEmployeeAudit } from "./v5-minimum-opportunity-fill.js";
+import {
+  canUnassignAllAssignmentGuards,
+  type UnassignAssignmentGuardOpts,
+} from "./v5-assignment-guards.js";
+import {
+  isV5PreferredPhaseDay,
+  logV5PreferredPhaseRemoval,
+} from "./v5-preferred-phase-guard.js";
+import {
+  canAssignV5LockedPreference,
+  logV5LockedPreferenceRemoval,
+} from "./v5-preference-lock-final.js";
+import type { V56MinimumLockAuditEntry } from "./v5-minimum-lock.js";
 
 export const GENERATOR_REST_LABELS = new Set([
   "FOLGA",
@@ -127,6 +150,35 @@ export class GenerationWorkspace {
 
   /** Fonte única de rateio — min/target/max e contadores de turnos. */
   rateioContext: ScheduleRateioContext | null = null;
+
+  /** V5 — dias alocados na fase preferida (protegidos entre fases). */
+  readonly v5PreferredPhaseDays = new Set<string>();
+  readonly v5PreferredPhaseRemovalLog: PreferredPhaseRemovalLog[] = [];
+  readonly v5RepairPreferenceDilutionLog: V5RepairPreferenceDilutionLog[] = [];
+  readonly v5FillPreferenceDilutionLog: V5FillPreferenceDilutionLog[] = [];
+  readonly v5RepairPreferenceSwapLog: V5RepairPreferenceSwapLog[] = [];
+  v5PipelineStage = "";
+  /** V5 — repair prioriza pref=gap antes de diluir perfil preferido. */
+  v5RepairPreferenceStrict = false;
+
+  /** V5.4 — PAOs com 100% pref em before_repair_gaps_final; slots preferidos protegidos. */
+  readonly v5LockedPreferenceEmployees = new Set<string>();
+  readonly v5LockedPreferenceAssignments = new Set<string>();
+  readonly v5LockedPreferenceRemovalLog: V5LockedPreferenceRemovalLog[] = [];
+
+  /** V6 — tentativas de alocação por oportunidade (abaixo do mínimo). */
+  readonly v6OpportunityAttemptLog: V6OpportunityAttemptLog[] = [];
+
+  /** V5.5 — auditoria por funcionário (minimum opportunity fill). */
+  readonly v55MinimumOpportunityAudit: V55MinimumOpportunityEmployeeAudit[] = [];
+
+  /** V5.6 — guarda anti-sub-mínimo downstream (após V5.5). */
+  v56MinimumLockEnabled = false;
+  readonly v56MinimumLockAudit: V56MinimumLockAuditEntry[] = [];
+
+  /** Diagnóstico persistência — snapshots pós-enforce / pré-save. */
+  readonly persistenceFocusSnapshots: PersistenceFocusSnapshot[] = [];
+  persistenceFocusTraceEnabled = false;
 
   /** T8 isolado emergencial pós-dedup — preservado em repairIsolatedT8. */
   private readonly emergencyIsolatedT8Keys = new Set<string>();
@@ -458,13 +510,18 @@ export class GenerationWorkspace {
       return false;
     }
     if (this.isDayBlockedForShift(uuid, day)) return false;
+    if (!canAssignV5LockedPreference(this, uuid, day, code)) return false;
     const did = this.uuidToDomain.get(uuid)!;
     const emp = this.input.employees.find((e) => e.uuid === uuid)!.employee;
     const shiftCode = toShiftCode(code);
 
     if (emp.role === "PAO" && shiftCode && this.rateioContext) {
       const ctx = this.rateioContext;
+      const parallelOnly = isParallelOnlyPreferredPao(this, uuid);
+      const isParallel = isParallelShiftCode(this, code);
       const current = ctx.currentTurnCounts.get(uuid) ?? 0;
+      const effectiveTurnCount =
+        parallelOnly && isParallel ? (ctx.currentT9Counts.get(uuid) ?? 0) : current;
       const max = ctx.maxTurnCounts.get(uuid);
       const eligibility = canAssignShiftWithRateio({
         monthDays: this.days.length,
@@ -472,6 +529,7 @@ export class GenerationWorkspace {
         shift: shiftCode,
         employeeId: uuid,
         currentTurnCounts: ctx.currentTurnCounts,
+        effectiveTurnCount,
         maxTurnCounts: ctx.maxTurnCounts,
         minTurnCounts: ctx.minTurnCounts,
         targetTurnCounts: ctx.targetTurnCounts,
@@ -480,6 +538,7 @@ export class GenerationWorkspace {
         t8Counts: ctx.currentT8Counts,
         t9Counts: ctx.currentT9Counts,
         preferredShiftByEmployee: ctx.preferredShiftByEmployee,
+        seniorityWeightByEmployee: ctx.seniorityWeightByEmployee,
         strictMaxTurnCount: true,
         allowEmergencyOverflow: coverageEmergency,
       });
@@ -532,14 +591,42 @@ export class GenerationWorkspace {
     return evaluateTryAssignShiftDetailed(this, uuid, day, code, coverageEmergency);
   }
 
-  unassignShift(uuid: string, day: string, opts?: { bypassT8Protection?: boolean }): boolean {
-    if (!opts?.bypassT8Protection && this.isT8BlockProtected(uuid, day)) return false;
+  unassignShift(
+    uuid: string,
+    day: string,
+    opts?: { bypassT8Protection?: boolean } & UnassignAssignmentGuardOpts,
+  ): boolean {
     const did = this.uuidToDomain.get(uuid);
     if (!did) return false;
     const code = this.planned.get(assignmentKey(did, day));
+    if (!code) return false;
+
+    if (!opts?.bypassT8Protection && this.isT8BlockProtected(uuid, day)) return false;
+    if (!canUnassignAllAssignmentGuards(this, uuid, day, code, opts)) return false;
+
     const ok = this.planned.delete(assignmentKey(did, day));
     if (ok) {
-      if (code && this.rateioContext) {
+      if (opts?.v5LockedRemovalReason) {
+        logV5LockedPreferenceRemoval(
+          this,
+          uuid,
+          day,
+          code,
+          opts.v5LockedRemovalReason,
+          opts.v5LockedRemovalDetail ?? opts.v5LockedRemovalReason,
+        );
+      }
+      if (opts?.preferredRemovalReason) {
+        logV5PreferredPhaseRemoval(
+          this,
+          uuid,
+          day,
+          code,
+          opts.preferredRemovalReason,
+          opts.preferredRemovalDetail ?? opts.preferredRemovalReason,
+        );
+      }
+      if (this.rateioContext) {
         recordRateioUnassignment(this.rateioContext, uuid, code);
       }
       this.coverageGapsCache = null;
@@ -641,19 +728,12 @@ export class GenerationWorkspace {
   coverT8BlocksOnly(): number {
     let gaps = 0;
     this.ensureRateioContext();
-    const rateioEntries = computeTurnRateio(this).entries;
     for (let di = 0; di < this.days.length; di++) {
       const day = this.days[di];
       if (this.hasPaoCoverage(day, "T8")) continue;
-      const rotated = sortPaoForCoverageCandidates(this, di, rateioEntries).filter((c) =>
-        employeeCanStartT8Block(this, c.uuid, false),
-      );
+      const rotated = sortPaoForT8CoverageCandidates(this, di, false);
       if (!this.tryAssignT8Coverage(day, rotated)) {
-        const emergencyPool = sortPaoForCoverageCandidates(this, di, rateioEntries).filter(
-          (c) =>
-            !isParallelOnlyPreferredPao(this, c.uuid) &&
-            employeeCanStartT8Block(this, c.uuid, true),
-        );
+        const emergencyPool = sortPaoForT8CoverageCandidates(this, di, true);
         if (!this.tryAssignT8Coverage(day, emergencyPool, true)) gaps++;
       }
     }
@@ -740,7 +820,16 @@ export class GenerationWorkspace {
 
     if (this.shiftOnDay(did, d0) !== "T8" && !this.tryAssignShift(uuid, d0, "T8")) return false;
     if (this.shiftOnDay(did, d1) !== "T8" && !this.tryAssignShift(uuid, d1, "T8")) {
-      if (this.planned.get(assignmentKey(did, d0)) === "T8") this.unassignShift(uuid, d0);
+      if (this.planned.get(assignmentKey(did, d0)) === "T8") {
+        this.unassignShift(uuid, d0, {
+          bypassT8Protection: true,
+          bypassPreferredPhaseProtection: !isV5PreferredPhaseDay(this, uuid, d0),
+          preferredRemovalReason: isV5PreferredPhaseDay(this, uuid, d0)
+            ? undefined
+            : "T8_BLOCK_ROLLBACK",
+          preferredRemovalDetail: "rollback bloco T8 incompleto",
+        });
+      }
       return false;
     }
 
@@ -798,15 +887,7 @@ export class GenerationWorkspace {
   /** Cobertura T8 somente como bloco indivisível T8/T8/ND. */
   tryAssignT8Coverage(day: string, candidates?: GenerationInputEmployee[], coverageEmergency = false): boolean {
     const dayIndex = Math.max(0, this.days.indexOf(day));
-    const defaultPool = (() => {
-      this.ensureRateioContext();
-      const entries = computeTurnRateio(this).entries;
-      return sortPaoForCoverageCandidates(this, dayIndex, entries).filter(
-        (c) =>
-          !isParallelOnlyPreferredPao(this, c.uuid) &&
-          (coverageEmergency || employeeCanStartT8Block(this, c.uuid, false)),
-      );
-    })();
+    const defaultPool = sortPaoForT8CoverageCandidates(this, dayIndex, coverageEmergency);
     const pool = candidates ?? defaultPool;
 
     for (const c of pool) {
@@ -1385,16 +1466,13 @@ export class GenerationWorkspace {
   planT8CoverageRotating(): void {
     if (this.paoEmps.length === 0) return;
 
-    let blockIndex = 0;
     for (let i = 0; i < this.days.length; ) {
       const d0 = this.days[i];
-      const order = sortPaoByAssignedTurnBalance(this);
+      const order = sortPaoForT8CoverageCandidates(this, i);
 
       let placed = false;
-      for (let attempt = 0; attempt < order.length; attempt++) {
-        const c = order[(blockIndex + attempt) % order.length];
+      for (const c of order) {
         if (this.tryPlaceT8Block(c.uuid, d0)) {
-          blockIndex++;
           placed = true;
           const d1 = addDays(d0, 1);
           const nextIdx = this.days.indexOf(d1);
@@ -1403,7 +1481,6 @@ export class GenerationWorkspace {
         }
       }
       if (!placed) {
-        blockIndex++;
         i++;
       }
     }
@@ -1497,6 +1574,7 @@ export class GenerationWorkspace {
         const nextT8 = this.shiftOnDay(did, next) === "T8";
         if (!prevT8 && !nextT8) {
           if (this.isEmergencyIsolatedT8(c.uuid, day)) continue;
+          if (isV5PreferredPhaseDay(this, c.uuid, day)) continue;
           this.unassignShift(c.uuid, day);
         }
       }
@@ -2350,6 +2428,7 @@ export class GenerationWorkspace {
     const code = this.planned.get(assignmentKey(did, day));
     if (!code || code === "T8") return false;
     if (this.isT8BlockProtected(uuid, day)) return false;
+    if (!canUnassignAllAssignmentGuards(this, uuid, day, code)) return false;
 
     if (this.rateioContext) {
       recordRateioUnassignment(this.rateioContext, uuid, code);

@@ -1,12 +1,8 @@
 import { addDays } from "../rules/dates.js";
-import { sortPaoByOperationalPriority } from "./pao-operational-priority.js";
-import {
-  employeeCanStartT8Block,
-} from "./t8-block-limits.js";
+import { sortPaoForT8CoverageCandidates } from "./t8-coverage-priority.js";
 import type { GenerationInputEmployee } from "./generation-types.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import type { ValidationIssue } from "./types.js";
-import { sortPaoByRateioPriority } from "./schedule-rateio-context.js";
 import { auditT8NdFromGridSource, finalizeT8NdBlocks } from "./schedule-grid-source.js";
 
 export function sortT8Candidates(
@@ -14,17 +10,7 @@ export function sortT8Candidates(
   dayIndex: number,
   coverageEmergency = false,
 ): GenerationInputEmployee[] {
-  const ctx = ws.ensureRateioContext();
-  const base = sortPaoByOperationalPriority(ws, dayIndex).filter((c) =>
-    employeeCanStartT8Block(ws, c.uuid, coverageEmergency),
-  );
-  return sortPaoByRateioPriority(
-    ws,
-    ctx,
-    "T8",
-    base.map((c) => ({ uuid: c.uuid, seniority: c.employee.seniority })),
-    { allowEmergency: coverageEmergency },
-  ).map((c) => base.find((b) => b.uuid === c.uuid)!);
+  return sortPaoForT8CoverageCandidates(ws, dayIndex, coverageEmergency);
 }
 
 export interface StructuralT8Audit {
@@ -81,24 +67,14 @@ export function auditStructuralT8(ws: GenerationWorkspace): StructuralT8Audit {
  */
 export function allocateT8BlocksStrict(ws: GenerationWorkspace): T8AllocationResult {
   let blocksBefore = countT8Blocks(ws);
-  let blockIndex = 0;
 
   for (let di = 0; di < ws.days.length; di++) {
     const day = ws.days[di]!;
     if (ws.hasPaoCoverage(day, "T8")) continue;
 
-    const rotated = sortT8Candidates(ws, di);
-    let placed = false;
-    for (let attempt = 0; attempt < rotated.length; attempt++) {
-      const c = rotated[(blockIndex + attempt) % rotated.length]!;
-      if (ws.tryAssignT8Coverage(day, [c])) {
-        placed = true;
-        blockIndex++;
-        break;
-      }
-    }
-    if (!placed) {
-      ws.tryAssignT8Coverage(day, rotated);
+    const candidates = sortT8Candidates(ws, di);
+    if (!ws.tryAssignT8Coverage(day, candidates)) {
+      ws.tryAssignT8Coverage(day, sortT8Candidates(ws, di, true), true);
     }
   }
 

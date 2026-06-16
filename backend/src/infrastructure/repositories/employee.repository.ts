@@ -26,7 +26,11 @@ const employeeDetailInclude = {
     include: { shift: true },
     orderBy: { shift: { code: "asc" as const } },
   },
-} as const;
+  specificShiftRequests: {
+    include: { shift: true },
+    orderBy: [{ year: "asc" as const }, { month: "asc" as const }, { dayOfMonth: "asc" as const }],
+  },
+};
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -56,8 +60,24 @@ export class EmployeeRepository {
     noFlightDates?: string[];
     restrictedShiftIds?: string[];
     preferredShiftIds?: string[];
+    specificShiftRequests?: Array<{
+      shiftId: string;
+      year?: number | null;
+      month?: number | null;
+      dayOfMonth?: number | null;
+      weekday?: number | null;
+    }>;
   }) {
-    const { birthDate, seniorityNumber, type, noFlightDates, restrictedShiftIds, preferredShiftIds, ...rest } = data;
+    const {
+      birthDate,
+      seniorityNumber,
+      type,
+      noFlightDates,
+      restrictedShiftIds,
+      preferredShiftIds,
+      specificShiftRequests,
+      ...rest
+    } = data;
 
     return prisma.$transaction(async (tx) => {
       const assigned = await this.assignSeniorityOnCreate(tx, type, seniorityNumber, async (position) =>
@@ -71,7 +91,14 @@ export class EmployeeRepository {
           include: employeeInclude,
         }),
       );
-      await this.syncRestrictions(tx, assigned.id, noFlightDates, restrictedShiftIds, preferredShiftIds);
+      await this.syncRestrictions(
+        tx,
+        assigned.id,
+        noFlightDates,
+        restrictedShiftIds,
+        preferredShiftIds,
+        specificShiftRequests,
+      );
       return tx.employee.findUniqueOrThrow({
         where: { id: assigned.id },
         include: employeeDetailInclude,
@@ -91,12 +118,28 @@ export class EmployeeRepository {
       noFlightDates?: string[];
       restrictedShiftIds?: string[];
       preferredShiftIds?: string[];
+      specificShiftRequests?: Array<{
+        shiftId: string;
+        year?: number | null;
+        month?: number | null;
+        dayOfMonth?: number | null;
+        weekday?: number | null;
+      }>;
     },
   ) {
     const current = await prisma.employee.findUnique({ where: { id } });
     if (!current) throw new Error("NOT_FOUND");
 
-    const { birthDate, seniorityNumber, type, noFlightDates, restrictedShiftIds, preferredShiftIds, ...rest } = data;
+    const {
+      birthDate,
+      seniorityNumber,
+      type,
+      noFlightDates,
+      restrictedShiftIds,
+      preferredShiftIds,
+      specificShiftRequests,
+      ...rest
+    } = data;
     const nextType = type ?? current.type;
 
     return prisma.$transaction(async (tx) => {
@@ -130,8 +173,20 @@ export class EmployeeRepository {
         await tx.employee.update({ where: { id }, data: patch });
       }
 
-      if (noFlightDates !== undefined || restrictedShiftIds !== undefined || preferredShiftIds !== undefined) {
-        await this.syncRestrictions(tx, id, noFlightDates, restrictedShiftIds, preferredShiftIds);
+      if (
+        noFlightDates !== undefined ||
+        restrictedShiftIds !== undefined ||
+        preferredShiftIds !== undefined ||
+        specificShiftRequests !== undefined
+      ) {
+        await this.syncRestrictions(
+          tx,
+          id,
+          noFlightDates,
+          restrictedShiftIds,
+          preferredShiftIds,
+          specificShiftRequests,
+        );
       }
 
       return tx.employee.findUniqueOrThrow({ where: { id }, include: employeeDetailInclude });
@@ -200,6 +255,13 @@ export class EmployeeRepository {
     noFlightDates?: string[],
     restrictedShiftIds?: string[],
     preferredShiftIds?: string[],
+    specificShiftRequests?: Array<{
+      shiftId: string;
+      year?: number | null;
+      month?: number | null;
+      dayOfMonth?: number | null;
+      weekday?: number | null;
+    }>,
   ): Promise<void> {
     if (noFlightDates !== undefined) {
       const dates = dedupeIsoDates(noFlightDates);
@@ -239,6 +301,31 @@ export class EmployeeRepository {
         const rows = shiftIds.filter((sid) => valid.has(sid)).map((shiftId) => ({ employeeId, shiftId }));
         if (rows.length > 0) {
           await tx.employeePreferredShift.createMany({ data: rows });
+        }
+      }
+    }
+
+    if (specificShiftRequests !== undefined) {
+      await tx.employeeSpecificShiftRequest.deleteMany({ where: { employeeId } });
+      if (specificShiftRequests.length > 0) {
+        const shiftIds = [...new Set(specificShiftRequests.map((r) => r.shiftId))];
+        const existing = await tx.shift.findMany({
+          where: { id: { in: shiftIds } },
+          select: { id: true },
+        });
+        const valid = new Set(existing.map((s) => s.id));
+        const rows = specificShiftRequests
+          .filter((r) => valid.has(r.shiftId))
+          .map((r) => ({
+            employeeId,
+            shiftId: r.shiftId,
+            year: r.year ?? null,
+            month: r.month ?? null,
+            dayOfMonth: r.dayOfMonth ?? null,
+            weekday: r.weekday ?? null,
+          }));
+        if (rows.length > 0) {
+          await tx.employeeSpecificShiftRequest.createMany({ data: rows });
         }
       }
     }

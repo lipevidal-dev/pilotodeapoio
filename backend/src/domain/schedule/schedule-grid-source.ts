@@ -3,6 +3,7 @@ import { PROTECTED_PREALLOC_TYPES, VACATION_TYPES } from "../rules/constants.js"
 import { normalizeOperationalLabel } from "./operational-labels.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import type { ValidationIssue } from "./types.js";
+import { isV5PreferredPhaseDay } from "./v5-preferred-phase-guard.js";
 
 /** Labels que impedem materialização de ND gerado pelo motor. */
 const ND_HARD_BLOCK_LABELS = new Set([
@@ -119,7 +120,13 @@ export function clearGeneratorShiftForNdDay(
   if (isNdOverrideProtected(ws, uuid, day)) return false;
   const code = ws.toAssignments().find((a) => a.employeeUuid === uuid && a.date === day)?.shiftCode;
   if (!code) return true;
-  return ws.unassignShift(uuid, day, { bypassT8Protection: true });
+  if (isV5PreferredPhaseDay(ws, uuid, day)) return false;
+  return ws.unassignShift(uuid, day, {
+    bypassT8Protection: true,
+    bypassPreferredPhaseProtection: true,
+    preferredRemovalReason: "ND_DAY_CONFLICT",
+    preferredRemovalDetail: "turno conflitante no dia ND pós T8/T8",
+  });
 }
 
 export function buildScheduleGridLabels(ws: GenerationWorkspace): ScheduleGridLabel[] {
@@ -153,6 +160,18 @@ export interface T8NdAuditResult {
 
 function shiftCodeOnDay(ws: GenerationWorkspace, uuid: string, day: string): string | undefined {
   return ws.toAssignments().find((a) => a.employeeUuid === uuid && a.date === day)?.shiftCode;
+}
+
+/** Dia reservado a ND após par T8/T8 do mesmo funcionário — não recebe T8 isolado. */
+export function isNdDayAfterOwnT8Pair(
+  ws: GenerationWorkspace,
+  uuid: string,
+  day: string,
+): boolean {
+  const d2 = addDays(day, -1);
+  const d1 = addDays(day, -2);
+  if (!ws.days.includes(d1) || !ws.days.includes(d2)) return false;
+  return shiftCodeOnDay(ws, uuid, d1) === "T8" && shiftCodeOnDay(ws, uuid, d2) === "T8";
 }
 
 /**
@@ -241,6 +260,14 @@ export function auditT8NdFromGridSource(ws: GenerationWorkspace): T8NdAuditResul
 /** Garante ND após todos os passos do motor (dedup, optimizer, paralelo). */
 export function finalizeT8NdBlocks(ws: GenerationWorkspace): void {
   ws.repairIsolatedT8();
+  ws.reconcileNdAfterParallelShifts();
+  ws.ensureNdForT8Pairs();
+  ensureCrossMonthNdForT8Pairs(ws);
+  ws.cleanupOrphanNd();
+}
+
+/** V5 pré-repair — preserva T8 mono da fase preferida (não chama repairIsolatedT8). */
+export function finalizeT8NdBlocksForV5PreRepair(ws: GenerationWorkspace): void {
   ws.reconcileNdAfterParallelShifts();
   ws.ensureNdForT8Pairs();
   ensureCrossMonthNdForT8Pairs(ws);

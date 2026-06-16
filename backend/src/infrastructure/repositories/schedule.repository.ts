@@ -213,6 +213,24 @@ export class ScheduleRepository {
     }));
   }
 
+  /** Turno em dias específicos — cadastro Funcionários. */
+  async listSpecificShiftDayPreferencesForMonth(
+    _year: number,
+    _month: number,
+  ): Promise<import("../../domain/schedule/generation-types.js").SpecificShiftDayPreferenceRow[]> {
+    const rows = await prisma.employeeSpecificShiftRequest.findMany({
+      include: { shift: { select: { code: true } } },
+    });
+    return rows.map((r) => ({
+      employeeUuid: r.employeeId,
+      shiftCode: r.shift.code.toUpperCase(),
+      year: r.year,
+      month: r.month,
+      dayOfMonth: r.dayOfMonth,
+      weekday: r.weekday,
+    }));
+  }
+
   /** Dias do mês em que funcionários não devem receber voo. */
   async listNoFlightDatesForMonth(year: number, month: number) {
     const start = new Date(Date.UTC(year, month - 1, 1));

@@ -25,6 +25,8 @@ import {
   type V4TransferAuditContext,
   type V4TransferPhaseAudit,
 } from "./v4-transfer-audit.js";
+import { capturePersistenceFocus } from "./persistence-focus-trace.js";
+import { rejectTransferIfWouldDropDonorBelowMin } from "./v5-minimum-lock.js";
 
 const TRANSFERABLE_SHIFTS: ShiftCode[] = ["T6", "T7", "T8"];
 const MIN_PHASE_SHIFTS: ShiftCode[] = ["T6", "T7"];
@@ -101,6 +103,54 @@ function countBelowTarget(ctx: ScheduleRateioContext, ws: GenerationWorkspace): 
     if (turnCount(ctx, c.uuid) < target) n++;
   }
   return n;
+}
+
+/** Soma déficits proporcionais — usado para detectar loop sem progresso. */
+function totalMinDeficit(ctx: ScheduleRateioContext, ws: GenerationWorkspace): number {
+  let sum = 0;
+  for (const c of ws.paoEmps) {
+    const min = ctx.minTurnCounts.get(c.uuid) ?? 0;
+    const cur = turnCount(ctx, c.uuid);
+    if (cur < min) sum += min - cur;
+  }
+  return sum;
+}
+
+function totalTargetDeficit(ctx: ScheduleRateioContext, ws: GenerationWorkspace): number {
+  let sum = 0;
+  for (const c of ws.paoEmps) {
+    const target = ctx.targetTurnCounts.get(c.uuid) ?? 0;
+    const cur = turnCount(ctx, c.uuid);
+    if (cur < target) sum += target - cur;
+  }
+  return sum;
+}
+
+function totalDeficitForPhase(
+  ctx: ScheduleRateioContext,
+  ws: GenerationWorkspace,
+  phase: TransferPhase,
+): number {
+  return phase === "min" ? totalMinDeficit(ctx, ws) : totalTargetDeficit(ctx, ws);
+}
+
+function maxPassesForPhase(
+  ctx: ScheduleRateioContext,
+  ws: GenerationWorkspace,
+  phase: TransferPhase,
+): number {
+  const deficit = totalDeficitForPhase(ctx, ws, phase);
+  const ceiling = Math.ceil(deficit) + ws.paoEmps.length;
+  return Math.min(MAX_TRANSFER_PASSES, Math.max(1, ceiling));
+}
+
+function transferEdgeKey(
+  donorUuid: string,
+  receiverUuid: string,
+  day: string,
+  shift: ShiftCode,
+): string {
+  return `${donorUuid}|${receiverUuid}|${day}|${shift}`;
 }
 
 function listBelowMinimum(ctx: ScheduleRateioContext, ws: GenerationWorkspace): RankedEmployee[] {
@@ -407,6 +457,11 @@ function trySameDayTransfer(
 
   const receiverBefore = turnCount(ctx, receiverUuid);
 
+  const minLockReject = rejectTransferIfWouldDropDonorBelowMin(ws, donorUuid, day, shift);
+  if (minLockReject) {
+    return reject(minLockReject as TransferRejectionCode);
+  }
+
   const bypassT8 = shift === "T8";
   if (!ws.unassignShift(donorUuid, day, { bypassT8Protection: bypassT8 })) {
     return reject("UNASSIGN_FAILED");
@@ -496,8 +551,11 @@ function runTransferPasses(
   const phase = options?.phase ?? "min";
   const collector = options?.audit;
   let transfers = 0;
+  const acceptedEdges = new Set<string>();
+  let prevDeficit = totalDeficitForPhase(syncCtx(ws), ws, phase);
+  const maxPasses = maxPassesForPhase(syncCtx(ws), ws, phase);
 
-  for (let pass = 0; pass < MAX_TRANSFER_PASSES; pass++) {
+  for (let pass = 0; pass < maxPasses; pass++) {
     if (stopWhenEmpty()) break;
 
     const ctx = syncCtx(ws);
@@ -509,6 +567,7 @@ function runTransferPasses(
 
     let moved = false;
     let anyDonor = false;
+    let stalledByChurn = false;
 
     for (const tier of donorTiersForPhase(phase)) {
       const donorList = listDonorsForTier(ctx, ws, tier);
@@ -531,6 +590,10 @@ function runTransferPasses(
             : undefined;
 
           for (const { day, shift } of listDonorAssignments(ws, donor.uuid, phase)) {
+            const reverseKey = transferEdgeKey(receiver.uuid, donor.uuid, day, shift);
+            if (acceptedEdges.has(reverseKey)) continue;
+
+            const passSnapshot = captureOptimizationSnapshot(ws);
             if (
               !trySameDayTransfer(
                 ws,
@@ -544,16 +607,32 @@ function runTransferPasses(
             ) {
               continue;
             }
+
+            const newDeficit = totalDeficitForPhase(syncCtx(ws), ws, phase);
+            if (newDeficit >= prevDeficit - 1e-9) {
+              restoreOptimizationSnapshot(ws, passSnapshot);
+              syncCtx(ws);
+              stalledByChurn = true;
+              break;
+            }
+
+            acceptedEdges.add(transferEdgeKey(donor.uuid, receiver.uuid, day, shift));
+            prevDeficit = newDeficit;
             transfers++;
             moved = true;
             syncCtx(ws);
             break;
           }
-          if (moved) break;
+          if (moved || stalledByChurn) break;
         }
-        if (moved) break;
+        if (moved || stalledByChurn) break;
       }
-      if (moved) break;
+      if (moved || stalledByChurn) break;
+    }
+
+    if (stalledByChurn) {
+      collector?.recordPassBothFoundAllRejected();
+      break;
     }
 
     if (!moved) {
@@ -577,15 +656,23 @@ function runMinimumTransferLoop(
     { ...options, phase: "min" },
   );
 
-  while (transfers < MAX_TRANSFER_PASSES && countBelowMin(syncCtx(ws), ws) > 0) {
+  const maxExtra = maxPassesForPhase(syncCtx(ws), ws, "min");
+
+  while (transfers < maxExtra && countBelowMin(syncCtx(ws), ws) > 0) {
+    const beforeDeficit = totalMinDeficit(syncCtx(ws), ws);
     if (!applyOneValidMinimumTransfer(ws)) break;
+    const afterDeficit = totalMinDeficit(syncCtx(ws), ws);
+    if (afterDeficit >= beforeDeficit - 1e-9) break;
     transfers++;
   }
 
-  while (transfers < MAX_TRANSFER_PASSES) {
+  while (transfers < maxExtra) {
     const pending = validateRateioMinimums(ws).issues.some((i) => i.hasValidTransfer);
     if (!pending) break;
+    const beforeDeficit = totalMinDeficit(syncCtx(ws), ws);
     if (!applyOneValidMinimumTransfer(ws)) break;
+    const afterDeficit = totalMinDeficit(syncCtx(ws), ws);
+    if (afterDeficit >= beforeDeficit - 1e-9) break;
     transfers++;
   }
 
@@ -671,6 +758,16 @@ export function enforceProportionalTurnTargets(
   const target = enforceTargetTurnTargets(ws, { audit: options?.audit, phase: "target" });
   const minimumAfterTarget = enforceMinimumTurnTargets(ws, { phase: "min" });
   const rateioMinimums = validateRateioMinimums(ws);
+
+  if (ws.persistenceFocusTraceEnabled) {
+    ws.persistenceFocusSnapshots.push(
+      capturePersistenceFocus(
+        ws,
+        `depois enforceProportionalTurnTargets [${ws.v5PipelineStage || "?"}]`,
+      ),
+    );
+  }
+
   return { minimum, target, minimumAfterTarget, rateioMinimums };
 }
 
@@ -801,6 +898,15 @@ export function restoreInputLockedPreallocations(ws: GenerationWorkspace): void 
       endTime: times?.endTime,
     });
   }
+  const deduped: typeof ws.allocations = [];
+  const seen = new Set<string>();
+  for (const row of ws.allocations) {
+    const key = `${row.employeeUuid}|${row.date}|${normalizeOperationalLabel(row.label).toUpperCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(row);
+  }
+  ws.allocations.splice(0, ws.allocations.length, ...deduped);
   ws.clearCoverageGapsCache();
 }
 
@@ -832,9 +938,9 @@ function applyCleanMinimumEnforceMerge(
 
   for (let i = 0; i < 64; i++) {
     if (!validateRateioMinimums(clean).issues.some((x) => x.hasValidTransfer)) break;
-    const report = enforceMinimumTurnTargets(clean);
+    enforceProportionalTurnTargets(clean);
     clean.syncRateioContext();
-    if (report.transfers === 0) break;
+    if (countBelowMin(clean.rateioContext!, clean) === 0) break;
   }
 
   ws.allocations.splice(0, ws.allocations.length, ...templateAllocations.map((a) => ({ ...a })));
@@ -869,6 +975,7 @@ function applyCleanMinimumEnforceMerge(
       }
     }
   }
+  ws.clearCoverageGapsCache();
 }
 
 /**
@@ -890,6 +997,7 @@ export function finalizeMinimumTurnTargetsForSave(
 
   restoreInputLockedPreallocations(ws);
   ws.syncRateioContext();
+  ws.clearCoverageGapsCache();
   return ws;
 }
 

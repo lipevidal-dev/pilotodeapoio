@@ -43,6 +43,10 @@ export interface GenerationInput {
   preferredShifts?: Map<number, Set<string>>;
   /** Dias em que o funcionário não deve receber voo (não bloqueia turno). */
   noFlightDates?: Array<{ employeeUuid: string; date: string }>;
+  /** Preferências de turno em dias específicos (cadastro admin). */
+  specificShiftDayPreferences?: SpecificShiftDayPreferenceRow[];
+  /** Expandido para o mês — preenchido pelo mapper. */
+  specificShiftRequests?: SpecificShiftRequest[];
 }
 
 export interface ShiftRestrictionRow {
@@ -52,6 +56,23 @@ export interface ShiftRestrictionRow {
 
 export interface PreferredShiftRow {
   employeeUuid: string;
+  shiftCode: string;
+}
+
+/** Preferência forte: turno em dia do mês ou dia da semana. */
+export interface SpecificShiftDayPreferenceRow {
+  employeeUuid: string;
+  shiftCode: string;
+  year?: number | null;
+  month?: number | null;
+  dayOfMonth?: number | null;
+  weekday?: number | null;
+}
+
+/** Alocação concreta expandida para o mês alvo. */
+export interface SpecificShiftRequest {
+  employeeUuid: string;
+  date: string;
   shiftCode: string;
 }
 export interface GeneratedAssignment {

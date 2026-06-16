@@ -17,6 +17,13 @@ import { countWorkdayBreakdown } from "./real-schedule-workdays.js";
 import { countRateioTurns } from "./pao-rateio-shifts.js";
 import { buildScheduleRateioContext } from "./schedule-rateio-context.js";
 import { getPaoPriorityTier } from "./pao-operational-priority.js";
+import type { ShiftCode } from "./assignment-eligibility.js";
+import {
+  preferenceScoreForShift,
+  targetTurnDeficit,
+} from "./preference-scoring.js";
+import { sortCandidatesForRestrictedShiftBreak } from "./shift-restriction-sorting.js";
+import { sortPaoByPoolSeniority } from "./pao-pool-seniority.js";
 
 export interface TurnRateioEntry {
   employeeUuid: string;
@@ -112,7 +119,7 @@ export function computeTurnRateio(ws: GenerationWorkspace): TurnRateioResult {
 
   const ctx = ws.rateioContext ?? buildScheduleRateioContext(ws);
   syncRateioCountsFromWorkspace(ws, ctx);
-  const sorted = [...ws.paoEmps].sort((a, b) => a.employee.seniority - b.employee.seniority);
+  const sorted = sortPaoByPoolSeniority(ws);
   const mainPoolUuids = sorted
     .filter((e) => ctx.mainPoolEmployeeIds.has(e.uuid))
     .map((e) => e.uuid);
@@ -206,11 +213,12 @@ export function sortPaoByAssignedTurnBalance(
   });
 }
 
-/** Ordena candidatos para cobertura — prioriza abaixo do mínimo/meta, sem excluir PAOs no max. */
+/** Ordena candidatos para cobertura — prioriza abaixo do mínimo/meta, preferência×senioridade. */
 export function sortPaoForCoverageCandidates(
   ws: GenerationWorkspace,
   _dayIndex: number,
   entries?: TurnRateioEntry[],
+  shift?: ShiftCode,
 ): GenerationInputEmployee[] {
   const ctx = ws.rateioContext;
   const rateioEntries = entries ?? computeTurnRateio(ws).entries;
@@ -231,7 +239,7 @@ export function sortPaoForCoverageCandidates(
     return 3;
   };
 
-  return [...ws.paoEmps].sort((a, b) => {
+  const sorted = [...ws.paoEmps].sort((a, b) => {
     const tierA = coverageTier(a.uuid);
     const tierB = coverageTier(b.uuid);
     if (tierA !== tierB) return tierA - tierB;
@@ -260,12 +268,25 @@ export function sortPaoForCoverageCandidates(
     const devB = byUuid.get(b.uuid)?.turnDeviation ?? 0;
     if (devA !== devB) return devA - devB;
 
+    if (ctx) {
+      const targetDefA = targetTurnDeficit(ctx, a.uuid);
+      const targetDefB = targetTurnDeficit(ctx, b.uuid);
+      if (targetDefA !== targetDefB) return targetDefB - targetDefA;
+
+      if (shift) {
+        const prefA = preferenceScoreForShift(ws, ctx, a.uuid, shift);
+        const prefB = preferenceScoreForShift(ws, ctx, b.uuid, shift);
+        if (prefA !== prefB) return prefB - prefA;
+      }
+    }
+
     const curA = ctx ? currentTurnCount(ctx, a.uuid) : 0;
     const curB = ctx ? currentTurnCount(ctx, b.uuid) : 0;
     if (curA !== curB) return curA - curB;
 
-    return a.employee.seniority - b.employee.seniority;
+    return a.employee.seniority - b.employee.seniority || a.uuid.localeCompare(b.uuid);
   });
+  return shift ? sortCandidatesForRestrictedShiftBreak(ws, sorted, shift) : sorted;
 }
 
 /** @deprecated Prefer sortPaoForCoverageCandidates — não filtra PAOs no max. */

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ScheduleRepairEngine } from "../domain/schedule/schedule-repair-engine.js";
 import { ScheduleGenerationEngine } from "../domain/schedule/schedule-generation-engine.js";
-import { RealScheduleEngine } from "../domain/schedule/real-schedule-engine.js";
 import { GenerationWorkspace } from "../domain/schedule/generation-workspace.js";
 import { realisticGenerationInput } from "./realistic-fixtures.js";
 import { minimalPaoInput, paoUuid } from "./schedule-slices/slice-helpers.js";
@@ -39,7 +38,7 @@ describe("reparo de cobertura — coverageEmergency", () => {
   });
 
   it("cenário realista junho/2026 zera furo de T7 no dia 21", () => {
-    const result = new ScheduleGenerationEngine(new RealScheduleEngine()).generate(
+    const result = new ScheduleGenerationEngine().generate(
       realisticGenerationInput(),
     );
     expect(result.summary.coverageMissingCount).toBe(0);

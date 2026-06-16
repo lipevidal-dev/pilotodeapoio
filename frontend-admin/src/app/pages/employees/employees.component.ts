@@ -48,7 +48,7 @@ import { mergeDates } from '../../utils/date-range-utils';
 
 import { formatSeniorityLabel, sortEmployeesBySeniority } from '../../utils/employee-sort.util';
 
-import type { CreateEmployeePayload, Employee, JobRole, Shift } from '../../models/api.models';
+import type { CreateEmployeePayload, Employee, JobRole, Shift, SpecificShiftRequestPayload } from '../../models/api.models';
 
 
 
@@ -155,6 +155,18 @@ export class EmployeesComponent implements OnInit {
   formRestrictedShiftIds: string[] = [];
 
   formPreferredShiftIds: string[] = [];
+
+  formSpecificShiftRequests: SpecificShiftRequestPayload[] = [];
+
+  readonly weekdayOptions = [
+    { label: 'Domingo', value: 0 },
+    { label: 'Segunda', value: 1 },
+    { label: 'Terça', value: 2 },
+    { label: 'Quarta', value: 3 },
+    { label: 'Quinta', value: 4 },
+    { label: 'Sexta', value: 5 },
+    { label: 'Sábado', value: 6 },
+  ];
 
   calendarViewYear = new Date().getFullYear();
 
@@ -392,6 +404,8 @@ export class EmployeesComponent implements OnInit {
 
     this.formPreferredShiftIds = [];
 
+    this.formSpecificShiftRequests = [];
+
     this.dialogVisible.set(true);
 
   }
@@ -420,6 +434,8 @@ export class EmployeesComponent implements OnInit {
 
     this.formPreferredShiftIds = [];
 
+    this.formSpecificShiftRequests = [];
+
     this.dialogVisible.set(true);
 
     this.loadingDetail.set(true);
@@ -433,6 +449,14 @@ export class EmployeesComponent implements OnInit {
         this.formRestrictedShiftIds = [...(detail.restrictedShiftIds ?? [])];
 
         this.formPreferredShiftIds = [...(detail.preferredShiftIds ?? [])];
+
+        this.formSpecificShiftRequests = (detail.specificShiftRequests ?? []).map((r) => ({
+          shiftId: r.shiftId,
+          year: r.year,
+          month: r.month,
+          dayOfMonth: r.dayOfMonth,
+          weekday: r.weekday,
+        }));
 
         this.loadingDetail.set(false);
 
@@ -512,6 +536,33 @@ export class EmployeesComponent implements OnInit {
 
     return this.formPreferredShiftIds.some((id) => restricted.has(id));
 
+  }
+
+  addSpecificShiftRow(): void {
+    const firstShift = this.shiftOptions()[0]?.value;
+    if (!firstShift) return;
+    this.formSpecificShiftRequests = [
+      ...this.formSpecificShiftRequests,
+      { shiftId: firstShift, dayOfMonth: 1, weekday: null },
+    ];
+  }
+
+  removeSpecificShiftRow(index: number): void {
+    this.formSpecificShiftRequests = this.formSpecificShiftRequests.filter((_, i) => i !== index);
+  }
+
+  setSpecificShiftMode(index: number, mode: 'day' | 'weekday'): void {
+    const row = { ...this.formSpecificShiftRequests[index] };
+    if (mode === 'day') {
+      row.dayOfMonth = row.dayOfMonth ?? 1;
+      row.weekday = null;
+    } else {
+      row.weekday = row.weekday ?? 1;
+      row.dayOfMonth = null;
+    }
+    this.formSpecificShiftRequests = this.formSpecificShiftRequests.map((r, i) =>
+      i === index ? row : r,
+    );
   }
 
 
@@ -600,6 +651,8 @@ export class EmployeesComponent implements OnInit {
 
     const preferredShiftIds = [...new Set(this.formPreferredShiftIds)];
 
+    const specificShiftRequests = this.formSpecificShiftRequests.filter((r) => r.shiftId);
+
 
 
     if (this.dialogMode === 'create') {
@@ -621,6 +674,8 @@ export class EmployeesComponent implements OnInit {
         restrictedShiftIds,
 
         preferredShiftIds,
+
+        specificShiftRequests,
 
       };
 
@@ -657,6 +712,8 @@ export class EmployeesComponent implements OnInit {
         restrictedShiftIds,
 
         preferredShiftIds,
+
+        specificShiftRequests,
 
       })
 

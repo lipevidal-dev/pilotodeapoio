@@ -56,6 +56,14 @@ type RestrictionFields = {
 
   preferredShiftIds?: string[];
 
+  specificShiftRequests?: Array<{
+    shiftId: string;
+    year?: number | null;
+    month?: number | null;
+    dayOfMonth?: number | null;
+    weekday?: number | null;
+  }>;
+
 };
 
 
@@ -256,6 +264,8 @@ export class EmployeeUseCase {
 
       preferredShiftIds: data.preferredShiftIds,
 
+      specificShiftRequests: data.specificShiftRequests,
+
     });
 
     return employeeToApi(row);
@@ -322,6 +332,8 @@ export class EmployeeUseCase {
     if (data.restrictedShiftIds !== undefined) patch.restrictedShiftIds = data.restrictedShiftIds;
 
     if (data.preferredShiftIds !== undefined) patch.preferredShiftIds = data.preferredShiftIds;
+
+    if (data.specificShiftRequests !== undefined) patch.specificShiftRequests = data.specificShiftRequests;
 
     if (resolved) {
 

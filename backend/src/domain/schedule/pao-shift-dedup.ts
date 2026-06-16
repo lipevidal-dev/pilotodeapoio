@@ -1,7 +1,7 @@
 import { PAO_COVERAGE_SHIFTS } from "../rules/constants.js";
 import { listParallelShiftCodes } from "../shift/coverage-type.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
-
+import { sortDedupRemovalCandidates } from "./v5-minimum-lock.js";
 function shiftCodesToDedupe(ws: GenerationWorkspace): string[] {
   const parallel = listParallelShiftCodes(ws.input.shifts);
   return [...PAO_COVERAGE_SHIFTS, ...parallel.filter((c) => !PAO_COVERAGE_SHIFTS.includes(c as typeof PAO_COVERAGE_SHIFTS[number]))];
@@ -26,13 +26,12 @@ export function deduplicatePaoShiftCoverage(ws: GenerationWorkspace): number {
         }
       }
       if (onShift.length <= 1) continue;
-      onShift.sort(
-        (a, b) => a.seniority - b.seniority || a.name.localeCompare(b.name, "pt-BR"),
-      );
-      for (let i = 1; i < onShift.length; i++) {
-        if (ws.unassignShift(onShift[i]!.uuid, day, { bypassT8Protection: true })) {
+      const ctx = ws.ensureRateioContext();
+      const sorted = sortDedupRemovalCandidates(ws, ctx, onShift);
+      for (let i = 1; i < sorted.length; i++) {
+        if (ws.unassignShift(sorted[i]!.uuid, day, { bypassT8Protection: true })) {
           removed++;
-          byCell.delete(`${onShift[i]!.uuid}|${day}`);
+          byCell.delete(`${sorted[i]!.uuid}|${day}`);
         }
       }
     }

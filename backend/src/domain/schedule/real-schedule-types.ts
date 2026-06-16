@@ -7,9 +7,18 @@ import type { RealStructuralMetrics } from "./real-schedule-audit.js";
 import type { VacationFortnightBelowPattern } from "./real-schedule-vacation-materialize.js";
 import type { V3BlockMaterializeAudit } from "./v3-block-materialize-audit.js";
 
+export const MOTOR_VERSION_V4 = "REAL_V4";
+export const MOTOR_VERSION_V5 = "REAL_V5";
+export const MOTOR_VERSION_V6 = "REAL_V6";
+/** @deprecated Use MOTOR_VERSION_V4 — alias legado dos testes V4. */
 export const MOTOR_VERSION_ID = "REAL_V1";
-export const ENGINE_PATH = "GenerateScheduleUseCase -> RealScheduleEngine";
+export const ENGINE_PATH_V4 = "GenerateScheduleUseCase -> RealScheduleEngineV4";
+export const ENGINE_PATH_V5 = "GenerateScheduleUseCase -> RealScheduleEngineV5";
+export const ENGINE_PATH_V6 = "GenerateScheduleUseCase -> RealScheduleEngineV6";
+export const ENGINE_PATH = ENGINE_PATH_V6;
 export const MOTOR_REAL_V1_LABEL = "Motor real v1 — demanda/metas/blocos/voos";
+export const MOTOR_V5_LABEL = "Motor V5 — cota mensal, senioridade e preferências";
+export const MOTOR_V6_LABEL = "Motor V6 — oportunidades antes do repair, pipeline enxuto";
 export const MONTHLY_WORKDAY_TARGET = 20;
 export const MIN_MONTHLY_FOLGAS = 10;
 export const FLEXIBLE_SHIFT_SHORTFALL = 3;

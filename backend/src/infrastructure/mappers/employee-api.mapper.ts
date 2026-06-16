@@ -24,6 +24,16 @@ export interface PreferredShiftSummary {
   name: string;
 }
 
+export interface SpecificShiftRequestSummary {
+  shiftId: string;
+  shiftCode: string;
+  shiftName: string;
+  year: number | null;
+  month: number | null;
+  dayOfMonth: number | null;
+  weekday: number | null;
+}
+
 export interface EmployeeApiRecord {
 
   id: string;
@@ -58,6 +68,8 @@ export interface EmployeeApiRecord {
 
   preferredShifts: PreferredShiftSummary[];
 
+  specificShiftRequests: SpecificShiftRequestSummary[];
+
   createdAt: string;
 
   updatedAt: string;
@@ -72,6 +84,10 @@ type ShiftRestrictionWithShift = EmployeeShiftRestriction & { shift: Shift };
 
 type PreferredShiftWithShift = EmployeePreferredShift & { shift: Shift };
 
+type SpecificShiftRequestWithShift = import("@prisma/client").EmployeeSpecificShiftRequest & {
+  shift: Shift;
+};
+
 type EmployeeWithRole = Employee & {
 
   role?: Role | null;
@@ -81,6 +97,8 @@ type EmployeeWithRole = Employee & {
   shiftRestrictions?: ShiftRestrictionWithShift[];
 
   preferredShifts?: PreferredShiftWithShift[];
+
+  specificShiftRequests?: SpecificShiftRequestWithShift[];
 
 };
 
@@ -100,6 +118,7 @@ export function employeeToApi(row: EmployeeWithRole): EmployeeApiRecord {
 
   const shiftRows = row.shiftRestrictions ?? [];
   const preferredRows = row.preferredShifts ?? [];
+  const specificRows = row.specificShiftRequests ?? [];
 
   return {
 
@@ -147,6 +166,16 @@ export function employeeToApi(row: EmployeeWithRole): EmployeeApiRecord {
 
       name: r.shift.name,
 
+    })),
+
+    specificShiftRequests: specificRows.map((r) => ({
+      shiftId: r.shiftId,
+      shiftCode: r.shift.code,
+      shiftName: r.shift.name,
+      year: r.year,
+      month: r.month,
+      dayOfMonth: r.dayOfMonth,
+      weekday: r.weekday,
     })),
 
     createdAt: row.createdAt.toISOString(),

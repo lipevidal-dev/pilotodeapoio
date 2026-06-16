@@ -17,11 +17,10 @@ export function coverResidualGaps(ws: GenerationWorkspace): ResidualCoverageResu
 
   for (let di = 0; di < ws.days.length; di++) {
     const day = ws.days[di]!;
-    const candidates = sortPaoForCoverageCandidates(ws, di, rateioEntries);
-
     for (const code of ["T6", "T7"] as const) {
       if (ws.hasPaoCoverage(day, code)) continue;
 
+      const candidates = sortPaoForCoverageCandidates(ws, di, rateioEntries, code);
       let placed = false;
       for (const c of candidates) {
         if (wouldExceedT6T7BlockMax(ws, c.uuid, day, code)) continue;

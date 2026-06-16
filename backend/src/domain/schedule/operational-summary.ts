@@ -267,6 +267,7 @@ export function buildOperationalSummary(
 
   const apaoCodes = apaoTurnoCodes(ws);
   const paoCodes = paoTurnoCodes(ws);
+  const seenAllocByDay = new Set<string>();
 
   for (const a of ws.toAssignments()) {
     const stats = byUuid.get(a.employeeUuid);
@@ -287,6 +288,9 @@ export function buildOperationalSummary(
   for (const al of ws.allocations) {
     const stats = byUuid.get(al.employeeUuid);
     if (!stats) continue;
+    const allocKey = `${al.employeeUuid}|${al.date}|${normalizeOperationalLabel(al.label).toUpperCase()}`;
+    if (seenAllocByDay.has(allocKey)) continue;
+    seenAllocByDay.add(allocKey);
     bumpAllocLabel(stats, al.label);
   }
 

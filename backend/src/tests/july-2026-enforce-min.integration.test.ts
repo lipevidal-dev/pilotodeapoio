@@ -7,6 +7,10 @@ import {
   validateRateioMinimums,
 } from "../domain/schedule/enforce-minimum-turn-targets.js";
 import { countRateioTurns } from "../domain/schedule/pao-rateio-shifts.js";
+import {
+  buildPreferenceQuartileSummary,
+  buildPreferenceSeniorityAudit,
+} from "../domain/schedule/preference-scoring.js";
 import { validateGenerationBeforeSave } from "../domain/schedule/schedule-generation-validators.js";
 import { buildGenerationInput, preAllocationsToLocked } from "../infrastructure/mappers/generation-input.mapper.js";
 import { CalendarRepository } from "../infrastructure/repositories/calendar.repository.js";
@@ -14,6 +18,7 @@ import { PreAllocationRepository } from "../infrastructure/repositories/pre-allo
 import { ScheduleRepository } from "../infrastructure/repositories/schedule.repository.js";
 import { assignmentKey } from "../domain/schedule/types.js";
 import type { GenerationInput, GenerationResult } from "../domain/schedule/generation-types.js";
+import type { RealMotorReport } from "../domain/schedule/real-schedule-types.js";
 
 const YEAR = 2026;
 const MONTH = 7;
@@ -114,6 +119,16 @@ describe.skipIf(!DB_URL.includes("5434") && !DB_URL.includes("5432"))(
       expect(
         dryRun.minimum.attempts.filter((a) => a.phase === "min" && a.outcome === "accepted").length,
       ).toBe(0);
+
+      const prefAudit = buildPreferenceSeniorityAudit(ws, ws.rateioContext!);
+      const prefWithShift = prefAudit.filter((r) => r.preferredShift);
+      if (prefWithShift.length >= 3) {
+        const quartiles = buildPreferenceQuartileSummary(prefAudit);
+        expect(quartiles.superior).toBeGreaterThanOrEqual(quartiles.inferior);
+      }
+
+      const notes = (result.summary.realMotorReport as unknown as RealMotorReport).stepNotes.join("\n");
+      expect(notes).toContain("PREFERÊNCIA X SENIORIDADE");
     }, 600_000);
 
     it("enforceMinimumTurnTargets aplica transferência pendente no grid final", async () => {

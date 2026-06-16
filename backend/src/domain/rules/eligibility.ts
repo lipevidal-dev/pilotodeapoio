@@ -141,7 +141,7 @@ export function canWork(
 
   if (shiftRestrictions) {
     const restricted = shiftRestrictions.get(empId);
-    if (restricted?.has(shiftCode.toUpperCase())) {
+    if (restricted?.has(shiftCode.toUpperCase()) && !coverageEmergency) {
       return { ok: false, reason: `turno ${shiftCode} restrito para o funcionário` };
     }
   }

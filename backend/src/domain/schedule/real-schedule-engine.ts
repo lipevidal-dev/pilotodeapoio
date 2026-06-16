@@ -18,6 +18,7 @@ import { deduplicatePaoShiftCoverage } from "./pao-shift-dedup.js";
 import { repairT8GapsAfterDedup } from "./repair-t8-gaps-after-dedup.js";
 import {
   repairAllCoverageGapsFinal,
+  repairCoverageGapsBeforeSave,
   validateNoCoverageGaps,
 } from "./repair-all-coverage-gaps-final.js";
 import { optimizeEmergencyIsolatedT8 } from "./optimize-emergency-isolated-t8.js";
@@ -34,10 +35,15 @@ import { materializeT6T7BlocksStrict } from "./real-schedule-blocks.js";
 import { buildStructuralMetrics } from "./real-schedule-audit.js";
 import { buildEmployeeDiagnostics } from "./real-schedule-employee-diagnostics.js";
 import {
+  buildPreferenceSeniorityAudit,
+  formatPreferenceSeniorityAudit,
+} from "./preference-scoring.js";
+import {
   buildRealV1FolgaReport,
   countAutoCommonFolgas,
 } from "./real-schedule-folga-metrics.js";
 import { allocateParallelShifts } from "./real-schedule-parallel.js";
+import { assignmentKey } from "./types.js";
 import { allocateT8BlocksStrict, closeT8CoverageGaps } from "./real-schedule-t8.js";
 import { materializeVacationFortnightPatterns } from "./real-schedule-vacation-materialize.js";
 import {
@@ -283,6 +289,8 @@ export class RealScheduleEngine {
     motorReport.t8IsolatedCount = motorReport.structuralMetrics.isolatedT8Count;
     motorReport.t8PairsWithoutNdCount = motorReport.structuralMetrics.pairsWithoutNdCount;
     motorReport.employeeDiagnostics = buildEmployeeDiagnostics(ws);
+    const prefAudit = buildPreferenceSeniorityAudit(ws, ws.ensureRateioContext());
+    motorReport.stepNotes.push(formatPreferenceSeniorityAudit(prefAudit));
 
     ws.correctMonoFolgasPedidas();
     const dupesRemoved = deduplicatePaoShiftCoverage(ws);
@@ -370,11 +378,17 @@ export class RealScheduleEngine {
     }
 
     if (ws.listCoverageGaps().length > 0) {
+      ws.clearCoverageGapsCache();
       const ctxFinal = ws.ensureRateioContext();
       repairAllCoverageGapsFinal(ws, ctxFinal);
       finalizeT8NdBlocks(ws);
       ws.syncRateioContext();
       enforceProportionalTurnTargets(ws);
+      if (ws.listCoverageGaps().length > 0) {
+        repairAllCoverageGapsFinal(ws, ctxFinal);
+        finalizeT8NdBlocks(ws);
+        ws.syncRateioContext();
+      }
     }
 
     const tailMinValidation = validateRateioMinimums(ws);
@@ -419,6 +433,94 @@ export class RealScheduleEngine {
     }
 
     const saveWs = finalizeMinimumTurnTargetsForSave(ws, input);
+    const parallelTopUp = allocateParallelShifts(saveWs);
+    if (parallelTopUp.parallelShiftsAllocated > 0) {
+      motorReport.stepNotes.push(
+        `[15] Turnos paralelos complementares: ${parallelTopUp.parallelShiftsAllocated} alocação(ões).`,
+      );
+    }
+
+    saveWs.syncRateioContext();
+    const postParallelEnforcement = enforceProportionalTurnTargets(saveWs);
+    if (
+      postParallelEnforcement.minimum.transfers > 0 ||
+      postParallelEnforcement.target.transfers > 0 ||
+      postParallelEnforcement.minimumAfterTarget.transfers > 0
+    ) {
+      motorReport.stepNotes.push(
+        `[15b] Pós-paralelo: min ${postParallelEnforcement.minimum.belowMinBefore}→${postParallelEnforcement.minimum.belowMinAfter} ` +
+          `(${postParallelEnforcement.minimum.transfers + postParallelEnforcement.minimumAfterTarget.transfers} transf min).`,
+      );
+    }
+
+    saveWs.clearCoverageGapsCache();
+    const preSaveRepair = repairCoverageGapsBeforeSave(saveWs);
+    if (
+      preSaveRepair.t6Filled +
+        preSaveRepair.t7Filled +
+        preSaveRepair.t8EmergencyIsolated +
+        preSaveRepair.t8BlocksPlaced >
+      0
+    ) {
+      motorReport.stepNotes.push(
+        `[15c] Reparo cobertura pré-save: T6=${preSaveRepair.t6Filled} T7=${preSaveRepair.t7Filled} ` +
+          `T8 blocos=${preSaveRepair.t8BlocksPlaced} T8 emerg=${preSaveRepair.t8EmergencyIsolated}; ` +
+          `gaps=${preSaveRepair.gapsRemaining}.`,
+      );
+    }
+    if (preSaveRepair.warnings.length > 0) {
+      motorReport.warnings.push(...preSaveRepair.warnings);
+    }
+
+    if (preSaveRepair.persistAssignments) {
+      for (const c of [...saveWs.paoEmps, ...saveWs.apaoEmps]) {
+        for (const day of saveWs.days) {
+          if (saveWs.isLockedByAdmin(c.uuid, day)) continue;
+          saveWs.planned.delete(assignmentKey(c.domainId, day));
+        }
+      }
+      for (const a of preSaveRepair.persistAssignments) {
+        const did = saveWs.uuidToDomain.get(a.employeeUuid);
+        if (did != null) saveWs.planned.set(assignmentKey(did, a.date), a.shiftCode);
+      }
+      if (preSaveRepair.persistAllocations) {
+        saveWs.allocations.splice(
+          0,
+          saveWs.allocations.length,
+          ...preSaveRepair.persistAllocations.map((a) => ({ ...a })),
+        );
+      }
+      saveWs.clearCoverageGapsCache();
+      saveWs.syncRateioContext();
+      if (validateRateioMinimums(saveWs).issues.some((i) => i.hasValidTransfer)) {
+        const postPreSaveEnforce = enforceProportionalTurnTargets(saveWs);
+        for (let clamp = 0; clamp < 8; clamp++) {
+          if (!validateRateioMinimums(saveWs).issues.some((i) => i.hasValidTransfer)) break;
+          const clampReport = enforceMinimumTurnTargets(saveWs);
+          saveWs.syncRateioContext();
+          if (clampReport.transfers === 0) break;
+        }
+        saveWs.clearCoverageGapsCache();
+        const gapsAfterPreSaveEnforce = saveWs.listCoverageGaps().length;
+        if (gapsAfterPreSaveEnforce > 0) {
+          repairAllCoverageGapsFinal(saveWs, saveWs.ensureRateioContext());
+          finalizeT8NdBlocks(saveWs);
+          saveWs.syncRateioContext();
+          saveWs.clearCoverageGapsCache();
+        }
+        if (
+          postPreSaveEnforce.minimum.transfers > 0 ||
+          postPreSaveEnforce.target.transfers > 0 ||
+          gapsAfterPreSaveEnforce > 0
+        ) {
+          motorReport.stepNotes.push(
+            `[15d] Pós-pré-save: min ${postPreSaveEnforce.minimum.belowMinBefore}→${postPreSaveEnforce.minimum.belowMinAfter}; ` +
+              `gaps pós-enforce=${gapsAfterPreSaveEnforce}→${saveWs.listCoverageGaps().length}.`,
+          );
+        }
+      }
+    }
+
     const assignments = saveWs.toAssignments();
     const ctx = saveWs.toScheduleContext();
     const engineViolations = validateSchedule(ctx);
@@ -446,6 +548,7 @@ export class RealScheduleEngine {
       folgasPerPao[c.employee.name] = ws.countRest(c.uuid);
     }
 
+    saveWs.clearCoverageGapsCache();
     const coverageGaps = saveWs.listCoverageGaps().length;
     if (coverageGaps === 0 && balanceReport.warnings.length > 0) {
       balanceReport.warnings = balanceReport.warnings.filter((w) => w.type !== "COBERTURA");
@@ -540,6 +643,21 @@ export function runFinalCoveragePipeline(
   const dupes2 = deduplicatePaoShiftCoverage(ws);
   let repair3 = repairAllCoverageGapsFinal(ws, ctx);
   finalizeT8NdBlocks(ws);
+
+  ws.syncRateioContext();
+  const postRepairEnforcement = enforceProportionalTurnTargets(ws);
+  if (
+    postRepairEnforcement.minimum.transfers > 0 ||
+    postRepairEnforcement.target.transfers > 0 ||
+    postRepairEnforcement.minimumAfterTarget.transfers > 0
+  ) {
+    notes.push(
+      `[13d] Pós-reparo cobertura: min ${postRepairEnforcement.minimum.belowMinBefore}→${postRepairEnforcement.minimum.belowMinAfter} ` +
+        `(${postRepairEnforcement.minimum.transfers} transf min); ` +
+        `target ${postRepairEnforcement.target.transfers} transf; ` +
+        `min pós-target ${postRepairEnforcement.minimumAfterTarget.transfers} transf.`,
+    );
+  }
 
   let gapViolations = validateNoCoverageGaps(ws);
 

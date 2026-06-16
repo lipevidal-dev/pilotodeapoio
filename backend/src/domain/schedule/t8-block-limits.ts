@@ -1,4 +1,5 @@
 import { addDays } from "../rules/dates.js";
+import { isParallelOnlyPreferredPao } from "./employee-t6-t7-shift.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 
 /** Máximo de blocos T8/T8/ND por PAO no mês. */
@@ -31,12 +32,22 @@ export function employeeAtT8BlockLimit(ws: GenerationWorkspace, uuid: string): b
   return countT8BlocksForEmployee(ws, uuid) >= MAX_T8_BLOCKS_PER_PAO_MONTH;
 }
 
-/** PAO pode iniciar um novo bloco T8/T8/ND neste mês. */
+function anyOtherPaoCanStartT8Block(ws: GenerationWorkspace, excludeUuid: string): boolean {
+  for (const c of ws.paoEmps) {
+    if (c.uuid === excludeUuid) continue;
+    if (isParallelOnlyPreferredPao(ws, c.uuid)) continue;
+    if (!employeeAtT8BlockLimit(ws, c.uuid)) return true;
+  }
+  return false;
+}
+
+/** PAO pode iniciar bloco T8/T8/ND — máx. 2; emergência só se ninguém mais puder bloco. */
 export function employeeCanStartT8Block(
   ws: GenerationWorkspace,
   uuid: string,
   coverageEmergency = false,
 ): boolean {
   if (!employeeAtT8BlockLimit(ws, uuid)) return true;
-  return coverageEmergency;
+  if (!coverageEmergency) return false;
+  return !anyOtherPaoCanStartT8Block(ws, uuid);
 }

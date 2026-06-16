@@ -46,10 +46,11 @@ export function wouldExceedT6T7BlockMax(
 function sortCoverageCandidates(
   ws: GenerationWorkspace,
   dayIndex: number,
+  code: T6T7ShiftCode,
 ): GenerationInputEmployee[] {
   ws.ensureRateioContext();
   const entries = computeTurnRateio(ws).entries;
-  return sortPaoForCoverageCandidates(ws, dayIndex, entries);
+  return sortPaoForCoverageCandidates(ws, dayIndex, entries, code);
 }
 
 function coverShiftByBlocks(ws: GenerationWorkspace, code: T6T7ShiftCode): number {
@@ -64,7 +65,7 @@ function coverShiftByBlocks(ws: GenerationWorkspace, code: T6T7ShiftCode): numbe
       continue;
     }
 
-    const candidates = sortCoverageCandidates(ws, di);
+    const candidates = sortCoverageCandidates(ws, di, code);
     let placed = false;
 
     const prevDay = di > 0 ? ws.days[di - 1] : undefined;
@@ -142,9 +143,9 @@ export function coverT6T7ByUnitDays(ws: GenerationWorkspace): number {
   let gaps = 0;
   for (let di = 0; di < ws.days.length; di++) {
     const day = ws.days[di];
-    const rotated = sortCoverageCandidates(ws, di);
     for (const code of ["T6", "T7"] as const) {
       if (ws.hasPaoCoverage(day, code)) continue;
+      const rotated = sortCoverageCandidates(ws, di, code);
       let assigned = false;
       for (const c of rotated) {
         if (ws.tryAssignShift(c.uuid, day, code)) {

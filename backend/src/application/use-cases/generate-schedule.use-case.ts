@@ -1,7 +1,11 @@
-import { RealScheduleEngine } from "../../domain/schedule/real-schedule-engine.js";
+import { generateScheduleWithRouter, resolveActiveMotorVersion } from "../../domain/schedule/schedule-engine-router.js";
 import {
   ENGINE_PATH,
-  MOTOR_VERSION_ID,
+  ENGINE_PATH_V4,
+  ENGINE_PATH_V5,
+  MOTOR_VERSION_V4,
+  MOTOR_VERSION_V5,
+  MOTOR_VERSION_V6,
 } from "../../domain/schedule/real-schedule-types.js";
 import { MANUAL_PREALLOC_LABELS } from "../../domain/schedule/operational-labels.js";
 import { CalendarRepository } from "../../infrastructure/repositories/calendar.repository.js";
@@ -37,8 +41,8 @@ export interface GenerateScheduleResult {
   summary: Record<string, unknown>;
   success: boolean;
   suggestions: string[];
-  motorVersion: typeof MOTOR_VERSION_ID;
-  enginePath: typeof ENGINE_PATH;
+  motorVersion: typeof MOTOR_VERSION_V4 | typeof MOTOR_VERSION_V5 | typeof MOTOR_VERSION_V6;
+  enginePath: typeof ENGINE_PATH | typeof ENGINE_PATH_V4 | typeof ENGINE_PATH_V5;
   realEngineExecuted: true;
   /** Preenchido quando validateBeforeSave falha antes da persistência. */
   persistenceBlocked?: boolean;
@@ -57,7 +61,9 @@ export class GenerateScheduleUseCase {
     private readonly scheduleRepo = new ScheduleRepository(),
     private readonly calendarRepo = new CalendarRepository(),
     private readonly preAllocRepo = new PreAllocationRepository(),
-    private readonly engine = new RealScheduleEngine(),
+    private readonly engine: { generate: typeof generateScheduleWithRouter } = {
+      generate: generateScheduleWithRouter,
+    },
   ) {}
 
   async execute(year: number, month: number): Promise<GenerateScheduleResult> {
@@ -89,6 +95,9 @@ export class GenerateScheduleUseCase {
         .map((row) => `${row.employeeUuid}|${row.date}`),
     );
 
+    const specificShiftDayPreferences =
+      await this.scheduleRepo.listSpecificShiftDayPreferencesForMonth(year, month);
+
     const input = buildGenerationInput({
       year,
       month,
@@ -101,12 +110,16 @@ export class GenerateScheduleUseCase {
       crossMonthHistory,
       shiftRestrictionRows,
       preferredShiftRows,
+      specificShiftDayPreferences,
       noFlightDates,
       approvedDayOff,
       flightDays,
     });
 
     const generated = this.engine.generate(input);
+    const motorVersion = resolveActiveMotorVersion();
+    const enginePath =
+      motorVersion === MOTOR_VERSION_V4 ? ENGINE_PATH_V4 : ENGINE_PATH_V5;
 
     const saveValidation = validateGenerationBeforeSave(input, generated);
     if (saveValidation.criticalCount > 0) {
@@ -140,8 +153,8 @@ export class GenerateScheduleUseCase {
 
     const summary = {
       ...generated.summary,
-      motorVersion: MOTOR_VERSION_ID,
-      enginePath: ENGINE_PATH,
+      motorVersion,
+      enginePath,
       realEngineExecuted: true,
     };
 
@@ -154,8 +167,8 @@ export class GenerateScheduleUseCase {
       summary: summary as unknown as Record<string, unknown>,
       success: generated.success,
       suggestions: generated.suggestions,
-      motorVersion: MOTOR_VERSION_ID,
-      enginePath: ENGINE_PATH,
+      motorVersion,
+      enginePath,
       realEngineExecuted: true,
     };
   }

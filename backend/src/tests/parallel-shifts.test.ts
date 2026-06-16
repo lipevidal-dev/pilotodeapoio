@@ -227,6 +227,21 @@ describe("Motor — turnos paralelos T9", () => {
     expect(ws.tryAssignShift(paoUuid(1), "2026-06-05", "T9")).toBe(false);
   });
 
+  it("10b. PAO preferência exclusiva T9 não recebe T8 e recebe T9 após etapa paralela", async () => {
+    const { allocateT8BlocksStrict } = await import("../domain/schedule/real-schedule-t8.js");
+    const input = inputWithT9Preference();
+    const ws = new GenerationWorkspace(input);
+    ws.applyHardBlocks();
+    ws.initRateioContext();
+    allocateT8BlocksStrict(ws);
+    allocateParallelShifts(ws);
+    const uuid = paoUuid(0);
+    const t9 = ws.toAssignments().filter((a) => a.employeeUuid === uuid && a.shiftCode === "T9");
+    const t8 = ws.toAssignments().filter((a) => a.employeeUuid === uuid && a.shiftCode === "T8");
+    expect(t8).toHaveLength(0);
+    expect(t9.length).toBeGreaterThan(0);
+  });
+
   it("11. T9 pode coexistir com T6 de outro funcionário no mesmo dia", () => {
     const input = inputWithT9Preference();
     const ws = new GenerationWorkspace(input);

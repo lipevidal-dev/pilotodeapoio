@@ -17,6 +17,9 @@ export interface AssignmentEligibilityContext {
   t9Counts?: Map<string, number>;
 
   preferredShiftByEmployee?: Map<string, ShiftCode | null>;
+  seniorityWeightByEmployee?: Map<string, number>;
+
+  effectiveTurnCount?: number;
 
   strictMaxTurnCount?: boolean;
   allowEmergencyOverflow?: boolean;
@@ -34,7 +37,10 @@ export function canAssignShiftWithRateio(
   const reasons: string[] = [];
   let scorePenalty = 0;
 
-  const current = context.currentTurnCounts.get(context.employeeId) ?? 0;
+  const current =
+    context.effectiveTurnCount ??
+    context.currentTurnCounts.get(context.employeeId) ??
+    0;
   const max = context.maxTurnCounts.get(context.employeeId);
 
   if (
@@ -56,6 +62,8 @@ export function canAssignShiftWithRateio(
 
   const preferredShift =
     context.preferredShiftByEmployee?.get(context.employeeId) ?? null;
+  const seniorityWeight =
+    context.seniorityWeightByEmployee?.get(context.employeeId) ?? 1;
 
   if (preferredShift && preferredShift !== context.shift) {
     scorePenalty += 20;
@@ -63,7 +71,7 @@ export function canAssignShiftWithRateio(
   }
 
   if (preferredShift && preferredShift === context.shift) {
-    scorePenalty -= 10;
+    scorePenalty -= 30 * seniorityWeight;
   }
 
   return {

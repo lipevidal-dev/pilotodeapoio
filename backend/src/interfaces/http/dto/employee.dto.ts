@@ -30,6 +30,28 @@ const shiftIdArray = z.array(z.string().uuid()).optional().default([]);
 
 const preferredShiftIdArray = z.array(z.string().uuid()).optional().default([]);
 
+const specificShiftRequestSchema = z
+  .object({
+    shiftId: z.string().uuid(),
+    year: z.number().int().min(2000).max(2100).optional().nullable(),
+    month: z.number().int().min(1).max(12).optional().nullable(),
+    dayOfMonth: z.number().int().min(1).max(31).optional().nullable(),
+    weekday: z.number().int().min(0).max(6).optional().nullable(),
+  })
+  .superRefine((row, ctx) => {
+    const hasDay = row.dayOfMonth != null;
+    const hasWeekday = row.weekday != null;
+    if (hasDay === hasWeekday) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Informe dayOfMonth ou weekday (exclusivo)",
+        path: ["dayOfMonth"],
+      });
+    }
+  });
+
+const specificShiftRequestArray = z.array(specificShiftRequestSchema).optional().default([]);
+
 
 
 function rejectDuplicateShiftIds(ids: string[], path: string) {
@@ -75,6 +97,8 @@ export const createEmployeeSchema = z
     restrictedShiftIds: shiftIdArray,
 
     preferredShiftIds: preferredShiftIdArray,
+
+    specificShiftRequests: specificShiftRequestArray,
 
   })
 
@@ -127,6 +151,8 @@ export const updateEmployeeSchema = z
     restrictedShiftIds: shiftIdArray.optional(),
 
     preferredShiftIds: preferredShiftIdArray.optional(),
+
+    specificShiftRequests: specificShiftRequestArray.optional(),
 
   })
 

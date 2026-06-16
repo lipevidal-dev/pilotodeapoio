@@ -1,6 +1,8 @@
 import { addDays } from "../rules/dates.js";
-import { isNdOverrideProtected } from "./schedule-grid-source.js";
-import { computeTurnRateio, sortPaoForCoverageCandidates } from "./real-schedule-turn-rateio.js";
+import { isNdDayAfterOwnT8Pair, isNdOverrideProtected } from "./schedule-grid-source.js";
+import { sortPaoForT8CoverageCandidates } from "./t8-coverage-priority.js";
+import { sortPaoForV5RepairT8Coverage } from "./v5-repair-preference.js";
+import { sortCandidatesForRestrictedShiftBreak } from "./shift-restriction-sorting.js";
 import { isParallelOnlyPreferredPao } from "./employee-t6-t7-shift.js";
 import type { GenerationWorkspace } from "./generation-workspace.js";
 import type { ValidationIssue } from "./types.js";
@@ -44,10 +46,9 @@ function canPlaceT8BlockAt(
 }
 
 function t8RepairCandidates(ws: GenerationWorkspace, dayIndex: number) {
-  const entries = computeTurnRateio(ws).entries;
-  return sortPaoForCoverageCandidates(ws, dayIndex, entries).filter(
-    (c) => !isParallelOnlyPreferredPao(ws, c.uuid),
-  );
+  return ws.v5RepairPreferenceStrict
+    ? sortPaoForV5RepairT8Coverage(ws, dayIndex, true)
+    : sortPaoForT8CoverageCandidates(ws, dayIndex, true);
 }
 
 /** Tenta fechar gap T8 no dia D montando bloco T8/T8/ND válido. */
@@ -95,17 +96,20 @@ function tryEmergencyIsolatedT8(
   const dayIndex = Math.max(0, ws.days.indexOf(gapDay));
   const candidates = t8RepairCandidates(ws, dayIndex);
 
-  const tryPool = [
-    ...candidates,
-    ...ws.paoEmps.filter(
+  const fallback = sortCandidatesForRestrictedShiftBreak(
+    ws,
+    ws.paoEmps.filter(
       (c) =>
         !isParallelOnlyPreferredPao(ws, c.uuid) &&
         !candidates.some((x) => x.uuid === c.uuid),
     ),
-  ];
+    "T8",
+  );
+  const tryPool = [...candidates, ...fallback];
 
   for (const c of tryPool) {
     if (wouldDuplicateT8Coverage(ws, c.uuid, gapDay)) continue;
+    if (isNdDayAfterOwnT8Pair(ws, c.uuid, gapDay)) continue;
     if (ws.isDayBlockedForShift(c.uuid, gapDay)) continue;
     if (!ws.tryAssignShift(c.uuid, gapDay, "T8", true)) continue;
 

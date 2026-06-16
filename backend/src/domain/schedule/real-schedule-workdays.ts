@@ -19,6 +19,8 @@ export function countWorkdayBreakdown(ws: GenerationWorkspace, uuid: string): Wo
 
   const rateioCodes = new Set(listPaoRateioShiftCodesFromWorkspace(ws));
 
+  const seenOperationalAlloc = new Set<string>();
+
   for (const a of ws.toAssignments()) {
     if (a.employeeUuid !== uuid) continue;
     const code = a.shiftCode.toUpperCase();
@@ -31,6 +33,9 @@ export function countWorkdayBreakdown(ws: GenerationWorkspace, uuid: string): Wo
 
   for (const al of ws.allocations) {
     if (al.employeeUuid !== uuid) continue;
+    const allocKey = `${al.employeeUuid}|${al.date}|${normalizeOperationalLabel(al.label).toUpperCase()}`;
+    if (seenOperationalAlloc.has(allocKey)) continue;
+    seenOperationalAlloc.add(allocKey);
     const n = normalizeOperationalLabel(al.label).toUpperCase();
     if (n === "VOO") stats.voos++;
     else if (n === "SIMULADOR") stats.simuladores++;

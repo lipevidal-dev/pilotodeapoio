@@ -72,7 +72,7 @@ export function listIsolatedT8Entries(ws: GenerationWorkspace): IsolatedT8Entry[
 
 function coverageCandidates(ws: GenerationWorkspace, dayIndex: number) {
   const entries = computeTurnRateio(ws).entries;
-  return sortPaoForCoverageCandidates(ws, dayIndex, entries).filter(
+  return sortPaoForCoverageCandidates(ws, dayIndex, entries, "T8").filter(
     (c) => !isParallelOnlyPreferredPao(ws, c.uuid),
   );
 }

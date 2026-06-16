@@ -20,6 +20,19 @@ export interface PreferredShiftSummary {
   name: string;
 }
 
+export interface SpecificShiftRequestPayload {
+  shiftId: string;
+  year?: number | null;
+  month?: number | null;
+  dayOfMonth?: number | null;
+  weekday?: number | null;
+}
+
+export interface SpecificShiftRequestSummary extends SpecificShiftRequestPayload {
+  shiftCode: string;
+  shiftName: string;
+}
+
 export interface Employee {
   id: string;
   name: string;
@@ -37,6 +50,7 @@ export interface Employee {
   restrictedShifts?: RestrictedShiftSummary[];
   preferredShiftIds?: string[];
   preferredShifts?: PreferredShiftSummary[];
+  specificShiftRequests?: SpecificShiftRequestSummary[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -50,6 +64,7 @@ export interface CreateEmployeePayload {
   noFlightDates?: string[];
   restrictedShiftIds?: string[];
   preferredShiftIds?: string[];
+  specificShiftRequests?: SpecificShiftRequestPayload[];
 }
 
 export interface UpdateEmployeePayload {
@@ -61,6 +76,7 @@ export interface UpdateEmployeePayload {
   noFlightDates?: string[];
   restrictedShiftIds?: string[];
   preferredShiftIds?: string[];
+  specificShiftRequests?: SpecificShiftRequestPayload[];
 }
 
 export interface JobRole {

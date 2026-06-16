@@ -13,6 +13,7 @@ export type TransferRejectionCode =
   | "ASSIGN_FAILED"
   | "RECEIVER_NO_GAIN"
   | "DONOR_BELOW_MIN_AFTER"
+  | "DONOR_MINIMUM_LOCK"
   | "COVERAGE_GAPS_AFTER";
 
 export type TransferPhase = "min" | "target";

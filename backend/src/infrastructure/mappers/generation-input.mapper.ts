@@ -4,11 +4,14 @@ import type {
   GenerationInputEmployee,
   PreferredShiftRow,
   ShiftRestrictionRow,
+  SpecificShiftDayPreferenceRow,
 } from "../../domain/schedule/generation-types.js";
 import { isoDateKey } from "../../domain/rules/date-keys.js";
 import { resolveMotorRoleCodes } from "../../domain/role/motor-codes.js";
 import { normalizeOperationalLabel } from "../../domain/schedule/operational-labels.js";
 import { compareEmployeesBySeniority } from "../../domain/employee/seniority.js";
+import { expandSpecificShiftRequests } from "../../domain/schedule/specific-shift-requests.js";
+import { iterDays } from "../../domain/rules/dates.js";
 import { prismaEmployeeToDomain } from "./employee.mapper.js";
 import { prismaShiftToDomain } from "./shift.mapper.js";
 
@@ -28,6 +31,7 @@ export function buildGenerationInput(params: {
   crossMonthHistory?: import("../../domain/schedule/cross-month-history.js").CrossMonthHistory;
   shiftRestrictionRows?: ShiftRestrictionRow[];
   preferredShiftRows?: PreferredShiftRow[];
+  specificShiftDayPreferences?: SpecificShiftDayPreferenceRow[];
   noFlightDates?: Array<{ employeeUuid: string; date: string }>;
 }): GenerationInput {
   const sorted = [...params.employees].sort(compareEmployeesBySeniority);
@@ -38,6 +42,14 @@ export function buildGenerationInput(params: {
   }));
 
   const motorRoleCodes = resolveMotorRoleCodes(params.roles ?? []);
+  const days = iterDays(params.year, params.month);
+  const specificShiftDayPreferences = params.specificShiftDayPreferences ?? [];
+  const specificShiftRequests = expandSpecificShiftRequests(
+    params.year,
+    params.month,
+    days,
+    specificShiftDayPreferences,
+  );
 
   return {
     year: params.year,
@@ -54,6 +66,8 @@ export function buildGenerationInput(params: {
     shiftRestrictions: buildShiftRestrictionMap(genEmployees, params.shiftRestrictionRows ?? []),
     preferredShifts: buildPreferredShiftMap(genEmployees, params.preferredShiftRows ?? []),
     noFlightDates: params.noFlightDates ?? [],
+    specificShiftDayPreferences,
+    specificShiftRequests,
   };
 }
 
