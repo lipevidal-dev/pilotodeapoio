@@ -308,17 +308,17 @@ export function fillPreferredShifts(ws: CleanWorkspace): void {
   const phase = "PREFERRED";
   const applyMeta = motorRuleEnabled(ws.options, "pao_meta_turnos");
 
-  const employees = [...ws.paoEmployees].sort(
-    (a, b) =>
-      a.employee.seniority - b.employee.seniority ||
-      a.employee.name.localeCompare(b.employee.name),
+  const employees = ws.sortEmployeesForPreferredFill(
+    ws.paoEmployees.filter((e) => {
+      const pref = primaryPreferredRateio(ws, e.domainId);
+      return pref && pref !== "T8" && ws.isShiftAllowedForGeneration(pref);
+    }),
   );
 
   const prefByUuid = new Map<string, string>();
   for (const emp of employees) {
     const pref = primaryPreferredRateio(ws, emp.domainId);
-    if (!pref || pref === "T8") continue;
-    if (!ws.isShiftAllowedForGeneration(pref)) continue;
+    if (!pref) continue;
     prefByUuid.set(emp.uuid, pref);
   }
 

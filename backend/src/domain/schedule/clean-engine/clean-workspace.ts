@@ -349,6 +349,40 @@ export class CleanWorkspace {
     return !this.wouldExceedTotalMetaTurnos(uuid, extraTurnos);
   }
 
+  isAtOrAboveTotalMetaTurnos(uuid: string): boolean {
+    if (!this.usesNextMotorRules()) return false;
+    if (!motorRuleEnabled(this.options, "pao_meta_turnos")) return false;
+    const limit = this.effectiveTotalMetaForEmployee(uuid);
+    if (!Number.isFinite(limit)) return false;
+    return this.countRateioTurns(uuid) >= limit;
+  }
+
+  /** Quanto falta para a meta mensal de turnos (0 = no teto ou já cheio). */
+  metaTurnosDeficit(uuid: string): number {
+    if (!this.usesNextMotorRules()) return Number.POSITIVE_INFINITY;
+    if (!motorRuleEnabled(this.options, "pao_meta_turnos")) return Number.POSITIVE_INFINITY;
+    const limit = this.effectiveTotalMetaForEmployee(uuid);
+    if (!Number.isFinite(limit)) return Number.POSITIVE_INFINITY;
+    return Math.max(0, limit - this.countRateioTurns(uuid));
+  }
+
+  /** Bloco T8/T8/ND novo consome até 2 turnos + 1 dia produtivo (ND). */
+  hasCapacityForNewT8Block(uuid: string): boolean {
+    return this.hasTotalMetaHeadroom(uuid, 2) && this.hasDiasTrabalhadosHeadroom(uuid, 3);
+  }
+
+  /** Preferência: maior déficit de meta primeiro; cobertura residual: mais novo primeiro. */
+  sortEmployeesForPreferredFill(employees: GenerationInputEmployee[]): GenerationInputEmployee[] {
+    return [...employees].sort((a, b) => {
+      const deficitCmp = this.metaTurnosDeficit(b.uuid) - this.metaTurnosDeficit(a.uuid);
+      if (deficitCmp !== 0) return deficitCmp;
+      return (
+        a.employee.seniority - b.employee.seniority ||
+        a.employee.name.localeCompare(b.employee.name)
+      );
+    });
+  }
+
   /** Meta de dias produtivos (turnos + ND + voo + simulador + curso + CMA + outros). */
   effectiveDiasTrabalhadosForEmployee(uuid: string): number {
     if (!this.usesNextMotorRules()) return Number.POSITIVE_INFINITY;
@@ -668,7 +702,7 @@ export class CleanWorkspace {
     return false;
   }
 
-  /** Preferência + antiguidade (mais antigo); furo de cota → mais novo primeiro. */
+  /** Cobertura: déficit de meta (puxar quem está abaixo) → mais novo primeiro no residual. */
   sortCoverageCandidatesForShift(
     shiftCode: string,
     employees: GenerationInputEmployee[] = this.paoEmployees,
@@ -676,15 +710,27 @@ export class CleanWorkspace {
     const normalized = shiftCode.toUpperCase();
     const usePref =
       this.usesNextMotorRules() && motorRuleEnabled(this.options, "preferred_shifts");
+    const applyMeta =
+      this.usesNextMotorRules() && motorRuleEnabled(this.options, "pao_meta_turnos");
+
+    const pool = applyMeta
+      ? employees.filter((e) => !this.isAtOrAboveTotalMetaTurnos(e.uuid))
+      : employees;
 
     const tieBreak = (
       a: GenerationInputEmployee,
       b: GenerationInputEmployee,
       oldestFirst: boolean,
     ): number => {
+      if (applyMeta) {
+        const deficitCmp = this.metaTurnosDeficit(b.uuid) - this.metaTurnosDeficit(a.uuid);
+        if (deficitCmp !== 0) return deficitCmp;
+      }
+
       const ta = this.countRateioTurnsForShift(a.uuid, normalized);
       const tb = this.countRateioTurnsForShift(b.uuid, normalized);
       if (ta !== tb) return ta - tb;
+
       const senCmp = oldestFirst
         ? a.employee.seniority - b.employee.seniority
         : b.employee.seniority - a.employee.seniority;
@@ -693,12 +739,12 @@ export class CleanWorkspace {
     };
 
     if (!usePref) {
-      return [...employees].sort((a, b) => tieBreak(a, b, true));
+      return [...pool].sort((a, b) => tieBreak(a, b, true));
     }
 
-    const prefer = employees.filter((e) => employeePrefersShift(this, e.domainId, normalized));
-    const others = employees.filter((e) => !employeePrefersShift(this, e.domainId, normalized));
-    prefer.sort((a, b) => tieBreak(a, b, true));
+    const prefer = pool.filter((e) => employeePrefersShift(this, e.domainId, normalized));
+    const others = pool.filter((e) => !employeePrefersShift(this, e.domainId, normalized));
+    prefer.sort((a, b) => tieBreak(a, b, false));
     others.sort((a, b) => tieBreak(a, b, false));
     return [...prefer, ...others];
   }

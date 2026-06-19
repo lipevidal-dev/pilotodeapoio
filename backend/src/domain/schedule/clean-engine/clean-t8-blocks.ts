@@ -40,10 +40,6 @@ export function sortPaoBySeniorityNewestFirst<T extends GenerationInputEmployee>
   );
 }
 
-function sortPaoBySeniority<T extends GenerationInputEmployee>(employees: T[]): T[] {
-  return sortPaoBySeniorityOldestFirst(employees);
-}
-
 export function countT8Blocks(ws: CleanWorkspace, uuid: string): number {
   const did = ws.uuidToDomain.get(uuid);
   if (did == null) return 0;
@@ -474,35 +470,38 @@ function tryPlaceT8BlockForCoverage(
   return false;
 }
 
+function t8CoverageMetaAllowsBlock(
+  ws: CleanWorkspace,
+  uuid: string,
+  gapDay: string,
+): boolean {
+  if (!motorRuleEnabled(ws.options, "pao_meta_turnos")) return true;
+  if (ws.isAtOrAboveTotalMetaTurnos(uuid)) return false;
+  if (isLastDayOfMonth(ws, gapDay)) {
+    return ws.hasTotalMetaHeadroom(uuid, 1);
+  }
+  return ws.hasCapacityForNewT8Block(uuid);
+}
+
 function buildT8CoverageCandidatePool(
   ws: CleanWorkspace,
   gapDay: string,
 ): Array<(typeof ws.paoEmployees)[number]> {
-  const applyMeta =
-    ws.usesNextMotorRules() && motorShiftRuleEnabled(ws.options, "pao_meta_turnos", "T8");
-
   const eligible = ws.paoEmployees.filter((c) => {
-    if (!applyMeta) return true;
+    if (!ws.usesNextMotorRules()) return true;
 
-    const t8Meta = ws.effectiveMetaTurnosForShift(c.uuid, "T8");
-    const belowT8Meta = ws.countRateioTurnsForShift(c.uuid, "T8") < t8Meta;
-    if (belowT8Meta) {
-      return ws.hasTotalMetaHeadroom(c.uuid, 1) && ws.hasDiasTrabalhadosHeadroom(c.uuid, 1);
+    if (motorRuleEnabled(ws.options, "pao_meta_turnos")) {
+      if (!t8CoverageMetaAllowsBlock(ws, c.uuid, gapDay)) return false;
     }
-
-    if (
-      isLastDayOfMonth(ws, gapDay) &&
-      canPlaceT8BlockCrossMonthEnd(ws, c.uuid, gapDay, true, true)
-    ) {
-      return true;
+    if (motorShiftRuleEnabled(ws.options, "pao_meta_turnos", "T8")) {
+      if (ws.countRateioTurnsForShift(c.uuid, "T8") >= ws.effectiveMetaTurnosForShift(c.uuid, "T8")) {
+        return false;
+      }
     }
-    // No teto da meta T8: ainda pode fechar o furo realocando bloco que começa no dia seguinte.
-    const conflictStart = addDays(gapDay, 1);
-    if (!ws.days.includes(conflictStart)) return false;
-    return (
-      employeeT8BlockStartsAt(ws, c.uuid, conflictStart) &&
-      t8BlockDaysUnlocked(ws, c.uuid, conflictStart)
-    );
+    if (motorRuleEnabled(ws.options, "pao_meta_dias_trabalhados")) {
+      if (!ws.hasDiasTrabalhadosHeadroom(c.uuid, 1)) return false;
+    }
+    return true;
   });
   return ws.sortCoverageCandidatesForShift("T8", eligible);
 }
@@ -601,13 +600,16 @@ export function tryAssignT8CoverageGap(ws: CleanWorkspace, day: string): boolean
 }
 
 export function employeeCanReceiveMoreT8Blocks(ws: CleanWorkspace, uuid: string): boolean {
+  if (motorRuleEnabled(ws.options, "pao_meta_turnos") && ws.isAtOrAboveTotalMetaTurnos(uuid)) {
+    return false;
+  }
   if (
     motorShiftRuleEnabled(ws.options, "pao_meta_turnos", "T8") &&
     ws.countRateioTurnsForShift(uuid, "T8") >= ws.effectiveMetaTurnosForShift(uuid, "T8")
   ) {
     return false;
   }
-  if (motorRuleEnabled(ws.options, "pao_meta_turnos") && ws.wouldExceedTotalMetaTurnos(uuid, 1)) {
+  if (motorRuleEnabled(ws.options, "pao_meta_turnos") && !ws.hasTotalMetaHeadroom(uuid, 1)) {
     return false;
   }
   if (motorRuleEnabled(ws.options, "pao_meta_dias_trabalhados") && ws.wouldExceedDiasTrabalhados(uuid, 1)) {
@@ -653,10 +655,14 @@ export function trySeedMonthEndT8Block(ws: CleanWorkspace): boolean {
   const last = ws.days[ws.days.length - 1];
   if (!last || ws.hasPaoCoverage(last, "T8")) return false;
 
-  const pool = [
-    ...sortPaoBySeniorityOldestFirst(ws.paoEmployees.filter((c) => isT8PreferredPao(ws, c.uuid))),
-    ...sortPaoBySeniorityNewestFirst(ws.paoEmployees.filter((c) => !isT8PreferredPao(ws, c.uuid))),
-  ];
+  const pool = ws.sortCoverageCandidatesForShift(
+    "T8",
+    ws.paoEmployees.filter(
+      (c) =>
+        !ws.isAtOrAboveTotalMetaTurnos(c.uuid) &&
+        employeeCanReceiveMoreT8Blocks(ws, c.uuid),
+    ),
+  );
   for (const c of pool) {
     if (tryPlaceT8BlockCrossMonthEnd(ws, c.uuid, last, true)) return true;
   }
@@ -697,7 +703,7 @@ export function fillT8PreferredBlocks(ws: CleanWorkspace): void {
   if (ws.usesNextMotorRules() && !motorRuleEnabled(ws.options, "preferred_shifts")) return;
   if (!ws.isShiftAllowedForGeneration("T8")) return;
 
-  const employees = sortPaoBySeniority(
+  const employees = ws.sortEmployeesForPreferredFill(
     ws.paoEmployees.filter((e) => isT8PreferredPao(ws, e.uuid)),
   );
 

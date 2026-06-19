@@ -509,7 +509,7 @@ describe("CleanEngine", () => {
     ).toBe(false);
   });
 
-  it("Lucas T8: cobertura dia 9 realoca bloco 10-11 (pipeline completo)", () => {
+  it("Lucas T8: cobertura dia 9 usa PAO abaixo da meta (sem realocar quem no teto)", () => {
     const paos = [
       emp(1, "Palombino"),
       emp(2, "Antonio"),
@@ -525,10 +525,6 @@ describe("CleanEngine", () => {
         [2, new Set(["T8"])],
         [3, new Set(["T8"])],
       ]),
-      lockedAllocations: [
-        { employeeUuid: "uuid-pal", date: "2026-07-10", label: "FOLGA PEDIDA" },
-        { employeeUuid: "uuid-pal", date: "2026-07-11", label: "FOLGA PEDIDA" },
-      ],
     };
     const options = {
       scopeEmployeeUuids: ["uuid-pal", "uuid-ant", "uuid-luc"],
@@ -539,29 +535,22 @@ describe("CleanEngine", () => {
         pao_meta_turnos: true,
         pao_espacamento_turnos: true,
         t8_t8_nd: true,
-        locked_preallocations: true,
         coverage_t8: true,
       },
       motorParams: { pao_meta_turnos: 4, pao_espacamento_turnos: 2, pao_max_consecutivos: 6 },
     };
     const ws = new CleanWorkspace(input, options);
-    ws.applyLockedPreAllocations();
-    // Simula estado real: Lucas já tem 5-6/ND7 e 10-11/ND12 antes da cobertura
+    // Lucas no teto (2 blocos = 4 turnos); Antonio abaixo da meta
     expect(tryPlaceT8Block(ws, "uuid-luc", "2026-07-05")).toBe(true);
-    expect(tryPlaceT8Block(ws, "uuid-ant", "2026-07-07")).toBe(true);
-    expect(tryPlaceT8Block(ws, "uuid-luc", "2026-07-10")).toBe(true);
+    expect(tryPlaceT8Block(ws, "uuid-luc", "2026-07-15")).toBe(true);
+    expect(ws.countRateioTurns("uuid-luc")).toBe(4);
+    expect(ws.isAtOrAboveTotalMetaTurnos("uuid-luc")).toBe(true);
 
     expect(ws.hasPaoCoverage("2026-07-09", "T8")).toBe(false);
     expect(tryAssignT8CoverageGap(ws, "2026-07-09")).toBe(true);
-    expect(ws.getShiftOnDay(3, "2026-07-09")?.toUpperCase()).toBe("T8");
-    expect(ws.getShiftOnDay(3, "2026-07-10")?.toUpperCase()).toBe("T8");
-    expect(ws.getBlockLabel(3, "2026-07-11")?.toUpperCase()).toBe("ND");
-    expect(ws.getShiftOnDay(3, "2026-07-12")).toBeUndefined();
-    expect(ws.getBlockLabel(3, "2026-07-12")).toBeUndefined();
-    const lucasNd = ws.toAllocations().filter(
-      (a) => a.employeeUuid === "uuid-luc" && a.label.toUpperCase() === "ND",
-    );
-    expect(lucasNd.map((a) => a.date).sort()).toEqual(["2026-07-07", "2026-07-11"]);
+    expect(ws.hasPaoCoverage("2026-07-09", "T8")).toBe(true);
+    expect(ws.getShiftOnDay(3, "2026-07-09")).toBeUndefined();
+    expect(ws.countRateioTurns("uuid-luc")).toBe(4);
   });
 
   it("Lucas T8: bloco completo 9-10/ND11 na cobertura (exceção espaçamento)", () => {
@@ -812,6 +801,57 @@ describe("CleanEngine", () => {
     expect(ws.getShiftOnDay(2, "2026-07-09")?.toUpperCase()).toBe("T8");
     expect(ws.getShiftOnDay(1, "2026-07-09")).toBeUndefined();
     expect(ws.getShiftOnDay(2, "2026-07-10")?.toUpperCase()).toBe("T8");
+  });
+
+  it("cobertura T8: PAO no teto de meta não recebe bloco — passa ao próximo mais novo", () => {
+    const senior = emp(1, "Senior T8", "PAO", 1);
+    const junior = emp(2, "Junior T8", "PAO", 50);
+    senior.uuid = "uuid-senior";
+    junior.uuid = "uuid-junior";
+
+    const input: GenerationInput = {
+      year: 2026,
+      month: 7,
+      employees: [senior, junior],
+      shifts: baseShifts(),
+      lockedAllocations: [],
+      vacationDays: [],
+      approvedDayOff: [],
+      flightDays: [],
+      preferredShifts: new Map([
+        [1, new Set(["T8"])],
+        [2, new Set(["T8"])],
+      ]),
+    };
+    const options = {
+      motorVersion: MOTOR_VERSION_NEXT,
+      allowedShiftCodes: ["T6", "T7", "T8"],
+      coverageShiftCodes: ["T8"],
+      enabledRules: {
+        preferred_shifts: true,
+        pao_meta_turnos: true,
+        pao_espacamento_turnos: true,
+        t8_t8_nd: true,
+        coverage_t8: true,
+      },
+      motorParams: {
+        [paoShiftParamId("meta_turnos", "T8")]: 10,
+        pao_espacamento_turnos: 0,
+      },
+    };
+    const ws = new CleanWorkspace(input, options);
+
+    for (let i = 1; i <= 10; i++) {
+      const day = `2026-07-${String(i).padStart(2, "0")}`;
+      ws.assignShift("uuid-junior", day, i % 2 === 0 ? "T7" : "T6", "SETUP", "seed");
+    }
+    expect(ws.countRateioTurns("uuid-junior")).toBe(10);
+
+    expect(ws.hasPaoCoverage("2026-07-15", "T8")).toBe(false);
+    expect(tryAssignT8CoverageGap(ws, "2026-07-15")).toBe(true);
+    expect(ws.getShiftOnDay(senior.domainId, "2026-07-15")?.toUpperCase()).toBe("T8");
+    expect(ws.getShiftOnDay(junior.domainId, "2026-07-15")).toBeUndefined();
+    expect(ws.countRateioTurns("uuid-junior")).toBe(10);
   });
 
   it("cobertura T6: furo de cota aloca mais novo entre quem não prefere o turno", () => {
