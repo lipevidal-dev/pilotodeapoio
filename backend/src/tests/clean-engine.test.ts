@@ -814,6 +814,46 @@ describe("CleanEngine", () => {
     expect(ws.getShiftOnDay(2, "2026-07-10")?.toUpperCase()).toBe("T8");
   });
 
+  it("cobertura T6: furo de cota aloca mais novo entre quem não prefere o turno", () => {
+    const senior = emp(1, "Senior", "PAO", 1);
+    const junior = emp(2, "Junior", "PAO", 50);
+    senior.uuid = "uuid-senior";
+    junior.uuid = "uuid-junior";
+
+    const input: GenerationInput = {
+      year: 2026,
+      month: 7,
+      employees: [senior, junior],
+      shifts: baseShifts(),
+      lockedAllocations: [],
+      vacationDays: [],
+      approvedDayOff: [],
+      flightDays: [],
+      preferredShifts: new Map([
+        [1, new Set(["T7"])],
+        [2, new Set(["T7"])],
+      ]),
+    };
+    const options = {
+      motorVersion: MOTOR_VERSION_NEXT,
+      allowedShiftCodes: ["T6", "T7", "T8"],
+      coverageShiftCodes: ["T6"],
+      enabledRules: {
+        preferred_shifts: true,
+        pao_meta_turnos: true,
+        coverage_t6: true,
+      },
+      motorParams: {
+        [paoShiftParamId("meta_turnos", "T6")]: 20,
+        [paoShiftParamId("meta_turnos", "T7")]: 20,
+      },
+    };
+    const ws = new CleanWorkspace(input, options);
+    ws.fillCoverageGaps();
+    expect(ws.getShiftOnDay(junior.domainId, "2026-07-01")?.toUpperCase()).toBe("T6");
+    expect(ws.getShiftOnDay(senior.domainId, "2026-07-01")).toBeUndefined();
+  });
+
   it("cobertura T8 fim de mês: dia 31 + pré-alocações agosto T8/ND CONTINUIDADE", () => {
     const ana = emp(1, "Ana", "PAO", 1);
     const bruno = emp(2, "Bruno", "PAO", 2);

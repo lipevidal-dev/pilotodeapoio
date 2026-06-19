@@ -22,7 +22,7 @@ import { CleanAuditLog } from "./clean-audit.js";
 import { motorRuleEnabled, motorShiftMaxConsecutivos, motorShiftMetaTurnos, motorShiftRuleEnabled, sumMotorShiftMetaTurnos } from "./clean-motor-rules.js";
 import { motorShiftParamValue } from "../next-motor/next-motor-shift-params.js";
 import {
-  compareCandidatesForShift,
+  employeePrefersShift,
   isBlockedOnlyByTurnSpacing,
   isT8PreferredPao,
   prefersRateioShift,
@@ -668,6 +668,41 @@ export class CleanWorkspace {
     return false;
   }
 
+  /** Preferência + antiguidade (mais antigo); furo de cota → mais novo primeiro. */
+  sortCoverageCandidatesForShift(
+    shiftCode: string,
+    employees: GenerationInputEmployee[] = this.paoEmployees,
+  ): GenerationInputEmployee[] {
+    const normalized = shiftCode.toUpperCase();
+    const usePref =
+      this.usesNextMotorRules() && motorRuleEnabled(this.options, "preferred_shifts");
+
+    const tieBreak = (
+      a: GenerationInputEmployee,
+      b: GenerationInputEmployee,
+      oldestFirst: boolean,
+    ): number => {
+      const ta = this.countRateioTurnsForShift(a.uuid, normalized);
+      const tb = this.countRateioTurnsForShift(b.uuid, normalized);
+      if (ta !== tb) return ta - tb;
+      const senCmp = oldestFirst
+        ? a.employee.seniority - b.employee.seniority
+        : b.employee.seniority - a.employee.seniority;
+      if (senCmp !== 0) return senCmp;
+      return a.employee.name.localeCompare(b.employee.name);
+    };
+
+    if (!usePref) {
+      return [...employees].sort((a, b) => tieBreak(a, b, true));
+    }
+
+    const prefer = employees.filter((e) => employeePrefersShift(this, e.domainId, normalized));
+    const others = employees.filter((e) => !employeePrefersShift(this, e.domainId, normalized));
+    prefer.sort((a, b) => tieBreak(a, b, true));
+    others.sort((a, b) => tieBreak(a, b, false));
+    return [...prefer, ...others];
+  }
+
   fillCoverageGaps(): void {
     const phase = "COVERAGE";
     const excludeT8PrefFromT6T7 =
@@ -776,18 +811,7 @@ export class CleanWorkspace {
   }
 
   private sortedCandidates(_date: string, shiftCode: string): GenerationInputEmployee[] {
-    const usePref = this.usesNextMotorRules() && motorRuleEnabled(this.options, "preferred_shifts");
-    return [...this.paoEmployees].sort((a, b) => {
-      const prefCmp = usePref
-        ? compareCandidatesForShift(this, shiftCode, a.domainId, b.domainId, a.uuid, b.uuid)
-        : 0;
-      if (prefCmp !== 0) return prefCmp;
-
-      const ta = this.countRateioTurnsForShift(a.uuid, shiftCode);
-      const tb = this.countRateioTurnsForShift(b.uuid, shiftCode);
-      if (ta !== tb) return ta - tb;
-      return a.employee.name.localeCompare(b.employee.name);
-    });
+    return this.sortCoverageCandidatesForShift(shiftCode);
   }
 
   countRateioTurns(uuid: string): number {

@@ -504,13 +504,7 @@ function buildT8CoverageCandidatePool(
       t8BlockDaysUnlocked(ws, c.uuid, conflictStart)
     );
   });
-  const t8Preferred = sortPaoBySeniorityOldestFirst(
-    eligible.filter((c) => isT8PreferredPao(ws, c.uuid)),
-  );
-  const others = sortPaoBySeniorityNewestFirst(
-    eligible.filter((c) => !isT8PreferredPao(ws, c.uuid)),
-  );
-  return [...t8Preferred, ...others];
+  return ws.sortCoverageCandidatesForShift("T8", eligible);
 }
 
 /** PAO consegue fechar o furo com bloco indivisível T8/T8/ND (não T8 avulso). */
