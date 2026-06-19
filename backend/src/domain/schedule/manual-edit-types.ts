@@ -10,6 +10,7 @@ export type ManualAllocationType =
   | "T8_BLOCK"
   | "ND"
   | "FOLGA"
+  | "FS"
   | "FP"
   | "VOO"
   | "CURSO"
@@ -67,6 +68,7 @@ export const SHIFT_ALLOCATION_TYPES = new Set<ManualAllocationType>([
 export const PREALLOC_ALLOCATION_TYPES = new Set<ManualAllocationType>([
   "ND",
   "FOLGA",
+  "FS",
   "FP",
   "CURSO",
   "SIMULADOR",
@@ -80,6 +82,8 @@ export function manualTypeToPreallocLabel(type: ManualAllocationType): string | 
       return "ND";
     case "FOLGA":
       return "FOLGA";
+    case "FS":
+      return "FOLGA SOCIAL";
     case "FP":
       return "FOLGA PEDIDA";
     case "CURSO":

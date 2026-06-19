@@ -1,3 +1,4 @@
+import type { EmployeeFcfRule } from "../employee/fcf-config.js";
 import type { Employee } from "../employee/types.js";
 import type { Shift } from "../shift/types.js";
 import type { ValidationIssue } from "./types.js";
@@ -5,12 +6,7 @@ import type {
   CrossMonthHistory,
   VacationReturnDay,
 } from "./cross-month-history.js";
-import type {
-  EmployeeOperationalSummary,
-  OperationalTotals,
-} from "./operational-summary.js";
-import type { OperationalBalanceReport } from "./operational-balancer.js";
-import type { BlockOptimizerMetrics } from "./block-optimizer.js";
+
 export interface GenerationInputEmployee {
   uuid: string;
   domainId: number;
@@ -43,10 +39,12 @@ export interface GenerationInput {
   preferredShifts?: Map<number, Set<string>>;
   /** Dias em que o funcionário não deve receber voo (não bloqueia turno). */
   noFlightDates?: Array<{ employeeUuid: string; date: string }>;
-  /** Preferências de turno em dias específicos (cadastro admin). */
+  /** Preferências de turno em dias específicos (cadastro admin — legado). */
   specificShiftDayPreferences?: SpecificShiftDayPreferenceRow[];
-  /** Expandido para o mês — preenchido pelo mapper. */
+  /** Expandido para o mês — preenchido pelo mapper (legado). */
   specificShiftRequests?: SpecificShiftRequest[];
+  /** Preferência FCF — alocação desejada por dia da semana (por funcionário). */
+  fcfRules?: EmployeeFcfRule[];
 }
 
 export interface ShiftRestrictionRow {
@@ -116,8 +114,8 @@ export interface GenerationSummary {
   impossibleScenario?: boolean;
   mainBlockingReasons?: string[];
   generationMs?: number;
-  operationalByEmployee?: EmployeeOperationalSummary[];
-  operationalTotals?: OperationalTotals;
+  operationalByEmployee?: unknown[];
+  operationalTotals?: unknown;
   mathClosureOk?: boolean;
   paosCom11Folgas?: string[];
   t6BlockCoverage?: {
@@ -131,17 +129,19 @@ export interface GenerationSummary {
     unitOccurrences: number;
   };
   unitCoverageTotal?: number;
-  balanceReport?: OperationalBalanceReport;
+  balanceReport?: unknown;
   motorVersion?: string;
   enginePath?: string;
   realEngineExecuted?: boolean;
   realMotorReport?: Record<string, unknown>;
-  blockOptimizerMetrics?: BlockOptimizerMetrics;
+  blockOptimizerMetrics?: unknown;
 }
 
 export interface GenerationResult {
   assignments: GeneratedAssignment[];
   allocations: GeneratedAllocation[];
+  /** Pré-alocações fixas no mês seguinte (continuidade T8/T8/ND). */
+  crossMonthPreAllocations?: GeneratedAllocation[];
   violations: ValidationIssue[];
   summary: GenerationSummary;
   success: boolean;

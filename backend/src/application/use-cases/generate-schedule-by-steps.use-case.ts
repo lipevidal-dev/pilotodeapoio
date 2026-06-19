@@ -1,6 +1,6 @@
 import { scheduleGenerationInputService } from "../services/schedule-generation-input.service.js";
-import { stepGenerationEngine } from "../../domain/schedule/step-generation-engine.js";
-import type { StepGenerationOptions } from "../../domain/schedule/step-generation-types.js";
+import { stepGenerationEngine } from "../../domain/schedule/_legacy/step-generation-engine.js";
+import type { StepGenerationOptions } from "../../domain/schedule/_legacy/step-generation-types.js";
 
 export class GenerateScheduleByStepsUseCase {
   async execute(year: number, month: number, steps: StepGenerationOptions) {

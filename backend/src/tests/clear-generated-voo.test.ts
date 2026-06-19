@@ -7,17 +7,17 @@ describe("limpar geração — VOO gerado", () => {
     expect(CLEAR_GENERATED_LABELS).toContain("VOO");
   });
 
-  it("CLEAR_GENERATED_LABELS inclui folgas agrupadas e aniversário geradas", () => {
+  it("CLEAR_GENERATED_LABELS inclui folgas automáticas geradas", () => {
+    expect(CLEAR_GENERATED_LABELS).toContain("FOLGA");
+    expect(CLEAR_GENERATED_LABELS).toContain("FOLGA SOCIAL");
     expect(CLEAR_GENERATED_LABELS).toContain("FOLGA AGRUPADA");
-    expect(CLEAR_GENERATED_LABELS).toContain("FOLGA ANIVERSÁRIO");
+  });
+
+  it("CLEAR_GENERATED_LABELS não inclui folga pedida", () => {
+    expect(CLEAR_GENERATED_LABELS).not.toContain("FOLGA PEDIDA");
   });
 
   it("VOO manual na escala usa preAllocation (removível ao limpar geração)", () => {
     expect(manualTypeToPreallocLabel("VOO")).toBe("VOO");
-  });
-
-  it("limpar geração inclui preAllocation marcada escala-manual", () => {
-    expect(CLEAR_GENERATED_LABELS).toContain("VOO");
-    expect(CLEAR_GENERATED_LABELS).toContain("FOLGA");
   });
 });

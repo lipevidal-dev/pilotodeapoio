@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit, ViewChild, computed, inject, signal } fro
 import { Subscription, concatMap, from, last } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { CardModule } from 'primeng/card';
 import { ButtonModule } from 'primeng/button';
@@ -18,6 +19,7 @@ import { ScheduleService } from '../../services/schedule.service';
 import { ScheduleRefreshService } from '../../services/schedule-refresh.service';
 import { ScheduleWorkspaceService } from '../../services/schedule-workspace.service';
 import { ScheduleExportService } from '../../services/schedule-export.service';
+import { NextMotorConfigService } from '../../services/next-motor-config.service';
 import {
   ScheduleGridComponent,
   type GridDeletionSelectionComplete,
@@ -34,6 +36,7 @@ import {
   type DeletePopupContext,
 } from '../../components/schedule-delete-confirm-popup/schedule-delete-confirm-popup.component';
 import { ScheduleLegendComponent } from '../../components/schedule-legend/schedule-legend.component';
+import { Cfm56TurbineIconComponent } from '../../components/icons/cfm56-turbine-icon.component';
 import { extractManualEditConflictMessage } from '../../utils/manual-edit-error.util';
 import { groupContiguousDays, isoDateFromGrid } from '../../utils/schedule-grid-selection.util';
 import { sortEmployeesBySeniority } from '../../utils/employee-sort.util';
@@ -57,6 +60,12 @@ import type {
   ViolationSeverity,
 } from '../../models/api.models';
 import type { ScheduleGridData } from '../../models/schedule-grid.models';
+import {
+  formatGenerationPersistenceIssueLine,
+  generationRuleLabel,
+  summarizeGenerationPersistenceIssues,
+  type GenerationPersistenceValidation,
+} from '../../utils/generation-validation.util';
 
 const DEFAULT_STEP_OPTIONS = (): StepGenerationOptions => ({
   paoCheckPreAllocations: false,
@@ -79,6 +88,7 @@ const DEFAULT_STEP_OPTIONS = (): StepGenerationOptions => ({
   imports: [
     CommonModule,
     FormsModule,
+    RouterLink,
     CardModule,
     ButtonModule,
     InputNumberModule,
@@ -93,6 +103,7 @@ const DEFAULT_STEP_OPTIONS = (): StepGenerationOptions => ({
     ScheduleAllocationPopupComponent,
     ScheduleDeleteConfirmPopupComponent,
     ScheduleLegendComponent,
+    Cfm56TurbineIconComponent,
   ],
   templateUrl: './schedule.component.html',
   styleUrl: './schedule.component.scss',
@@ -104,23 +115,33 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   private readonly scheduleRefresh = inject(ScheduleRefreshService);
   private readonly workspace = inject(ScheduleWorkspaceService);
   private readonly exportService = inject(ScheduleExportService);
+  private readonly nextMotorConfig = inject(NextMotorConfigService);
   private readonly messages = inject(MessageService);
   private refreshSub?: Subscription;
 
   readonly yearSig = signal(this.workspace.year());
   readonly monthSig = signal(this.workspace.month());
 
-  readonly generating = signal(false);
   readonly generatingSteps = signal(false);
   readonly stepModalVisible = signal(false);
   readonly stepOptions = signal<StepGenerationOptions>(DEFAULT_STEP_OPTIONS());
   readonly stepAuditResult = signal<GenerateByStepsResponse | null>(null);
+  readonly generatingNextMotor = signal(false);
+  readonly nextMotorSummary = signal<{
+    enabledCount: number;
+    totalCount: number;
+    scopeMode: 'all' | 'selected';
+    scopeSelectedCount: number | null;
+    paoMetaTurnos: number;
+    paoMetaDias: number;
+    allowedShiftCodes: string[];
+  } | null>(null);
   readonly generatingFlights = signal(false);
-  readonly generatingApao = signal(false);
   readonly publishing = signal(false);
   readonly clearing = signal(false);
   readonly loadingView = signal(false);
   readonly publishBlocked = signal<PublishBlockedResponse | null>(null);
+  readonly generationBlocked = signal<GenerationPersistenceValidation | null>(null);
   readonly publishResult = signal<{ status: string } | null>(null);
   readonly scheduleData = signal<ScheduleMonthResponse | null>(null);
   readonly manualEditing = signal(false);
@@ -262,6 +283,12 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     return grid.groups.some((g) => g.rows.length > 0);
   }
 
+  generationRuleLabel = generationRuleLabel;
+
+  clearGenerationBlocked(): void {
+    this.generationBlocked.set(null);
+  }
+
   periodLabel(): string {
     const months = [
       'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
@@ -274,7 +301,34 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     this.yearSig.set(this.workspace.year());
     this.monthSig.set(this.workspace.month());
     this.loadScheduleView();
+    this.loadNextMotorSummary();
     this.refreshSub = this.scheduleRefresh.changes$.subscribe(() => this.loadScheduleView());
+  }
+
+  loadNextMotorSummary(): void {
+    this.nextMotorConfig.getConfig().subscribe({
+      next: (data) => {
+        const turnosFromShifts = (data.paoShiftParams ?? []).reduce(
+          (sum, row) =>
+            sum + (row.fields.find((f) => f.kind === 'meta_turnos')?.value ?? 0),
+          0,
+        );
+        const turnos = turnosFromShifts > 0 ? turnosFromShifts : 20;
+        const dias = data.params.find((p) => p.id === 'pao_meta_dias_trabalhados')?.value ?? 20;
+        this.nextMotorSummary.set({
+          enabledCount: data.enabledCount,
+          totalCount: data.totalCount,
+          scopeMode: data.scopeMode,
+          scopeSelectedCount: data.scopeSelectedCount,
+          paoMetaTurnos: turnos,
+          paoMetaDias: dias,
+          allowedShiftCodes: data.allowedShiftCodes ?? [],
+        });
+      },
+      error: () => {
+        this.nextMotorSummary.set(null);
+      },
+    });
   }
 
   ngOnDestroy(): void {
@@ -329,48 +383,74 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     });
   }
 
-  generate(): void {
-    this.generating.set(true);
-    this.stepAuditResult.set(null);
+  generateWithNextMotor(): void {
+    const summary = this.nextMotorSummary();
+    if (summary?.scopeMode === 'selected' && summary.scopeSelectedCount === 0) {
+      this.messages.add({
+        severity: 'warn',
+        summary: 'Escopo vazio',
+        detail: 'Selecione ao menos um funcionário em Configurações → Motor de Escala.',
+      });
+      return;
+    }
+    if (summary && summary.allowedShiftCodes.length === 0) {
+      this.messages.add({
+        severity: 'warn',
+        summary: 'Nenhum turno habilitado',
+        detail: 'Marque ao menos um turno em Configurações → Motor de Escala.',
+      });
+      return;
+    }
+    const y = this.yearSig();
+    const m = this.monthSig();
+    if (
+      !window.confirm(
+        `Gerar escala automática para ${String(m).padStart(2, '0')}/${y}? ` +
+          'A geração anterior do mês será substituída (férias e folgas pedidas permanecem).',
+      )
+    ) {
+      return;
+    }
+    this.generatingNextMotor.set(true);
     this.publishBlocked.set(null);
+    this.generationBlocked.set(null);
     this.publishResult.set(null);
-    this.scheduleService.generateSchedule(this.yearSig(), this.monthSig()).subscribe({
+    this.scheduleService.generateSchedule(y, m).subscribe({
       next: (result) => {
-        this.workspace.setGeneration(result, this.yearSig(), this.monthSig());
-        this.generating.set(false);
+        this.generatingNextMotor.set(false);
+        this.generationBlocked.set(null);
+        const gaps = result.summary?.['coverageGaps'] ?? result.summary?.['coverageMissingCount'];
+        const detail =
+          `${result.assignmentsCreated} turno(s), ${result.allocationsCreated} alocação(ões).` +
+          (typeof gaps === 'number' && gaps > 0 ? ` ${gaps} furo(s) de cobertura.` : '');
         this.messages.add({
-          severity: result.summary.criticalCount ? 'warn' : 'success',
-          summary: 'Escala gerada',
-          detail: `Status ${result.status} — ${result.assignmentsCreated} alocações.`,
+          severity: result.success ? 'success' : 'warn',
+          summary: result.success ? 'Escala gerada' : 'Escala gerada com pendências',
+          detail,
         });
         this.loadScheduleView();
       },
       error: (err: HttpErrorResponse) => {
-        this.generating.set(false);
-        const msg = err.error?.error ?? err.message ?? 'Erro ao gerar escala';
-        this.messages.add({ severity: 'error', summary: 'Geração', detail: msg });
-      },
-    });
-  }
-
-  generateApao(): void {
-    const id = this.activeScheduleMonthId();
-    if (!id) return;
-    this.generatingApao.set(true);
-    this.scheduleService.generateApaoSchedule(id).subscribe({
-      next: (result) => {
-        this.generatingApao.set(false);
-        this.messages.add({
-          severity: 'success',
-          summary: 'Escala APAO',
-          detail: `${result.assignmentsCreated ?? 0} turno(s) APAO; ${result.allocationsCreated ?? 0} folga(s) geradas.`,
-        });
-        this.loadScheduleView();
-      },
-      error: (err: HttpErrorResponse) => {
-        this.generatingApao.set(false);
-        const msg = err.error?.error ?? err.message ?? 'Erro ao gerar escala APAO';
-        this.messages.add({ severity: 'error', summary: 'Gerar Escala APAO', detail: msg });
+        this.generatingNextMotor.set(false);
+        const body = err.error as {
+          error?: string;
+          code?: string;
+          validation?: GenerationPersistenceValidation;
+        };
+        const validation = body?.validation;
+        if (err.status === 422 && validation?.issues?.length) {
+          this.generationBlocked.set(validation);
+          const summary = summarizeGenerationPersistenceIssues(validation.issues);
+          this.messages.add({
+            severity: 'error',
+            summary: 'Geração não salva',
+            detail: summary,
+            life: 12000,
+          });
+          return;
+        }
+        const msg = body?.error ?? err.message ?? 'Erro ao gerar escala';
+        this.messages.add({ severity: 'error', summary: 'Motor automático', detail: msg });
       },
     });
   }

@@ -1,6 +1,6 @@
 import { validateSchedule } from "../../domain/rules/engine.js";
-import { buildExtendedSummary } from "../../domain/schedule/generation-summary.js";
-import { GenerationWorkspace } from "../../domain/schedule/generation-workspace.js";
+import { buildExtendedSummary } from "../../domain/schedule/_legacy/generation-summary.js";
+import { GenerationWorkspace } from "../../domain/schedule/_legacy/generation-workspace.js";
 import { MANUAL_PREALLOC_LABELS } from "../../domain/schedule/operational-labels.js";
 import { isoDateKey } from "../../domain/rules/date-keys.js";
 import { CalendarRepository } from "../../infrastructure/repositories/calendar.repository.js";

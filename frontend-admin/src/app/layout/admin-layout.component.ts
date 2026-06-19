@@ -51,6 +51,7 @@ export class AdminLayoutComponent {
         { label: 'Funcionários', icon: 'pi pi-users', route: '/funcionarios' },
         { label: 'Cargos', icon: 'pi pi-briefcase', route: '/configuracoes/cargos' },
         { label: 'Turnos', icon: 'pi pi-clock', route: '/configuracoes/turnos' },
+        { label: 'Motor de Escala', icon: 'pi pi-bolt', route: '/configuracoes/motor-escala' },
       ],
     },
   ];

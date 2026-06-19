@@ -115,7 +115,7 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
         label: null,
         source: 'GENERATOR',
       },
-      ['ND'],
+      [{ label: 'ND' }],
     );
     expect(cell.kind).toBe('nd');
     expect(cell.display).toBe('ND');
@@ -146,7 +146,7 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
     expect(summary.diasTrabalhados).toBe(2);
   });
 
-  it('9. T9 paralelo conta em turnos e dias trabalhados', () => {
+  it('9. T9 conta em turnos e dias trabalhados como turno normal', () => {
     const emp: Employee = {
       id: 'pao-t9',
       name: 'PAO T9',
@@ -412,7 +412,7 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
         label: null,
         source: 'generated',
       },
-      ['FOLGA PEDIDA'],
+      [{ label: 'FOLGA PEDIDA' }],
     );
     expect(cell.display).toBe('FP');
     expect(cell.kind).toBe('fp');
@@ -420,8 +420,47 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
 
   it('férias têm prioridade sobre FP no mesmo dia', () => {
     expect(labelDisplayPriority('FÉRIAS')).toBeGreaterThan(labelDisplayPriority('FOLGA PEDIDA'));
-    const cell = resolveScheduleCell(undefined, ['FOLGA PEDIDA', 'FÉRIAS']);
+    const cell = resolveScheduleCell(undefined, [
+      { label: 'FOLGA PEDIDA' },
+      { label: 'FÉRIAS' },
+    ]);
     expect(cell.kind).toBe('ferias');
+  });
+
+  it('OUTRO exibe OTR com descrição no title', () => {
+    expect(mapLabelToCell('OUTRO', 'Reunião interna').display).toBe('OTR');
+    expect(mapLabelToCell('OUTRO', 'Reunião interna').title).toBe('Reunião interna');
+    expect(mapCellToCalendarDisplay(mapLabelToCell('OUTRO', 'Treinamento')).display).toBe('OTR');
+
+    const emp: Employee = {
+      id: 'pao-1',
+      name: 'PAO Test',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 6,
+      employees: [emp],
+      assignments: [],
+      preAllocations: [
+        {
+          id: 'outro-1',
+          employeeId: 'pao-1',
+          date: '2026-06-09T12:00:00.000Z',
+          label: 'OUTRO',
+          notes: 'Visita médica',
+        },
+      ],
+      operationalCadastros: [],
+    });
+    const cell = grid.groups[0].rows[0].cells[8];
+    expect(cell.display).toBe('OTR');
+    expect(cell.kind).toBe('outro');
+    expect(cell.title).toBe('Visita médica');
   });
 
   it('operationalCadastros exibe FER no último dia inclusivo do período', () => {

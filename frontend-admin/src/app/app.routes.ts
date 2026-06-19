@@ -164,6 +164,13 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/configuracoes/shifts/shifts.component').then((m) => m.ShiftsComponent),
       },
+      {
+        path: 'configuracoes/motor-escala',
+        loadComponent: () =>
+          import('./pages/configuracoes/motor-escala/motor-escala-config.component').then(
+            (m) => m.MotorEscalaConfigComponent,
+          ),
+      },
     ],
   },
   { path: '**', redirectTo: 'login' },

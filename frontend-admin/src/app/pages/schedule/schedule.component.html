@@ -6,6 +6,9 @@
   <ng-template pTemplate="header">
     <div class="ops-header">
       <span><i class="pi pi-cog"></i> Parâmetros de geração</span>
+      <a routerLink="/configuracoes/motor-escala" class="ops-config-link">
+        <i class="pi pi-sliders-h"></i> Regras do motor
+      </a>
     </div>
   </ng-template>
   <div class="ops-form">
@@ -30,20 +33,37 @@
       />
     </div>
     <p-button
-      label="Gerar Escala"
-      icon="pi pi-play"
-      styleClass="btn-gol-primary ops-btn-primary"
-      [loading]="generating()"
-      (onClick)="generate()"
-    />
+      styleClass="btn-gol-primary ops-btn-motor"
+      [loading]="generatingNextMotor()"
+      (onClick)="generateWithNextMotor()"
+      title="Gera escala com as regras configuradas em Motor de Escala"
+    >
+      <span class="ops-btn-motor__inner">
+        <app-cfm56-turbine-icon />
+        <span>Gerar Escala Automática</span>
+      </span>
+    </p-button>
+  </div>
+  <p class="ops-motor-hint">
+    @if (nextMotorSummary(); as s) {
+      Novo motor — {{ s.enabledCount }} de {{ s.totalCount }} regras ativas · turnos:
+      {{ s.allowedShiftCodes.join(', ') || 'nenhum' }} · metas PAO:
+      {{ s.paoMetaTurnos }} turnos / {{ s.paoMetaDias }} dias trabalhados ·
+      @if (s.scopeMode === 'all') {
+        todos os funcionários no escopo.
+      } @else {
+        {{ s.scopeSelectedCount ?? 0 }} funcionário(s) selecionado(s).
+      }
+      <a routerLink="/configuracoes/motor-escala">Ajustar</a>
+    } @else {
+      Configure regras, metas e funcionários em
+      <a routerLink="/configuracoes/motor-escala">Configurações → Motor de Escala</a>
+      antes de gerar.
+    }
+  </p>
+
+  <div class="ops-secondary-actions">
     @if (scheduleData()?.scheduleMonth?.status === 'GENERATED') {
-      <p-button
-        label="Gerar Escala APAO"
-        icon="pi pi-users"
-        severity="secondary"
-        [loading]="generatingApao()"
-        (onClick)="generateApao()"
-      />
       <p-button
         label="Gerar Voos"
         icon="pi pi-send"
@@ -81,6 +101,51 @@
   }
   @if (publishBlocked(); as blocked) {
     <p-message class="mt-3" severity="error" [text]="blocked.message" />
+  }
+  @if (generationBlocked(); as blocked) {
+    <div class="generation-blocked-panel mt-3">
+      <div class="generation-blocked-panel__header">
+        <span>
+          <i class="pi pi-exclamation-triangle"></i>
+          Geração não foi salva — {{ blocked.criticalCount }} inconsistência(s) crítica(s)
+        </span>
+        <p-button
+          icon="pi pi-times"
+          severity="secondary"
+          [text]="true"
+          size="small"
+          (onClick)="clearGenerationBlocked()"
+          title="Fechar"
+        />
+      </div>
+      <p class="generation-blocked-panel__hint">
+        Corrija os itens abaixo (ou ajuste regras / pré-alocações / motor) e gere novamente.
+      </p>
+      <p-table
+        [value]="blocked.issues"
+        styleClass="generation-blocked-table"
+        [tableStyle]="{ 'min-width': '100%' }"
+      >
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Regra</th>
+            <th>Data</th>
+            <th>Funcionário</th>
+            <th>Detalhe</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-issue>
+          <tr>
+            <td>
+              <p-tag severity="danger" [value]="generationRuleLabel(issue.ruleCode)" />
+            </td>
+            <td>{{ issue.date || '—' }}</td>
+            <td>{{ issue.employee || '—' }}</td>
+            <td>{{ issue.detail || issue.message }}</td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
   }
 </p-card>
 

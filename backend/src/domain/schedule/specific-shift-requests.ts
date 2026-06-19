@@ -1,5 +1,4 @@
 import { weekday } from "../rules/dates.js";
-import type { ShiftCode } from "./assignment-eligibility.js";
 import type { SpecificShiftDayPreferenceRow, SpecificShiftRequest } from "./generation-types.js";
 
 /** Expande preferências de dia específico para alocações concretas no mês. */
@@ -15,7 +14,7 @@ export function expandSpecificShiftRequests(
     if (row.year != null && row.year !== year) continue;
     if (row.month != null && row.month !== month) continue;
 
-    const code = row.shiftCode.toUpperCase() as ShiftCode;
+    const code = row.shiftCode.toUpperCase();
 
     if (row.dayOfMonth != null) {
       const date = `${year}-${String(month).padStart(2, "0")}-${String(row.dayOfMonth).padStart(2, "0")}`;

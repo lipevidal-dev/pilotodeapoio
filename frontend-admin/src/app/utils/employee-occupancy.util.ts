@@ -11,6 +11,7 @@ import {
   mapCellToCalendarDisplay,
   resolveScheduleCell,
   sanitizeAssignmentForGrid,
+  type OperationalLabelSource,
 } from './schedule-cell.mapper';
 
 function isCadastroPreallocDisplayLabel(label: string): boolean {
@@ -76,7 +77,7 @@ function monthDateKey(year: number, month: number, day: number): string {
 
 function occupancyTitle(
   cell: ScheduleCellData,
-  meta?: { source?: OperationalCadastroRow['source']; notes?: string | null },
+  meta?: { source?: OperationalCadastroRow['source'] },
 ): string {
   const base = cell.title ?? cell.display;
   const parts = [base];
@@ -88,9 +89,6 @@ function occupancyTitle(
       pre_allocation: 'Pré-alocação',
     };
     parts.push(`Origem: ${sourceLabel[meta.source]}`);
-  }
-  if (meta?.notes) {
-    parts.push(meta.notes);
   }
   return parts.join(' — ');
 }
@@ -112,16 +110,15 @@ export function buildEmployeeOccupancyMap(input: BuildEmployeeOccupancyInput): D
 
   const operationalByDate = new Map<
     string,
-    { labels: string[]; source?: OperationalCadastroRow['source']; notes?: string | null }
+    { sources: OperationalLabelSource[]; source?: OperationalCadastroRow['source'] }
   >();
 
   for (const row of schedule?.operationalCadastros ?? []) {
     if (row.employeeId !== employeeId) continue;
     const key = apiDateKey(row.date);
-    const bucket = operationalByDate.get(key) ?? { labels: [] };
-    bucket.labels.push(row.label);
+    const bucket = operationalByDate.get(key) ?? { sources: [] };
+    bucket.sources.push({ label: row.label, notes: row.notes ?? null });
     bucket.source = row.source;
-    if (row.notes) bucket.notes = row.notes;
     operationalByDate.set(key, bucket);
   }
 
@@ -137,8 +134,8 @@ export function buildEmployeeOccupancyMap(input: BuildEmployeeOccupancyInput): D
       continue;
     }
     const key = apiDateKey(row.date);
-    const bucket = operationalByDate.get(key) ?? { labels: [] };
-    bucket.labels.push(row.label);
+    const bucket = operationalByDate.get(key) ?? { sources: [] };
+    bucket.sources.push({ label: row.label, notes: row.notes ?? null });
     bucket.source = bucket.source ?? 'pre_allocation';
     operationalByDate.set(key, bucket);
   }
@@ -148,7 +145,7 @@ export function buildEmployeeOccupancyMap(input: BuildEmployeeOccupancyInput): D
     const bucket = operationalByDate.get(key);
     const cell = resolveScheduleCell(
       sanitizeAssignmentForGrid(assignmentByDate.get(key)),
-      bucket?.labels ?? [],
+      bucket?.sources ?? [],
     );
     if (cell.kind === 'empty' || !cell.display) continue;
 

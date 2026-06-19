@@ -48,7 +48,8 @@ import { mergeDates } from '../../utils/date-range-utils';
 
 import { formatSeniorityLabel, sortEmployeesBySeniority } from '../../utils/employee-sort.util';
 
-import type { CreateEmployeePayload, Employee, JobRole, Shift, SpecificShiftRequestPayload } from '../../models/api.models';
+import type { CreateEmployeePayload, Employee, JobRole, Shift } from '../../models/api.models';
+import { asRateioShiftCode, isRateioShiftCode, RATEIO_SHIFT_ORDER, type RateioShiftCode } from '../../utils/shift-code.util';
 
 
 
@@ -154,9 +155,22 @@ export class EmployeesComponent implements OnInit {
 
   formRestrictedShiftIds: string[] = [];
 
-  formPreferredShiftIds: string[] = [];
+  /** Preferência principal (T6/T7/T8/T9) — persiste em preferredShiftIds. */
+  formPrimaryPreferredShiftId: string | null = null;
 
-  formSpecificShiftRequests: SpecificShiftRequestPayload[] = [];
+  formIsFcf = false;
+
+  formFcfSchedule: Array<{ shiftId: string; weekday: number }> = [];
+
+  readonly fcfWeekdayOptions = [
+    { label: 'Segunda', value: 1 },
+    { label: 'Terça', value: 2 },
+    { label: 'Quarta', value: 3 },
+    { label: 'Quinta', value: 4 },
+    { label: 'Sexta', value: 5 },
+    { label: 'Sábado', value: 6 },
+    { label: 'Domingo', value: 0 },
+  ];
 
   readonly weekdayOptions = [
     { label: 'Domingo', value: 0 },
@@ -226,9 +240,32 @@ export class EmployeesComponent implements OnInit {
 
         value: s.id,
 
+        code: s.code.toUpperCase(),
+
       })),
 
   );
+
+
+
+  readonly rateioShiftOptions = computed(() =>
+    this.shiftOptions()
+      .filter(
+        (s): s is { label: string; value: string; code: RateioShiftCode } =>
+          isRateioShiftCode(s.code),
+      )
+      .sort((a, b) => (RATEIO_SHIFT_ORDER.get(a.code) ?? 99) - (RATEIO_SHIFT_ORDER.get(b.code) ?? 99)),
+  );
+
+
+
+  readonly primaryShiftOptions = computed(() => [
+
+    { label: 'Nenhuma', value: null as string | null },
+
+    ...this.rateioShiftOptions().map((s) => ({ label: s.code, value: s.value })),
+
+  ]);
 
 
 
@@ -402,9 +439,11 @@ export class EmployeesComponent implements OnInit {
 
     this.formRestrictedShiftIds = [];
 
-    this.formPreferredShiftIds = [];
+    this.formPrimaryPreferredShiftId = null;
 
-    this.formSpecificShiftRequests = [];
+    this.formIsFcf = false;
+
+    this.formFcfSchedule = [];
 
     this.dialogVisible.set(true);
 
@@ -432,9 +471,11 @@ export class EmployeesComponent implements OnInit {
 
     this.formRestrictedShiftIds = [];
 
-    this.formPreferredShiftIds = [];
+    this.formPrimaryPreferredShiftId = null;
 
-    this.formSpecificShiftRequests = [];
+    this.formIsFcf = false;
+
+    this.formFcfSchedule = [];
 
     this.dialogVisible.set(true);
 
@@ -448,13 +489,18 @@ export class EmployeesComponent implements OnInit {
 
         this.formRestrictedShiftIds = [...(detail.restrictedShiftIds ?? [])];
 
-        this.formPreferredShiftIds = [...(detail.preferredShiftIds ?? [])];
+        this.formPrimaryPreferredShiftId = this.resolvePrimaryPreferredShiftId(
 
-        this.formSpecificShiftRequests = (detail.specificShiftRequests ?? []).map((r) => ({
+          detail.preferredShiftIds ?? [],
+
+          detail.preferredShifts ?? [],
+
+        );
+
+        this.formIsFcf = detail.isFcf ?? false;
+
+        this.formFcfSchedule = (detail.fcfSchedule ?? []).map((r) => ({
           shiftId: r.shiftId,
-          year: r.year,
-          month: r.month,
-          dayOfMonth: r.dayOfMonth,
           weekday: r.weekday,
         }));
 
@@ -520,11 +566,11 @@ export class EmployeesComponent implements OnInit {
 
   allShiftsRestricted(): boolean {
 
-    const opts = this.shiftOptions();
+    const opts = this.rateioShiftOptions();
 
     if (opts.length === 0) return false;
 
-    return this.formRestrictedShiftIds.length >= opts.length;
+    return opts.every((o) => this.formRestrictedShiftIds.includes(o.value));
 
   }
 
@@ -532,37 +578,99 @@ export class EmployeesComponent implements OnInit {
 
   restrictedPreferredConflict(): boolean {
 
-    const restricted = new Set(this.formRestrictedShiftIds);
+    if (!this.formPrimaryPreferredShiftId) return false;
 
-    return this.formPreferredShiftIds.some((id) => restricted.has(id));
+    return this.formRestrictedShiftIds.includes(this.formPrimaryPreferredShiftId);
 
   }
 
-  addSpecificShiftRow(): void {
+
+
+  isShiftAvoided(shiftId: string): boolean {
+
+    return this.formRestrictedShiftIds.includes(shiftId);
+
+  }
+
+
+
+  setShiftAvoided(shiftId: string, avoided: boolean): void {
+
+    if (avoided) {
+
+      if (!this.formRestrictedShiftIds.includes(shiftId)) {
+
+        this.formRestrictedShiftIds = [...this.formRestrictedShiftIds, shiftId];
+
+      }
+
+      if (this.formPrimaryPreferredShiftId === shiftId) {
+
+        this.formPrimaryPreferredShiftId = null;
+
+      }
+
+      return;
+
+    }
+
+    this.formRestrictedShiftIds = this.formRestrictedShiftIds.filter((id) => id !== shiftId);
+
+  }
+
+
+
+  resolvePrimaryPreferredShiftId(
+
+    preferredShiftIds: string[],
+
+    preferredShifts: Array<{ id: string; code: string }>,
+
+  ): string | null {
+
+    const rateioIds = new Set(this.rateioShiftOptions().map((s) => s.value));
+
+    for (const id of preferredShiftIds) {
+
+      if (rateioIds.has(id)) return id;
+
+    }
+
+    for (const pref of preferredShifts) {
+      const code = asRateioShiftCode(pref.code);
+      if (!code) continue;
+      const match = this.rateioShiftOptions().find((s) => s.code === code);
+      if (match) return match.value;
+    }
+
+    return null;
+  }
+
+  addFcfScheduleRow(): void {
     const firstShift = this.shiftOptions()[0]?.value;
     if (!firstShift) return;
-    this.formSpecificShiftRequests = [
-      ...this.formSpecificShiftRequests,
-      { shiftId: firstShift, dayOfMonth: 1, weekday: null },
-    ];
+    const used = new Set(this.formFcfSchedule.map((r) => r.weekday));
+    const nextDay = this.fcfWeekdayOptions.find((d) => !used.has(d.value))?.value ?? 1;
+    this.formFcfSchedule = [...this.formFcfSchedule, { shiftId: firstShift, weekday: nextDay }];
   }
 
-  removeSpecificShiftRow(index: number): void {
-    this.formSpecificShiftRequests = this.formSpecificShiftRequests.filter((_, i) => i !== index);
+  removeFcfScheduleRow(index: number): void {
+    this.formFcfSchedule = this.formFcfSchedule.filter((_, i) => i !== index);
   }
 
-  setSpecificShiftMode(index: number, mode: 'day' | 'weekday'): void {
-    const row = { ...this.formSpecificShiftRequests[index] };
-    if (mode === 'day') {
-      row.dayOfMonth = row.dayOfMonth ?? 1;
-      row.weekday = null;
-    } else {
-      row.weekday = row.weekday ?? 1;
-      row.dayOfMonth = null;
+  onFcfToggle(enabled: boolean): void {
+    this.formIsFcf = enabled;
+    if (!enabled) {
+      this.formFcfSchedule = [];
+      return;
     }
-    this.formSpecificShiftRequests = this.formSpecificShiftRequests.map((r, i) =>
-      i === index ? row : r,
-    );
+    if (this.formFcfSchedule.length === 0) {
+      this.addFcfScheduleRow();
+    }
+  }
+
+  fcfWeekdayLabel(weekday: number): string {
+    return this.fcfWeekdayOptions.find((d) => d.value === weekday)?.label ?? String(weekday);
   }
 
 
@@ -623,20 +731,25 @@ export class EmployeesComponent implements OnInit {
 
     }
 
-    if (this.restrictedPreferredConflict()) {
-
-      this.messages.add({
-
-        severity: 'error',
-
-        summary: 'Validação',
-
-        detail: 'Um turno não pode estar em restrição e preferência ao mesmo tempo.',
-
-      });
-
-      return;
-
+    if (this.formIsFcf) {
+      const schedule = this.formFcfSchedule.filter((r) => r.shiftId && r.weekday != null);
+      if (schedule.length === 0) {
+        this.messages.add({
+          severity: 'warn',
+          summary: 'Validação',
+          detail: 'Adicione ao menos uma alocação FCF (dia da semana + turno desejado).',
+        });
+        return;
+      }
+      const weekdays = schedule.map((r) => r.weekday);
+      if (weekdays.length !== new Set(weekdays).size) {
+        this.messages.add({
+          severity: 'warn',
+          summary: 'Validação',
+          detail: 'Cada dia da semana pode aparecer apenas uma vez na alocação FCF.',
+        });
+        return;
+      }
     }
 
 
@@ -647,11 +760,11 @@ export class EmployeesComponent implements OnInit {
 
     const noFlightDates = [...new Set(this.formNoFlightDates.map((d) => dateToIso(d)))].sort();
 
-    const restrictedShiftIds = [...new Set(this.formRestrictedShiftIds)];
+    const isFcf = this.formIsFcf;
 
-    const preferredShiftIds = [...new Set(this.formPreferredShiftIds)];
-
-    const specificShiftRequests = this.formSpecificShiftRequests.filter((r) => r.shiftId);
+    const fcfSchedule = isFcf
+      ? this.formFcfSchedule.filter((r) => r.shiftId && r.weekday != null)
+      : [];
 
 
 
@@ -671,11 +784,9 @@ export class EmployeesComponent implements OnInit {
 
         noFlightDates,
 
-        restrictedShiftIds,
+        isFcf,
 
-        preferredShiftIds,
-
-        specificShiftRequests,
+        fcfSchedule,
 
       };
 
@@ -709,11 +820,9 @@ export class EmployeesComponent implements OnInit {
 
         noFlightDates,
 
-        restrictedShiftIds,
+        isFcf,
 
-        preferredShiftIds,
-
-        specificShiftRequests,
+        fcfSchedule,
 
       })
 

@@ -194,6 +194,8 @@
 
   [style]="{ width: 'min(720px, 96vw)' }"
 
+  [contentStyle]="{ 'max-height': '75vh', 'overflow-y': 'auto' }"
+
 >
 
   <div class="form-stack">
@@ -326,187 +328,102 @@
 
 
 
-    <section class="restriction-section">
+    <section class="restriction-section fcf-section">
 
-      <h3 class="section-title">Não alocar turno</h3>
+      <div class="flex align-items-center gap-2">
 
-      <p class="section-hint">Turnos selecionados não serão atribuídos na geração nem no reparo.</p>
+        <p-checkbox
 
-      <p-multiSelect
+          [(ngModel)]="formIsFcf"
 
-        [options]="shiftOptions()"
+          [binary]="true"
 
-        [(ngModel)]="formRestrictedShiftIds"
+          inputId="formIsFcf"
 
-        optionLabel="label"
-
-        optionValue="value"
-
-        placeholder="Selecione turnos restritos"
-
-        [filter]="true"
-
-        display="chip"
-
-        class="w-full"
-
-      />
-
-      @if (allShiftsRestricted()) {
-
-        <p-message
-
-          severity="warn"
-
-          text="Todos os turnos estão restritos — o funcionário pode ficar sem escala."
+          (ngModelChange)="onFcfToggle($event)"
 
         />
 
-      }
-
-    </section>
-
-
-
-    <section class="restriction-section">
-
-      <h3 class="section-title">Alocar em turno específico</h3>
-
-      <p class="section-hint">Turnos preferidos serão considerados pelo motor (ex.: T9 paralelo).</p>
-
-      <p-multiSelect
-
-        [options]="shiftOptions()"
-
-        [(ngModel)]="formPreferredShiftIds"
-
-        optionLabel="label"
-
-        optionValue="value"
-
-        placeholder="Selecione turnos preferidos"
-
-        [filter]="true"
-
-        display="chip"
-
-        class="w-full"
-
-      />
-
-      @if (restrictedPreferredConflict()) {
-
-        <p-message
-
-          severity="error"
-
-          text="Um turno não pode estar em restrição e preferência ao mesmo tempo."
-
-        />
-
-      }
-
-    </section>
-
-
-
-    <section class="restriction-section">
-
-      <h3 class="section-title">Alocar turno em dias específicos</h3>
-
-      <p class="section-hint">Preferência forte na geração — dia do mês ou dia da semana recorrente.</p>
-
-      <div class="restriction-toolbar">
-
-        <p-button
-
-          label="Adicionar regra"
-
-          icon="pi pi-plus"
-
-          severity="secondary"
-
-          [outlined]="true"
-
-          size="small"
-
-          (onClick)="addSpecificShiftRow()"
-
-        />
+        <label for="formIsFcf" class="section-title inline-title">Cargo FCF</label>
 
       </div>
 
-      @for (row of formSpecificShiftRequests; track $index) {
+      <p class="section-hint">
+        Preferência de alocação deste funcionário: em cada dia da semana escolhido, o motor tentará colocá-lo no turno desejado.
+        Não restringe o cargo a um único turno — nos demais dias a escala segue normalmente.
+      </p>
 
-        <div class="specific-shift-row">
 
-          <p-select
 
-            [options]="shiftOptions()"
+      @if (formIsFcf) {
 
-            [(ngModel)]="row.shiftId"
+        <div class="fcf-config">
 
-            optionLabel="label"
+          <h4 class="subsection-title">Alocações FCF</h4>
 
-            optionValue="value"
+          <div class="restriction-toolbar">
 
-            placeholder="Turno"
+            <p-button
 
-            class="specific-shift-field"
+              label="Adicionar dia"
 
-          />
+              icon="pi pi-plus"
 
-          <p-selectButton
+              severity="secondary"
 
-            [options]="[{ label: 'Dia do mês', value: 'day' }, { label: 'Dia da semana', value: 'weekday' }]"
+              [outlined]="true"
 
-            [ngModel]="row.dayOfMonth != null ? 'day' : 'weekday'"
+              size="small"
 
-            (ngModelChange)="setSpecificShiftMode($index, $event)"
-
-            optionLabel="label"
-
-            optionValue="value"
-
-          />
-
-          @if (row.dayOfMonth != null) {
-
-            <p-inputNumber
-
-              [(ngModel)]="row.dayOfMonth"
-
-              [min]="1"
-
-              [max]="31"
-
-              [useGrouping]="false"
-
-              placeholder="Dia"
+              (onClick)="addFcfScheduleRow()"
 
             />
 
-          } @else {
+          </div>
 
-            <p-select
 
-              [options]="weekdayOptions"
 
-              [(ngModel)]="row.weekday"
+          @for (row of formFcfSchedule; track $index) {
 
-              optionLabel="label"
+            <div class="fcf-schedule-row">
 
-              optionValue="value"
+              <p-select
 
-              placeholder="Dia da semana"
+                [options]="fcfWeekdayOptions"
 
-              class="specific-shift-field"
+                [(ngModel)]="row.weekday"
 
-            />
+                optionLabel="label"
+
+                optionValue="value"
+
+                placeholder="Dia da semana"
+
+                class="fcf-schedule-field"
+
+              />
+
+              <p-select
+
+                [options]="shiftOptions()"
+
+                [(ngModel)]="row.shiftId"
+
+                optionLabel="label"
+
+                optionValue="value"
+
+                placeholder="Turno desejado"
+
+                class="fcf-schedule-field"
+
+              />
+
+              <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="removeFcfScheduleRow($index)" />
+
+            </div>
 
           }
-
-          <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="removeSpecificShiftRow($index)" />
 
         </div>
 

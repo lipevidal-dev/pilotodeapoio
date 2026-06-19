@@ -52,6 +52,38 @@ const specificShiftRequestSchema = z
 
 const specificShiftRequestArray = z.array(specificShiftRequestSchema).optional().default([]);
 
+const fcfScheduleEntrySchema = z.object({
+  shiftId: z.string().uuid(),
+  weekday: z.number().int().min(0).max(6),
+});
+
+const fcfScheduleArray = z.array(fcfScheduleEntrySchema).optional().default([]);
+
+function refineFcfConfig(
+  data: { isFcf?: boolean; fcfSchedule?: Array<{ shiftId: string; weekday: number }> },
+  ctx: z.RefinementCtx,
+): void {
+  const isFcf = data.isFcf ?? false;
+  if (!isFcf) return;
+  const schedule = data.fcfSchedule ?? [];
+  if (schedule.length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Adicione ao menos uma alocação FCF (dia da semana + turno desejado)",
+      path: ["fcfSchedule"],
+    });
+    return;
+  }
+  const weekdays = schedule.map((r) => r.weekday);
+  if (weekdays.length !== new Set(weekdays).size) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Cada dia da semana pode aparecer apenas uma vez na alocação FCF",
+      path: ["fcfSchedule"],
+    });
+  }
+}
+
 
 
 function rejectDuplicateShiftIds(ids: string[], path: string) {
@@ -100,6 +132,10 @@ export const createEmployeeSchema = z
 
     specificShiftRequests: specificShiftRequestArray,
 
+    isFcf: z.boolean().optional().default(false),
+
+    fcfSchedule: fcfScheduleArray,
+
   })
 
   .refine((d) => Boolean(d.roleId || d.type), {
@@ -126,7 +162,9 @@ export const createEmployeeSchema = z
 
   })
 
-  .refine((d) => rejectRestrictedPreferredOverlap(d.restrictedShiftIds, d.preferredShiftIds));
+  .refine((d) => rejectRestrictedPreferredOverlap(d.restrictedShiftIds, d.preferredShiftIds))
+
+  .superRefine((d, ctx) => refineFcfConfig(d, ctx));
 
 
 
@@ -154,6 +192,10 @@ export const updateEmployeeSchema = z
 
     specificShiftRequests: specificShiftRequestArray.optional(),
 
+    isFcf: z.boolean().optional(),
+
+    fcfSchedule: fcfScheduleArray.optional(),
+
   })
 
   .superRefine((d, ctx) => {
@@ -177,6 +219,13 @@ export const updateEmployeeSchema = z
         ctx.addIssue({ code: "custom", message: overlap.message, path: ["preferredShiftIds"] });
       }
     }
+    refineFcfConfig(
+      {
+        isFcf: d.isFcf,
+        fcfSchedule: d.fcfSchedule,
+      },
+      ctx,
+    );
   });
 
 

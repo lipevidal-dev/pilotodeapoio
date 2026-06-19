@@ -7,7 +7,7 @@ import { EmployeesComponent } from './employees.component';
 import { buildMonthGrid } from '../../components/operational-calendar/operational-calendar.utils';
 import { environment } from '../../../environments/environment';
 
-describe('EmployeesComponent — restrições 6.3', () => {
+describe('EmployeesComponent — preferência de turno e FCF', () => {
   let fixture: ComponentFixture<EmployeesComponent>;
   let component: EmployeesComponent;
   let http: HttpTestingController;
@@ -48,15 +48,19 @@ describe('EmployeesComponent — restrições 6.3', () => {
     http.expectOne(`${base}/employees`).flush([]);
   }
 
-  it('exibe seções de restrição no popup', () => {
+  it('exibe seção FCF no popup', () => {
     flushInit();
     component.openNew();
     fixture.detectChanges();
     const html = fixture.nativeElement as HTMLElement;
     expect(html.textContent).toContain('Não alocar voos');
-    expect(html.textContent).toContain('Não alocar turno');
-    expect(html.textContent).toContain('Alocar em turno específico');
-    expect(html.querySelectorAll('p-multiSelect').length).toBe(2);
+    expect(html.textContent).not.toContain('Preferência de turno');
+    expect(html.textContent).not.toContain('Preferência principal de turno');
+    expect(html.textContent).toContain('Cargo FCF');
+    expect(html.textContent).not.toContain('Preferência por dia específico');
+    expect(html.textContent).not.toContain('Alocar em turno específico');
+    expect(html.textContent).not.toContain('Alocar turno em dias específicos');
+    expect(html.textContent).not.toContain('Não alocar turno');
   });
 
   it('calendário permite selecionar dias e resume bloqueios', () => {
@@ -77,60 +81,7 @@ describe('EmployeesComponent — restrições 6.3', () => {
     expect(component.formNoFlightDates.length).toBe(expected);
   });
 
-  it('multiselect de turnos mantém IDs selecionados', () => {
-    flushInit();
-    component.openNew();
-    component.formRestrictedShiftIds = ['s-t6', 's-t8'];
-    fixture.detectChanges();
-    expect(component.formRestrictedShiftIds).toEqual(['s-t6', 's-t8']);
-    expect(component.allShiftsRestricted()).toBe(false);
-    component.formRestrictedShiftIds = ['s-t6', 's-t7', 's-t8', 's-t9'];
-    expect(component.allShiftsRestricted()).toBe(true);
-  });
-
-  it('bloqueia conflito restrito + preferido', () => {
-    flushInit();
-    component.openNew();
-    component.formRestrictedShiftIds = ['s-t9'];
-    component.formPreferredShiftIds = ['s-t9'];
-    expect(component.restrictedPreferredConflict()).toBeTrue();
-  });
-
-  it('ao editar carrega preferredShiftIds do GET /employees/:id', () => {
-    flushInit();
-    component.openEdit({
-      id: 'emp-1',
-      name: 'Teste',
-      type: 'PAO',
-      roleId: 'role-pao',
-      cargoCode: 'PAO',
-      cargoName: 'PAO',
-      active: true,
-    });
-    http.expectOne(`${environment.apiBaseUrl}/employees/emp-1`).flush({
-      id: 'emp-1',
-      name: 'Teste',
-      type: 'PAO',
-      roleId: 'role-pao',
-      cargoCode: 'PAO',
-      cargoName: 'PAO',
-      seniorityNumber: 1,
-      seniorityLabel: '1',
-      active: true,
-      birthDate: null,
-      noFlightDates: [],
-      restrictedShiftIds: [],
-      restrictedShifts: [],
-      preferredShiftIds: ['s-t9'],
-      preferredShifts: [{ id: 's-t9', code: 'T9', name: 'Turno 9' }],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    fixture.detectChanges();
-    expect(component.formPreferredShiftIds).toEqual(['s-t9']);
-  });
-
-  it('ao editar carrega restrições do GET /employees/:id', () => {
+  it('ao editar carrega dias sem voo do GET /employees/:id', () => {
     flushInit();
     component.openEdit({
       id: 'emp-1',
@@ -160,6 +111,74 @@ describe('EmployeesComponent — restrições 6.3', () => {
     });
     fixture.detectChanges();
     expect(component.formNoFlightDates.length).toBe(2);
-    expect(component.formRestrictedShiftIds).toEqual(['s-t8']);
+  });
+
+  it('exibe configuração FCF ao marcar cargo FCF', () => {
+    flushInit();
+    component.openNew();
+    component.formIsFcf = true;
+    component.addFcfScheduleRow();
+    component.formFcfSchedule = [{ shiftId: 's-t7', weekday: 1 }, { shiftId: 's-t8', weekday: 3 }];
+    fixture.detectChanges();
+    const html = fixture.nativeElement as HTMLElement;
+    expect(html.textContent).toContain('Alocações FCF');
+    expect(html.textContent).toContain('Turno desejado');
+    expect(html.textContent).toContain('Adicionar dia');
+    expect(component.formFcfSchedule).toEqual([
+      { shiftId: 's-t7', weekday: 1 },
+      { shiftId: 's-t8', weekday: 3 },
+    ]);
+  });
+
+  it('ao editar carrega alocações FCF do GET /employees/:id', () => {
+    flushInit();
+    component.openEdit({
+      id: 'emp-1',
+      name: 'Teste',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'PAO',
+      active: true,
+    });
+    http.expectOne(`${environment.apiBaseUrl}/employees/emp-1`).flush({
+      id: 'emp-1',
+      name: 'Teste',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'PAO',
+      seniorityNumber: 1,
+      seniorityLabel: '1',
+      active: true,
+      birthDate: null,
+      noFlightDates: [],
+      restrictedShiftIds: [],
+      restrictedShifts: [],
+      preferredShiftIds: [],
+      preferredShifts: [],
+      isFcf: true,
+      fcfSchedule: [
+        { shiftId: 's-t7', weekday: 1, shiftCode: 'T7', shiftName: 'Turno 7' },
+        { shiftId: 's-t8', weekday: 3, shiftCode: 'T8', shiftName: 'Turno 8' },
+      ],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    fixture.detectChanges();
+    expect(component.formIsFcf).toBeTrue();
+    expect(component.formFcfSchedule).toEqual([
+      { shiftId: 's-t7', weekday: 1 },
+      { shiftId: 's-t8', weekday: 3 },
+    ]);
+  });
+
+  it('desmarcar FCF limpa alocações', () => {
+    flushInit();
+    component.openNew();
+    component.formIsFcf = true;
+    component.addFcfScheduleRow();
+    component.onFcfToggle(false);
+    expect(component.formFcfSchedule).toEqual([]);
   });
 });

@@ -69,6 +69,7 @@ describe('buildManualAllocationOptions', () => {
     const keys = options.map((o) => o.key);
 
     expect(keys).toContain('FOLGA');
+    expect(keys).toContain('FS');
     expect(keys).toContain('FP');
     expect(keys).toContain('VOO');
     expect(keys).toContain('CURSO');
@@ -84,6 +85,7 @@ describe('buildManualAllocationOptions', () => {
     const keys = options.map((o) => o.key);
 
     expect(keys).toContain('FOLGA');
+    expect(keys).toContain('FS');
     expect(keys).toContain('FP');
     expect(keys).toContain('ND');
     expect(keys.includes('VOO' as ManualAllocationType)).toBe(false);

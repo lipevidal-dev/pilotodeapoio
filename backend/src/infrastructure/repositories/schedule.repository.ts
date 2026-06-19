@@ -9,10 +9,8 @@ import {
   mergeCrossMonthAllocations,
   type CrossMonthHistory,
 } from "../../domain/schedule/cross-month-history.js";
-import {
-  CLEAR_GENERATED_LABELS,
-  REGENERATION_CLEAR_LABELS,
-} from "../../domain/schedule/operational-labels.js";
+import { listClearablePreAllocationLabels } from "../../domain/schedule/clear-generated-policy.js";
+import { REGENERATION_CLEAR_LABELS } from "../../domain/schedule/operational-labels.js";
 import { iterDays, addDays } from "../../domain/rules/dates.js";
 import { isoDateKey, toDbDate } from "../../domain/rules/date-keys.js";
 import { prisma } from "../database/prisma-client.js";
@@ -78,6 +76,7 @@ export class ScheduleRepository {
       where: {
         scheduleMonthId,
         label: { in: [...REGENERATION_CLEAR_LABELS] },
+        NOT: { notes: { startsWith: "cross-month:" } },
       },
     });
   }
@@ -106,20 +105,20 @@ export class ScheduleRepository {
     const start = toDbDate(days[0]!);
     const end = toDbDate(days[days.length - 1]!);
 
+    // Somente pré-alocações geradas pelo motor — cadastros manuais (FP, sim, curso, etc.) permanecem
     await prisma.preAllocation.deleteMany({
       where: {
         scheduleMonthId,
-        OR: [
-          { label: { in: [...CLEAR_GENERATED_LABELS] } },
-          { label: { contains: "VOO", mode: "insensitive" } },
-          { notes: "escala-manual" },
-        ],
+        label: { in: [...listClearablePreAllocationLabels()] },
       },
     });
 
-    // Voos do mês (cadastro + escala) — férias e FP vêm de outras tabelas
+    // Voos gerados automaticamente — voos manuais (cadastro operacional) permanecem
     await prisma.flightAssignment.deleteMany({
-      where: { date: { gte: start, lte: end } },
+      where: {
+        date: { gte: start, lte: end },
+        source: "GENERATOR",
+      },
     });
 
     await prisma.scheduleAssignment.deleteMany({ where: { scheduleMonthId } });
@@ -316,6 +315,39 @@ export class ScheduleRepository {
         date: v.date ?? null,
         employeeId: v.employeeId ?? null,
       })),
+    });
+  }
+
+  /** Persiste pré-alocações fixas de continuidade T8/T8/ND no mês seguinte. */
+  async saveCrossMonthContinuations(
+    fromYear: number,
+    fromMonth: number,
+    rows: Array<{ employeeUuid: string; date: string; label: string }>,
+  ) {
+    if (rows.length === 0) return;
+
+    const nextMonth = fromMonth === 12 ? 1 : fromMonth + 1;
+    const nextYear = fromMonth === 12 ? fromYear + 1 : fromYear;
+    const marker = `cross-month:${fromYear}-${fromMonth}`;
+
+    const monthRecord = await this.ensureMonth(nextYear, nextMonth);
+
+    await prisma.preAllocation.deleteMany({
+      where: {
+        scheduleMonthId: monthRecord.id,
+        notes: marker,
+      },
+    });
+
+    await prisma.preAllocation.createMany({
+      data: rows.map((r) => ({
+        scheduleMonthId: monthRecord.id,
+        employeeId: r.employeeUuid,
+        date: toDbDate(r.date),
+        label: r.label,
+        notes: marker,
+      })),
+      skipDuplicates: true,
     });
   }
 }

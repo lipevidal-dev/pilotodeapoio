@@ -101,6 +101,8 @@ model Employee {
   shiftRestrictions   EmployeeShiftRestriction[]
   preferredShifts     EmployeePreferredShift[]
   specificShiftRequests EmployeeSpecificShiftRequest[]
+  isFcf               Boolean              @default(false) @map("is_fcf")
+  fcfSchedule         Json                 @default("[]") @map("fcf_schedule")
 
   @@unique([type, seniorityNumber])
 }
@@ -299,4 +301,12 @@ model FlightAssignment {
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([employeeId, date])
+}
+
+model SystemConfig {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_config")
 }

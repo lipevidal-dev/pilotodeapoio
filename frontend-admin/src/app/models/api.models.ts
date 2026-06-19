@@ -33,6 +33,13 @@ export interface SpecificShiftRequestSummary extends SpecificShiftRequestPayload
   shiftName: string;
 }
 
+export interface FcfScheduleEntry {
+  shiftId: string;
+  weekday: number;
+  shiftCode?: string;
+  shiftName?: string;
+}
+
 export interface Employee {
   id: string;
   name: string;
@@ -51,6 +58,8 @@ export interface Employee {
   preferredShiftIds?: string[];
   preferredShifts?: PreferredShiftSummary[];
   specificShiftRequests?: SpecificShiftRequestSummary[];
+  isFcf?: boolean;
+  fcfSchedule?: FcfScheduleEntry[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -64,7 +73,8 @@ export interface CreateEmployeePayload {
   noFlightDates?: string[];
   restrictedShiftIds?: string[];
   preferredShiftIds?: string[];
-  specificShiftRequests?: SpecificShiftRequestPayload[];
+  isFcf?: boolean;
+  fcfSchedule?: FcfScheduleEntry[];
 }
 
 export interface UpdateEmployeePayload {
@@ -76,7 +86,8 @@ export interface UpdateEmployeePayload {
   noFlightDates?: string[];
   restrictedShiftIds?: string[];
   preferredShiftIds?: string[];
-  specificShiftRequests?: SpecificShiftRequestPayload[];
+  isFcf?: boolean;
+  fcfSchedule?: FcfScheduleEntry[];
 }
 
 export interface JobRole {
@@ -331,6 +342,7 @@ export type ManualAllocationType =
   | 'T8_BLOCK'
   | 'ND'
   | 'FOLGA'
+  | 'FS'
   | 'FP'
   | 'VOO'
   | 'CURSO'
@@ -641,6 +653,94 @@ export interface DemandPlanningReport {
   unitCoverageAfter: number;
   stepNotes: string[];
   warnings?: Array<{ type: string; detail: string; employee?: string }>;
+}
+
+export type NextMotorRuleCategory =
+  | 'bloqueios'
+  | 'preferencias'
+  | 'cobertura'
+  | 'pao'
+  | 'apao'
+  | 'validacao';
+
+export interface NextMotorRuleRow {
+  id: string;
+  label: string;
+  description: string;
+  category: NextMotorRuleCategory;
+  enabled: boolean;
+  locked: boolean;
+}
+
+export interface NextMotorParamRow {
+  id: string;
+  label: string;
+  description: string;
+  category: NextMotorRuleCategory;
+  ruleId: string;
+  value: number;
+  min: number;
+  max: number;
+  locked: boolean;
+}
+
+export interface PaoShiftParamFieldRow {
+  id: string;
+  kind: string;
+  label: string;
+  description: string;
+  ruleId: string;
+  value: number;
+  min: number;
+  max: number;
+  locked: boolean;
+}
+
+export interface PaoShiftRuleFieldRow {
+  id: string;
+  globalRuleId: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  locked: boolean;
+}
+
+export interface PaoShiftParamsRow {
+  shiftCode: string;
+  shiftName: string;
+  fields: PaoShiftParamFieldRow[];
+  rules: PaoShiftRuleFieldRow[];
+}
+
+export interface EmployeeMotorPref {
+  preferredShiftId: string | null;
+  restrictedShiftIds: string[];
+}
+
+export interface NextMotorConfigResponse {
+  motorId: string;
+  motorLabel: string;
+  ready: boolean;
+  enabledCount: number;
+  totalCount: number;
+  scopeEmployeeIds: string[] | null;
+  scopeMode: 'all' | 'selected';
+  scopeSelectedCount: number | null;
+  employeePrefs: Record<string, EmployeeMotorPref>;
+  /** Turnos rateio que o motor pode alocar na geração automática. */
+  allowedShiftCodes: string[];
+  categories: Array<{ id: NextMotorRuleCategory; label: string }>;
+  rules: NextMotorRuleRow[];
+  params: NextMotorParamRow[];
+  paoShiftParams: PaoShiftParamsRow[];
+}
+
+export interface UpdateNextMotorRulesPayload {
+  enabled?: Record<string, boolean>;
+  params?: Record<string, number>;
+  scopeEmployeeIds?: string[] | null;
+  employeePrefs?: Record<string, EmployeeMotorPref>;
+  allowedShiftCodes?: string[] | null;
 }
 
 export interface StepGenerationOptions {

@@ -31,6 +31,7 @@ export interface CanWorkOptions {
   parallelShiftCodes?: Set<string>;
   roleByEmployeeId: Map<number, string>;
   maxMonthlyWork?: number;
+  maxConsecutiveWork?: number;
   coverageEmergency?: boolean;
   /** Edição manual: operador pode alocar APAO sem PAO cobrindo o intervalo. */
   skipApaoPaoCoverageCheck?: boolean;
@@ -73,6 +74,7 @@ export function canWork(
     skipApaoPaoCoverageCheck = false,
     skipApaoOverlapCheck = false,
     skipSimultaneousStationsCheck = false,
+    maxConsecutiveWork,
   } = options;
 
   const empId = employee.id;
@@ -84,15 +86,23 @@ export function canWork(
       return { ok: false, reason: `PAO não pode assumir turno de APAO (${shiftCode})` };
     }
     const normalizedCode = shiftCode.toUpperCase();
-    const isCoverageShift = ["T6", "T7", "T8"].includes(normalizedCode);
-    const isParallelShift = parallelShiftCodes?.has(normalizedCode) ?? false;
-    if (!isCoverageShift && !isParallelShift) {
-      return { ok: false, reason: `PAO só pode assumir T6, T7, T8 ou turno paralelo autorizado (proposto: ${shiftCode})` };
+    const isPrimaryPaoShift = ["T6", "T7", "T8"].includes(normalizedCode);
+    const isT9 = normalizedCode === "T9" || normalizedCode === "T09";
+    const isLegacyParallelShift =
+      (parallelShiftCodes?.has(normalizedCode) ?? false) && !isT9;
+    if (!isPrimaryPaoShift && !isT9 && !isLegacyParallelShift) {
+      return {
+        ok: false,
+        reason: `PAO só pode assumir T6, T7, T8 ou T9 (proposto: ${shiftCode})`,
+      };
     }
-    if (isParallelShift) {
+    if (isT9 || isLegacyParallelShift) {
       const preferred = preferredShifts?.get(empId);
       if (!preferred?.has(normalizedCode)) {
-        return { ok: false, reason: `turno ${shiftCode} requer preferência de alocação no cadastro` };
+        return {
+          ok: false,
+          reason: `turno ${shiftCode} requer preferência de alocação no cadastro do funcionário`,
+        };
       }
     }
   }
@@ -195,13 +205,15 @@ export function canWork(
   }
 
   if (isApaoShift && cargo === "APAO") {
-    if (consecutiveWorkCount(empId, workDay, planned, options.continuityBlocked) >= 6) {
+    const maxConsec = maxConsecutiveWork ?? 6;
+    if (consecutiveWorkCount(empId, workDay, planned, options.continuityBlocked) >= maxConsec) {
       return { ok: false, reason: "APAO precisa folgar após 6 dias consecutivos" };
     }
   }
 
   if (cargo !== "PAO FCF" && !coverageEmergency) {
-    if (consecutiveWorkCount(empId, workDay, planned, options.continuityBlocked) >= 6) {
+    const maxConsec = maxConsecutiveWork ?? 6;
+    if (consecutiveWorkCount(empId, workDay, planned, options.continuityBlocked) >= maxConsec) {
       return { ok: false, reason: "mais de 6 dias consecutivos" };
     }
     if (shiftCode === "T8" && t8PreviousCount(empId, workDay, planned) >= 2) {

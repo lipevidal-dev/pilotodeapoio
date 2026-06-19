@@ -26,9 +26,12 @@ import {
 
 import {
   EmployeeDuplicatePreferredShiftError,
+  EmployeeFcfConfigInvalidError,
+  EmployeeFcfShiftNotFoundError,
   EmployeePreferredShiftNotFoundError,
   EmployeeShiftPreferenceConflictError,
 } from "../errors/employee.errors.js";
+import { normalizeFcfSchedule, parseFcfScheduleJson, validateFcfConfig, type FcfScheduleEntry } from "../../domain/employee/fcf-config.js";
 
 import { ShiftRepository } from "../../infrastructure/repositories/shift.repository.js";
 
@@ -63,6 +66,10 @@ type RestrictionFields = {
     dayOfMonth?: number | null;
     weekday?: number | null;
   }>;
+
+  isFcf?: boolean;
+
+  fcfSchedule?: Parameters<typeof normalizeFcfSchedule>[0];
 
 };
 
@@ -110,7 +117,19 @@ export class EmployeeUseCase {
 
     const row = await this.repo.findById(id);
 
-    return row ? employeeToApi(row) : null;
+    if (!row) return null;
+
+    let shiftById: Map<string, import("@prisma/client").Shift> | undefined;
+
+    if (row.isFcf) {
+
+      const shifts = await this.shiftRepo.findAll(false);
+
+      shiftById = new Map(shifts.map((s) => [s.id, s]));
+
+    }
+
+    return employeeToApi(row, shiftById);
 
   }
 
@@ -220,6 +239,42 @@ export class EmployeeUseCase {
 
 
 
+  private async validateFcfConfig(
+    isFcf: boolean,
+    fcfSchedule: Parameters<typeof normalizeFcfSchedule>[0] | undefined,
+  ): Promise<{ isFcf: boolean; fcfSchedule: FcfScheduleEntry[] }> {
+    const normalized = normalizeFcfSchedule(fcfSchedule ?? []);
+    const msg = validateFcfConfig({ isFcf, fcfSchedule: normalized });
+    if (msg) throw new EmployeeFcfConfigInvalidError(msg);
+    if (!isFcf) {
+      return { isFcf: false, fcfSchedule: [] };
+    }
+    const shifts = await this.shiftRepo.findAll(false);
+    const activeIds = new Set(shifts.filter((s) => s.active).map((s) => s.id));
+    for (const entry of normalized) {
+      if (!activeIds.has(entry.shiftId)) {
+        throw new EmployeeFcfShiftNotFoundError(entry.shiftId);
+      }
+    }
+    return { isFcf: true, fcfSchedule: normalized };
+  }
+
+  private resolveFcfFields(
+    data: RestrictionFields,
+    current?: { isFcf: boolean; fcfSchedule: FcfScheduleEntry[] },
+  ): { isFcf: boolean; fcfSchedule: FcfScheduleEntry[] } | undefined {
+    if (data.isFcf === undefined && data.fcfSchedule === undefined) {
+      return undefined;
+    }
+    const isFcf = data.isFcf ?? current?.isFcf ?? false;
+    const fcfSchedule = isFcf
+      ? normalizeFcfSchedule(data.fcfSchedule ?? parseFcfScheduleJson(current?.fcfSchedule ?? []))
+      : [];
+    return { isFcf, fcfSchedule };
+  }
+
+
+
   async create(
 
     data: {
@@ -244,6 +299,8 @@ export class EmployeeUseCase {
 
     await this.validateShiftPreferences(data.restrictedShiftIds, data.preferredShiftIds);
 
+    const fcf = await this.validateFcfConfig(data.isFcf ?? false, data.fcfSchedule);
+
     const row = await this.repo.create({
 
       name: data.name,
@@ -265,6 +322,10 @@ export class EmployeeUseCase {
       preferredShiftIds: data.preferredShiftIds,
 
       specificShiftRequests: data.specificShiftRequests,
+
+      isFcf: fcf.isFcf,
+
+      fcfSchedule: fcf.fcfSchedule,
 
     });
 
@@ -315,6 +376,16 @@ export class EmployeeUseCase {
         : undefined,
     );
 
+    const fcfResolved = this.resolveFcfFields(data, currentDetail
+      ? {
+          isFcf: currentDetail.isFcf,
+          fcfSchedule: parseFcfScheduleJson(currentDetail.fcfSchedule),
+        }
+      : undefined);
+    const fcf = fcfResolved
+      ? await this.validateFcfConfig(fcfResolved.isFcf, fcfResolved.fcfSchedule)
+      : undefined;
+
     const resolved = await this.resolveRoleForUpdate(data.roleId, data.type, false);
 
     const patch: Parameters<EmployeeRepository["update"]>[1] = {};
@@ -334,6 +405,11 @@ export class EmployeeUseCase {
     if (data.preferredShiftIds !== undefined) patch.preferredShiftIds = data.preferredShiftIds;
 
     if (data.specificShiftRequests !== undefined) patch.specificShiftRequests = data.specificShiftRequests;
+
+    if (fcf) {
+      patch.isFcf = fcf.isFcf;
+      patch.fcfSchedule = fcf.fcfSchedule;
+    }
 
     if (resolved) {
 

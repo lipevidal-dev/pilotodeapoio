@@ -24,3 +24,21 @@ export class EmployeeDuplicatePreferredShiftError extends Error {
     this.name = "EmployeeDuplicatePreferredShiftError";
   }
 }
+
+export class EmployeeFcfConfigInvalidError extends Error {
+  readonly code = "EMPLOYEE_FCF_CONFIG_INVALID";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "EmployeeFcfConfigInvalidError";
+  }
+}
+
+export class EmployeeFcfShiftNotFoundError extends Error {
+  readonly code = "EMPLOYEE_FCF_SHIFT_NOT_FOUND";
+
+  constructor(shiftId: string) {
+    super(`Turno FCF não encontrado ou inativo: ${shiftId}`);
+    this.name = "EmployeeFcfShiftNotFoundError";
+  }
+}

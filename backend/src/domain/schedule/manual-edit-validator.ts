@@ -473,14 +473,19 @@ export function validateManualSet(
         message: `Conflito: funcionário possui restrição para ${type}.`,
       });
     }
-    if (v.parallelShiftCodes.has(type)) {
+    const upperType = type.toUpperCase();
+    const isT9 = upperType === "T9" || upperType === "T09";
+    const isLegacyParallel = v.parallelShiftCodes.has(type) && !isT9;
+    if (isT9 || isLegacyParallel) {
       const pref = v.preferredShifts.get(ref.employeeId);
       if (!pref?.has(type)) {
         conflicts.push({
-          code: "PARALLEL_SHIFT_NOT_PREFERRED",
+          code: isT9 ? "T9_NOT_PREFERRED" : "PARALLEL_SHIFT_NOT_PREFERRED",
           message: `Conflito: funcionário não possui preferência para ${type}.`,
         });
       }
+    }
+    if (isLegacyParallel) {
       for (const [key, occ] of v.occupancy) {
         if (!key.endsWith(`|${ref.date}`)) continue;
         const [uuid] = key.split("|") as [string, string];
@@ -568,6 +573,7 @@ export function validateManualMove(
     const n = normalizeOperationalLabel(src.preallocLabel).toUpperCase();
     if (n === "ND") moveType = "ND";
     else if (n.includes("FOLGA PEDIDA")) moveType = "FP";
+    else if (n === "FOLGA SOCIAL" || n === "FS") moveType = "FS";
     else if (n === "FOLGA") moveType = "FOLGA";
     else if (n === "SIMULADOR") moveType = "SIMULADOR";
     else if (n === "CURSO" || n === "CURSO ONLINE") moveType = "CURSO";

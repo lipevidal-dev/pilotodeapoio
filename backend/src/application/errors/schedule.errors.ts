@@ -67,6 +67,16 @@ export class SchedulePersistenceValidationError extends Error {
   }
 }
 
+export class NextMotorScopeEmptyError extends Error {
+  readonly code = "NEXT_MOTOR_SCOPE_EMPTY";
+  constructor() {
+    super(
+      "Escopo do motor vazio — selecione ao menos um funcionário em Configurações → Motor de Escala.",
+    );
+    this.name = "NextMotorScopeEmptyError";
+  }
+}
+
 export class PublishBlockedCriticalViolationsError extends Error {
   readonly code = "PUBLISH_BLOCKED_CRITICAL_VIOLATIONS";
   constructor(readonly criticalViolations: CriticalViolationDto[]) {

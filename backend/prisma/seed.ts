@@ -12,7 +12,7 @@ const DEFAULT_ROLES = [
     id: "00000000-0000-4000-8000-000000000001",
     name: "Piloto de Apoio Operacional",
     code: "PAO",
-    description: "Cobertura operacional PAO (T6/T7/T8)",
+    description: "Cobertura operacional PAO (T6/T7/T8/T9)",
     displayOrder: 1,
   },
   {
@@ -46,7 +46,7 @@ async function main() {
     { code: "T6", name: "Turno 6 PAO", startTime: "06:00", endTime: "14:00", durationHours: 8, employeeTypeAllowed: EmployeeTypeAllowed.PAO, displayOrder: 1, mandatoryCoverage: true, requiresT8PairNd: false, coverageType: "REQUIRED" as const },
     { code: "T7", name: "Turno 7 PAO", startTime: "14:00", endTime: "22:00", durationHours: 8, employeeTypeAllowed: EmployeeTypeAllowed.PAO, displayOrder: 2, mandatoryCoverage: true, requiresT8PairNd: false, coverageType: "REQUIRED" as const },
     { code: "T8", name: "Turno 8 PAO", startTime: "22:00", endTime: "06:00", durationHours: 8, employeeTypeAllowed: EmployeeTypeAllowed.PAO, displayOrder: 3, mandatoryCoverage: true, requiresT8PairNd: true, coverageType: "REQUIRED" as const },
-    { code: "T9", name: "Turno 9 PAO Paralelo", startTime: "10:00", endTime: "18:00", durationHours: 8, employeeTypeAllowed: EmployeeTypeAllowed.PAO, displayOrder: 8, mandatoryCoverage: false, requiresT8PairNd: false, coverageType: "PARALLEL" as const },
+    { code: "T9", name: "Turno 9 PAO", startTime: "10:00", endTime: "18:00", durationHours: 8, employeeTypeAllowed: EmployeeTypeAllowed.PAO, displayOrder: 4, mandatoryCoverage: true, requiresT8PairNd: false, coverageType: "REQUIRED" as const },
     { code: "T1", name: "Turno 1 APAO", startTime: "00:00", endTime: "06:00", durationHours: 6, employeeTypeAllowed: EmployeeTypeAllowed.APAO, displayOrder: 4, mandatoryCoverage: false, requiresT8PairNd: false, coverageType: "REQUIRED" as const },
     { code: "T2", name: "Turno 2 APAO", startTime: "06:00", endTime: "12:00", durationHours: 6, employeeTypeAllowed: EmployeeTypeAllowed.APAO, displayOrder: 5, mandatoryCoverage: false, requiresT8PairNd: false, coverageType: "REQUIRED" as const },
     { code: "T3", name: "Turno 3 APAO", startTime: "12:00", endTime: "18:00", durationHours: 6, employeeTypeAllowed: EmployeeTypeAllowed.APAO, displayOrder: 6, mandatoryCoverage: false, requiresT8PairNd: false, coverageType: "REQUIRED" as const },

@@ -1,6 +1,7 @@
 import type { Employee, EmployeeFlightRestriction, EmployeePreferredShift, EmployeeShiftRestriction, Role, Shift } from "@prisma/client";
 
 import { formatSeniorityLabel } from "../../domain/employee/seniority.js";
+import { parseFcfScheduleJson } from "../../domain/employee/fcf-config.js";
 
 import { isoDateKey } from "../../domain/rules/date-keys.js";
 
@@ -32,6 +33,13 @@ export interface SpecificShiftRequestSummary {
   month: number | null;
   dayOfMonth: number | null;
   weekday: number | null;
+}
+
+export interface FcfScheduleSummary {
+  shiftId: string;
+  weekday: number;
+  shiftCode?: string;
+  shiftName?: string;
 }
 
 export interface EmployeeApiRecord {
@@ -70,6 +78,10 @@ export interface EmployeeApiRecord {
 
   specificShiftRequests: SpecificShiftRequestSummary[];
 
+  isFcf: boolean;
+
+  fcfSchedule: FcfScheduleSummary[];
+
   createdAt: string;
 
   updatedAt: string;
@@ -104,7 +116,7 @@ type EmployeeWithRole = Employee & {
 
 
 
-export function employeeToApi(row: EmployeeWithRole): EmployeeApiRecord {
+export function employeeToApi(row: EmployeeWithRole, shiftById?: Map<string, Shift>): EmployeeApiRecord {
 
   const cargoCode = row.role?.code ?? row.type;
 
@@ -176,6 +188,15 @@ export function employeeToApi(row: EmployeeWithRole): EmployeeApiRecord {
       month: r.month,
       dayOfMonth: r.dayOfMonth,
       weekday: r.weekday,
+    })),
+
+    isFcf: row.isFcf ?? false,
+
+    fcfSchedule: parseFcfScheduleJson(row.fcfSchedule).map((entry) => ({
+      shiftId: entry.shiftId,
+      weekday: entry.weekday,
+      shiftCode: shiftById?.get(entry.shiftId)?.code,
+      shiftName: shiftById?.get(entry.shiftId)?.name,
     })),
 
     createdAt: row.createdAt.toISOString(),

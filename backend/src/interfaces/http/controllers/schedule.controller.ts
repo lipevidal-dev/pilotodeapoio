@@ -8,6 +8,7 @@ import { generateApaoScheduleUseCase } from "../../../application/use-cases/gene
 import { publishScheduleUseCase } from "../../../application/use-cases/publish-schedule.use-case.js";
 import { clearGeneratedScheduleUseCase } from "../../../application/use-cases/clear-generated-schedule.use-case.js";
 import {
+  NextMotorScopeEmptyError,
   PublishedScheduleCannotBeClearedError,
   PublishedScheduleCannotRegenerateError,
   PublishBlockedCriticalViolationsError,
@@ -15,6 +16,7 @@ import {
   ScheduleMonthNotFoundError,
   ScheduleNotGeneratedError,
   ScheduleNotPublishedError,
+  SchedulePersistenceValidationError,
 } from "../../../application/errors/schedule.errors.js";
 import { dtoToScheduleContext } from "../../../infrastructure/mappers/schedule-context.mapper.js";
 import {
@@ -97,6 +99,16 @@ export async function generateScheduleController(req: FastifyRequest, reply: Fas
   } catch (err) {
     if (err instanceof PublishedScheduleCannotRegenerateError) {
       return reply.status(409).send({ error: err.message, code: err.code });
+    }
+    if (err instanceof NextMotorScopeEmptyError) {
+      return reply.status(400).send({ error: err.message, code: err.code });
+    }
+    if (err instanceof SchedulePersistenceValidationError) {
+      return reply.status(422).send({
+        error: err.message,
+        code: err.code,
+        validation: err.validation,
+      });
     }
     req.log.error(err);
     return reply.status(500).send({ error: "Erro ao gerar escala" });

@@ -78,6 +78,10 @@ import {
   updateRoleController,
 } from "../controllers/role.controller.js";
 import { loginController, meController } from "../controllers/auth.controller.js";
+import {
+  getNextMotorConfigController,
+  updateNextMotorConfigController,
+} from "../controllers/next-motor-config.controller.js";
 
 export async function registerRoutes(app: FastifyInstance) {
   app.get("/health", healthController);
@@ -152,6 +156,9 @@ export async function registerRoutes(app: FastifyInstance) {
   app.put("/other-operational-allocations/:id", otherOperationalHandlers.update);
   app.delete("/other-operational-allocations/batch", otherOperationalHandlers.removeBatch);
   app.delete("/other-operational-allocations/:id", otherOperationalHandlers.remove);
+
+  app.get("/config/next-motor", getNextMotorConfigController);
+  app.put("/config/next-motor", updateNextMotorConfigController);
 
   app.patch("/schedules/:id/manual-cell", manualEditCellController);
   app.patch("/schedules/:id/manual-range", manualEditRangeController);

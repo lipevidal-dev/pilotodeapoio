@@ -1,21 +1,21 @@
-import { generateScheduleWithRouter, resolveActiveMotorVersion } from "../../domain/schedule/schedule-engine-router.js";
 import {
-  ENGINE_PATH,
-  ENGINE_PATH_V4,
-  ENGINE_PATH_V5,
-  MOTOR_VERSION_V4,
-  MOTOR_VERSION_V5,
-  MOTOR_VERSION_V6,
-} from "../../domain/schedule/real-schedule-types.js";
+  generateScheduleWithRouter,
+  resolveActiveEnginePath,
+  resolveActiveMotorVersion,
+} from "../../domain/schedule/schedule-engine-router.js";
+import { buildCleanEngineOptionsFromMotorConfig } from "../../domain/schedule/next-motor/next-motor-engine-options.js";
 import { MANUAL_PREALLOC_LABELS } from "../../domain/schedule/operational-labels.js";
+import { validateCleanGenerationBeforeSave, filterPersistenceBlockingIssues } from "../../domain/schedule/clean-engine/clean-validator.js";
+import type { CleanEngineOptions } from "../../domain/schedule/clean-engine/clean-types.js";
 import { CalendarRepository } from "../../infrastructure/repositories/calendar.repository.js";
 import { PreAllocationRepository } from "../../infrastructure/repositories/pre-allocation.repository.js";
 import { ScheduleRepository } from "../../infrastructure/repositories/schedule.repository.js";
+import { NextMotorConfigRepository } from "../../infrastructure/repositories/next-motor-config.repository.js";
+import { applyMotorEmployeeShiftPrefs } from "../../domain/schedule/next-motor/next-motor-employee-prefs.js";
 import {
   buildGenerationInput,
   preAllocationsToLocked,
 } from "../../infrastructure/mappers/generation-input.mapper.js";
-import { validateGenerationBeforeSave } from "../../domain/schedule/schedule-generation-validators.js";
 import {
   issueToApiViolation,
   validationIssuesToDb,
@@ -23,6 +23,7 @@ import {
 import {
   PublishedScheduleCannotRegenerateError,
   SchedulePersistenceValidationError,
+  NextMotorScopeEmptyError,
 } from "../errors/schedule.errors.js";
 
 export interface GenerateScheduleResult {
@@ -41,10 +42,9 @@ export interface GenerateScheduleResult {
   summary: Record<string, unknown>;
   success: boolean;
   suggestions: string[];
-  motorVersion: typeof MOTOR_VERSION_V4 | typeof MOTOR_VERSION_V5 | typeof MOTOR_VERSION_V6;
-  enginePath: typeof ENGINE_PATH | typeof ENGINE_PATH_V4 | typeof ENGINE_PATH_V5;
+  motorVersion: ReturnType<typeof resolveActiveMotorVersion>;
+  enginePath: ReturnType<typeof resolveActiveEnginePath>;
   realEngineExecuted: true;
-  /** Preenchido quando validateBeforeSave falha antes da persistência. */
   persistenceBlocked?: boolean;
   persistenceValidationIssues?: Array<{
     severity: string;
@@ -61,7 +61,10 @@ export class GenerateScheduleUseCase {
     private readonly scheduleRepo = new ScheduleRepository(),
     private readonly calendarRepo = new CalendarRepository(),
     private readonly preAllocRepo = new PreAllocationRepository(),
-    private readonly engine: { generate: typeof generateScheduleWithRouter } = {
+    private readonly nextMotorRepo = new NextMotorConfigRepository(),
+    private readonly engine: {
+      generate: (input: Parameters<typeof generateScheduleWithRouter>[0], options?: CleanEngineOptions) => ReturnType<typeof generateScheduleWithRouter>;
+    } = {
       generate: generateScheduleWithRouter,
     },
   ) {}
@@ -85,6 +88,14 @@ export class GenerateScheduleUseCase {
     const approvedDayOff = await this.calendarRepo.listApprovedDayOffForMonth(year, month);
     const flightDays = await this.calendarRepo.listFlightDaysForMonth(year, month);
 
+    const motorCfg = await this.nextMotorRepo.getFullConfig();
+    const shiftPrefs = applyMotorEmployeeShiftPrefs({
+      preferredShiftRows,
+      shiftRestrictionRows,
+      employeePrefs: motorCfg.employeePrefs,
+      shifts,
+    });
+
     const preAllocRows =
       existing?.preAllocations ?? (await this.preAllocRepo.findAll({ year, month }));
     const lockedFromDb = preAllocationsToLocked(preAllocRows);
@@ -94,9 +105,6 @@ export class GenerateScheduleUseCase {
         .filter((row) => MANUAL_PREALLOC_LABELS.has(row.label.toUpperCase()))
         .map((row) => `${row.employeeUuid}|${row.date}`),
     );
-
-    const specificShiftDayPreferences =
-      await this.scheduleRepo.listSpecificShiftDayPreferencesForMonth(year, month);
 
     const input = buildGenerationInput({
       year,
@@ -108,31 +116,44 @@ export class GenerateScheduleUseCase {
       vacationDays,
       vacationReturnDays,
       crossMonthHistory,
-      shiftRestrictionRows,
-      preferredShiftRows,
-      specificShiftDayPreferences,
+      shiftRestrictionRows: shiftPrefs.shiftRestrictionRows,
+      preferredShiftRows: shiftPrefs.preferredShiftRows,
       noFlightDates,
       approvedDayOff,
       flightDays,
     });
 
-    const generated = this.engine.generate(input);
-    const motorVersion = resolveActiveMotorVersion();
-    const enginePath =
-      motorVersion === MOTOR_VERSION_V4 ? ENGINE_PATH_V4 : ENGINE_PATH_V5;
+    const engineOptions = buildCleanEngineOptionsFromMotorConfig(motorCfg, shifts);
 
-    const saveValidation = validateGenerationBeforeSave(input, generated);
-    if (saveValidation.criticalCount > 0) {
-      const apiIssues = saveValidation.issues.map(issueToApiViolation);
+    if (
+      engineOptions.scopeEmployeeUuids &&
+      engineOptions.scopeEmployeeUuids.length === 0
+    ) {
+      throw new NextMotorScopeEmptyError();
+    }
+
+    const generated = this.engine.generate(input, engineOptions);
+    const motorVersion = (engineOptions.motorVersion ??
+      resolveActiveMotorVersion()) as ReturnType<typeof resolveActiveMotorVersion>;
+    const enginePath = resolveActiveEnginePath();
+
+    const saveValidation = validateCleanGenerationBeforeSave(input, generated, engineOptions);
+    const persistenceBlockers = filterPersistenceBlockingIssues(
+      saveValidation.issues,
+      engineOptions,
+    );
+    if (persistenceBlockers.length > 0) {
+      const uuidToName = new Map(input.employees.map((e) => [e.uuid, e.employee.name]));
+      const apiIssues = persistenceBlockers.map(issueToApiViolation);
       throw new SchedulePersistenceValidationError({
         stage: saveValidation.stage,
-        criticalCount: saveValidation.criticalCount,
+        criticalCount: persistenceBlockers.length,
         issues: apiIssues.map((v) => ({
           level: "CRITICAL" as const,
           ruleCode: v.ruleCode,
           message: v.message,
           date: v.date,
-          employee: v.employee,
+          employee: uuidToName.get(v.employee) ?? (v.employee || "—"),
           detail: v.detail,
         })),
       });
@@ -150,6 +171,14 @@ export class GenerateScheduleUseCase {
 
     const dbViolations = validationIssuesToDb(generated.violations, employees);
     await this.scheduleRepo.saveViolations(monthRecord.id, dbViolations);
+
+    if (generated.crossMonthPreAllocations && generated.crossMonthPreAllocations.length > 0) {
+      await this.scheduleRepo.saveCrossMonthContinuations(
+        year,
+        month,
+        generated.crossMonthPreAllocations,
+      );
+    }
 
     const summary = {
       ...generated.summary,

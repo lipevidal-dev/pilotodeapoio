@@ -1,0 +1,598 @@
+<h1 class="page-title">Motor de Escala</h1>
+
+<p class="page-subtitle">
+
+  Regras, metas numéricas e escopo de funcionários do próximo motor automático.
+
+</p>
+
+
+
+<p-card styleClass="gol-card-accent motor-intro-card mb-3">
+
+  <div class="motor-intro">
+
+    <div class="motor-intro__icon" aria-hidden="true">
+
+      <i class="pi pi-bolt"></i>
+
+    </div>
+
+    <div class="motor-intro__body">
+
+      <h2>{{ motorLabel() }}</h2>
+
+      <p>
+        Configure regras, metas e funcionários abaixo. O botão
+        <strong>Gerar Escala Automática</strong> na tela de Escala usa esta configuração.
+      </p>
+
+      <div class="motor-intro__meta">
+
+        <p-tag [value]="enabledCount() + ' / ' + totalCount() + ' regras ativas'" severity="info" />
+
+        <p-tag [value]="scopeSummary()" severity="secondary" />
+
+        <p-tag [value]="'Turnos: ' + allowedShiftsSummary()" severity="secondary" />
+
+        @if (!ready()) {
+
+          <p-tag value="Em desenvolvimento" severity="warn" />
+
+        }
+
+      </div>
+
+    </div>
+
+    <a routerLink="/escala" class="motor-intro__link">
+
+      <i class="pi pi-arrow-left"></i> Voltar à escala
+
+    </a>
+
+  </div>
+
+</p-card>
+
+
+
+@if (loading()) {
+
+  <p class="loading-text">Carregando configuração...</p>
+
+} @else {
+
+  <p-card styleClass="gol-card-accent motor-allowed-shifts-card mb-3">
+
+    <ng-template pTemplate="header">
+
+      <div class="rules-group-header">Turnos para geração automática</div>
+
+    </ng-template>
+
+
+
+    <p class="scope-hint">
+      Marque os turnos que o motor pode alocar ao clicar em
+      <strong>Gerar Escala Automática</strong>. Turnos desmarcados são ignorados
+      (preferência, blocos T8 e cobertura).
+    </p>
+
+
+
+    <div class="allowed-shifts-toolbar">
+
+      <p-tag [value]="allowedShiftsSummary()" severity="info" />
+
+      <p-button
+
+        label="Selecionar todos"
+
+        icon="pi pi-check-square"
+
+        severity="secondary"
+
+        [text]="true"
+
+        size="small"
+
+        (onClick)="selectAllAllowedShifts()"
+
+      />
+
+    </div>
+
+
+
+    <div class="allowed-shifts-list">
+
+      @for (shift of rateioShiftOptions(); track shift.code) {
+
+        <label class="allowed-shift-row">
+
+          <p-checkbox
+
+            [binary]="true"
+
+            [ngModel]="isAllowedShiftSelected(shift.code)"
+
+            (ngModelChange)="toggleAllowedShift(shift.code, $event)"
+
+            [inputId]="'allowed-' + shift.code"
+
+          />
+
+          <span class="allowed-shift-label">{{ shift.label }}</span>
+
+        </label>
+
+      }
+
+    </div>
+
+
+
+    @if (allowedShiftsDraft().size === 0) {
+
+      <p-message
+
+        severity="warn"
+
+        text="Selecione ao menos um turno para permitir salvar e gerar a escala."
+
+        styleClass="allowed-shifts-warning"
+
+      />
+
+    }
+
+  </p-card>
+
+
+
+  <p-card styleClass="gol-card-accent motor-rules-card mb-3">
+
+    <ng-template pTemplate="header">
+
+      <div class="rules-group-header">Funcionários no escopo</div>
+
+    </ng-template>
+
+
+
+    <p class="scope-hint">
+      Marque os PAOs no escopo. Abaixo do resumo de dias, ajuste preferência e turnos a evitar.
+    </p>
+
+
+
+    <div class="scope-toolbar">
+
+      <p-checkbox
+
+        [ngModel]="scopeAllDraft()"
+
+        (ngModelChange)="onScopeAllChange($event)"
+
+        [binary]="true"
+
+        inputId="scope-all"
+
+      />
+
+      <label for="scope-all" class="scope-all-label">Incluir todos os funcionários ativos</label>
+
+      @if (!scopeAllDraft()) {
+
+        <p-button
+
+          label="Marcar todos"
+
+          icon="pi pi-check-square"
+
+          severity="secondary"
+
+          [text]="true"
+
+          size="small"
+
+          (onClick)="selectAllEmployees()"
+
+        />
+
+        <p-button
+
+          label="Limpar"
+
+          icon="pi pi-times"
+
+          severity="secondary"
+
+          [text]="true"
+
+          size="small"
+
+          (onClick)="clearEmployeeSelection()"
+
+        />
+
+      }
+
+    </div>
+
+
+
+    <div class="employee-scope-list">
+
+      @for (emp of employees(); track emp.id) {
+
+        <div class="employee-scope-row">
+          <p-checkbox
+
+            [ngModel]="isEmployeeInScope(emp.id)"
+
+            (ngModelChange)="onEmployeeScopeToggle(emp.id, $event)"
+
+            [binary]="true"
+
+            [disabled]="scopeAllDraft()"
+
+            [inputId]="'emp-' + emp.id"
+
+          />
+
+          <div class="employee-scope-content">
+            <label [for]="'emp-' + emp.id" class="employee-scope-name-row">
+              <span class="employee-scope-name">{{ emp.name }}</span>
+              <span class="employee-scope-meta">
+                {{ employeeTypeLabel(emp.type) }}
+                @if (emp.cargoName) {
+                  · {{ emp.cargoName }}
+                }
+              </span>
+            </label>
+            @if (isEmployeeInScope(emp.id)) {
+              @if (employeeDayBudgetCompact(emp); as budget) {
+                <div
+                  class="employee-scope-budget"
+                  [class.employee-scope-budget--over]="budget.overBudget"
+                >
+                  <div class="employee-scope-budget__row">
+                    <span class="employee-scope-budget__ref">{{ budget.monthLabel }}</span>
+                    <span
+                      class="employee-scope-budget__saldo"
+                      [class.employee-scope-budget__saldo--over]="budget.overBudget"
+                    >
+                      @if (budget.overBudget) {
+                        {{ budget.remaining }} acima
+                      } @else {
+                        {{ budget.remaining }} livre(s)
+                      }
+                    </span>
+                  </div>
+                  <div class="employee-scope-budget__stats">
+                    {{ budget.totalDays }} total · {{ budget.fixedDays }} fixos ·
+                    {{ budget.metaDays }} metas
+                  </div>
+                  <div class="employee-scope-budget__bar" aria-hidden="true">
+                    <span
+                      class="employee-scope-budget__bar-seg employee-scope-budget__bar-seg--fixed"
+                      [style.width.%]="budget.fixedPct"
+                    ></span>
+                    <span
+                      class="employee-scope-budget__bar-seg employee-scope-budget__bar-seg--meta"
+                      [style.width.%]="budget.metaPct"
+                    ></span>
+                    <span
+                      class="employee-scope-budget__bar-seg employee-scope-budget__bar-seg--free"
+                      [style.width.%]="budget.freePct"
+                    ></span>
+                  </div>
+                </div>
+              } @else if (scheduleMonthLoading() && employeeRoleKind(emp) === 'PAO') {
+                <span class="employee-scope-budget-loading">Carregando contador...</span>
+              } @else {
+                @let proj = employeeProjection(emp);
+                @let prev = employeeProjectionLabel(emp);
+                @if (prev) {
+                  <span class="employee-scope-projection">{{ prev }}</span>
+                } @else if (proj.hint) {
+                  <span class="employee-scope-projection employee-scope-projection--muted">
+                    {{ proj.hint }}
+                  </span>
+                }
+              }
+
+              @if (employeeRoleKind(emp) === 'PAO' && rateioShiftOptions().length > 0) {
+                <div class="employee-scope-prefs">
+                  <div class="employee-scope-prefs__row">
+                    <span class="employee-scope-prefs__label">Pref.</span>
+                    @for (shift of rateioShiftOptions(); track shift.value) {
+                      <label class="employee-scope-prefs__item">
+                        <p-checkbox
+                          [binary]="true"
+                          [ngModel]="isEmployeePreferredShift(emp, shift.value)"
+                          (ngModelChange)="onEmployeePreferredShiftChange(emp, shift.value, $event)"
+                          [inputId]="'pref-' + emp.id + '-' + shift.value"
+                        />
+                        <span>{{ shift.code }}</span>
+                      </label>
+                    }
+                  </div>
+                  <div class="employee-scope-prefs__row">
+                    <span class="employee-scope-prefs__label">Evitar</span>
+                    @for (shift of rateioShiftOptions(); track shift.value) {
+                      <label class="employee-scope-prefs__item">
+                        <p-checkbox
+                          [binary]="true"
+                          [ngModel]="isEmployeeShiftAvoided(emp, shift.value)"
+                          (ngModelChange)="onEmployeeShiftAvoidedChange(emp, shift.value, $event)"
+                          [inputId]="'avoid-' + emp.id + '-' + shift.value"
+                        />
+                        <span>{{ shift.code }}</span>
+                      </label>
+                    }
+                  </div>
+                </div>
+              }
+            }
+          </div>
+
+        </div>
+
+      } @empty {
+
+        <p class="scope-empty">Nenhum funcionário ativo cadastrado.</p>
+
+      }
+
+    </div>
+
+    @if (scopeProjectionSummaryText(); as summary) {
+      <p class="scope-projection-summary">{{ summary }}</p>
+    }
+    <p class="scope-projection-disclaimer">
+      Estimativa orientativa com base nas metas e regras ativas — sujeita a férias, bloqueios e pré-alocações.
+    </p>
+
+  </p-card>
+
+
+
+  @for (group of groupedParams(); track group.category) {
+    @if (group.category !== 'pao') {
+    <p-card styleClass="gol-card-accent motor-rules-card mb-3">
+
+      <ng-template pTemplate="header">
+
+        <div class="rules-group-header">Metas — {{ group.label }}</div>
+
+      </ng-template>
+
+
+
+      <div class="params-list">
+
+        @for (param of group.items; track param.id) {
+
+          <div
+
+            class="param-row"
+
+            [class.param-row--disabled]="!isRuleEnabledForParam(param.ruleId)"
+
+          >
+
+            <div class="param-copy">
+
+              <span class="param-title">{{ param.label }}</span>
+
+              <span class="param-desc">{{ param.description }}</span>
+
+            </div>
+
+            <div class="param-input">
+              <p-inputNumber
+                styleClass="param-input-number"
+                inputStyleClass="param-input-number__field"
+                [ngModel]="paramValue(param.id)"
+                (ngModelChange)="onParamChange(param, $event)"
+                [min]="param.min"
+                [max]="param.max"
+                [useGrouping]="false"
+                [showButtons]="false"
+                [disabled]="!isRuleEnabledForParam(param.ruleId)"
+                [inputId]="'param-' + param.id"
+              />
+            </div>
+
+          </div>
+
+        }
+
+      </div>
+
+    </p-card>
+    }
+  }
+
+  @if (paoShiftColumns().length > 0) {
+    <p-card styleClass="gol-card-accent motor-rules-card mb-3">
+      <ng-template pTemplate="header">
+        <div class="rules-group-header">Metas e regras PAO</div>
+      </ng-template>
+
+      <p class="pao-day-budget-hint pao-day-budget-hint--section">
+        Ajuste metas e regras por turno na tabela abaixo. O contador de dias por PAO no escopo
+        usa a meta do turno preferido de cada funcionário.
+      </p>
+
+      <div class="pao-matrix-wrap">
+        <table class="pao-matrix">
+          <thead>
+            <tr>
+              <th class="pao-matrix__corner" scope="col">Regra / meta</th>
+              @for (col of paoShiftColumns(); track col.code) {
+                <th class="pao-matrix__shift" scope="col">
+                  <span class="pao-matrix__shift-code">{{ col.code }}</span>
+                  @if (col.name !== col.code) {
+                    <span class="pao-matrix__shift-name">{{ col.name }}</span>
+                  }
+                </th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="pao-matrix__section">
+              <td [attr.colspan]="paoShiftColumns().length + 1">Metas numéricas</td>
+            </tr>
+            @for (row of paoParamMatrixRows(); track row.kind) {
+              <tr>
+                <th class="pao-matrix__label" scope="row">{{ row.label }}</th>
+                @for (col of paoShiftColumns(); track col.code) {
+                  <td class="pao-matrix__cell">
+                    @if (shiftParamField(col.code, row.kind); as field) {
+                      <p-inputNumber
+                        styleClass="param-input-number pao-matrix__input"
+                        inputStyleClass="param-input-number__field"
+                        [ngModel]="paramValue(field.id)"
+                        (ngModelChange)="onShiftParamChange(field, $event)"
+                        [min]="field.min"
+                        [max]="field.max"
+                        [useGrouping]="false"
+                        [showButtons]="false"
+                        [disabled]="!isShiftRuleEnabled(col.code, field.ruleId)"
+                        [inputId]="'matrix-param-' + field.id"
+                        [attr.aria-label]="row.label + ' ' + col.code"
+                      />
+                    } @else {
+                      <span class="pao-matrix__empty">—</span>
+                    }
+                  </td>
+                }
+              </tr>
+            }
+
+            <tr class="pao-matrix__section">
+              <td [attr.colspan]="paoShiftColumns().length + 1">Regras ativas</td>
+            </tr>
+            @for (ruleRow of paoRuleMatrixRows(); track ruleRow.id) {
+              <tr>
+                <th class="pao-matrix__label" scope="row">{{ ruleRow.label }}</th>
+                @for (col of paoShiftColumns(); track col.code) {
+                  <td class="pao-matrix__cell pao-matrix__cell--toggle">
+                    @if (ruleVisibleForShift(ruleRow.id, col.code, ruleRow.shiftCodes)) {
+                      @if (shiftRuleField(col.code, ruleRow.id); as rule) {
+                        <label class="pao-matrix__toggle" [for]="'matrix-rule-' + rule.id">
+                          <p-checkbox
+                            [ngModel]="isEnabled(rule.id)"
+                            (ngModelChange)="onToggleShiftRule(rule, $event)"
+                            [binary]="true"
+                            [disabled]="rule.locked"
+                            [inputId]="'matrix-rule-' + rule.id"
+                          />
+                        </label>
+                      } @else {
+                        <span class="pao-matrix__empty">—</span>
+                      }
+                    } @else {
+                      <span class="pao-matrix__empty">—</span>
+                    }
+                  </td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </p-card>
+  }
+
+
+
+  @for (group of groupedRules(); track group.category) {
+
+    <p-card styleClass="gol-card-accent motor-rules-card mb-3">
+
+      <ng-template pTemplate="header">
+
+        <div class="rules-group-header">{{ group.label }}</div>
+
+      </ng-template>
+
+
+
+      <div class="rules-list">
+
+        @for (rule of group.items; track rule.id) {
+
+          <div class="rule-row" [class.rule-row--locked]="rule.locked">
+
+            <p-checkbox
+
+              [ngModel]="isEnabled(rule.id)"
+
+              (ngModelChange)="onToggle(rule, $event)"
+
+              [binary]="true"
+
+              [disabled]="rule.locked"
+
+              [inputId]="'rule-' + rule.id"
+
+            />
+
+            <label [for]="'rule-' + rule.id" class="rule-content">
+
+              <span class="rule-title">
+
+                {{ rule.label }}
+
+                @if (rule.locked) {
+
+                  <p-tag value="Inviolável" severity="secondary" styleClass="rule-lock-tag" />
+
+                }
+
+              </span>
+
+              <span class="rule-desc">{{ rule.description }}</span>
+
+            </label>
+
+          </div>
+
+        }
+
+      </div>
+
+    </p-card>
+
+  }
+
+
+
+  <div class="motor-actions" role="toolbar" aria-label="Ações do motor de escala">
+    <div class="motor-actions__inner">
+      <p-button
+        label="Descartar alterações"
+        icon="pi pi-undo"
+        severity="secondary"
+        [outlined]="true"
+        [disabled]="!dirty() || saving()"
+        (onClick)="resetDraft()"
+      />
+      <p-button
+        label="Salvar configuração"
+        icon="pi pi-save"
+        styleClass="btn-gol-primary"
+        [loading]="saving()"
+        [disabled]="!canSave()"
+        (onClick)="save()"
+      />
+    </div>
+  </div>
+
+}
+

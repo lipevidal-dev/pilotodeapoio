@@ -92,6 +92,24 @@
   color: var(--gol-gray-medium);
 }
 
+.avoid-shifts-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.avoid-shift-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.shift-preference-section {
+  gap: 0.65rem;
+}
+
 .restriction-toolbar {
   display: flex;
   align-items: center;
@@ -106,14 +124,39 @@
   color: var(--gol-orange);
 }
 
-.specific-shift-row {
+.fcf-section {
+  gap: 0.65rem;
+}
+
+.inline-title {
+  margin: 0;
+}
+
+.subsection-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.fcf-config {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--surface-border, #dee2e6);
+  border-radius: 8px;
+}
+
+.fcf-schedule-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  margin-top: 0.75rem;
+  margin-top: 0.5rem;
 }
 
-.specific-shift-field {
+.fcf-schedule-field {
   min-width: 10rem;
+  flex: 1;
 }

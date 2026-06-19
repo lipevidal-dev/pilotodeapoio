@@ -1,4 +1,8 @@
 .ops-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   padding: 0.85rem 1.25rem 0;
   font-weight: 600;
   color: var(--gol-gray-dark);
@@ -6,6 +10,20 @@
   i {
     color: var(--gol-orange);
     margin-right: 0.4rem;
+  }
+}
+
+.ops-config-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--gol-orange-dark);
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
   }
 }
 
@@ -28,6 +46,83 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--gol-gray-medium);
+}
+
+.ops-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #eceff3;
+}
+
+:host ::ng-deep .ops-btn-motor.p-button {
+  min-width: auto;
+  padding: 0.55rem 1rem;
+}
+
+.ops-btn-motor__inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.ops-motor-hint {
+  margin: 0.65rem 0 0;
+  font-size: 0.82rem;
+  color: var(--gol-gray-medium);
+  line-height: 1.45;
+
+  a {
+    color: var(--gol-orange-dark);
+    font-weight: 600;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
+.generation-blocked-panel {
+  border: 1px solid #f5c2c7;
+  border-radius: 8px;
+  background: #fff5f5;
+  padding: 0.85rem 1rem 1rem;
+}
+
+.generation-blocked-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-weight: 600;
+  color: #842029;
+
+  i {
+    margin-right: 0.35rem;
+  }
+}
+
+.generation-blocked-panel__hint {
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.82rem;
+  color: #664d03;
+}
+
+:host ::ng-deep .generation-blocked-table .p-datatable-thead > tr > th {
+  font-size: 0.78rem;
+  padding: 0.45rem 0.6rem;
+}
+
+:host ::ng-deep .generation-blocked-table .p-datatable-tbody > tr > td {
+  font-size: 0.82rem;
+  padding: 0.45rem 0.6rem;
+  vertical-align: top;
 }
 
 .ops-btn-primary {

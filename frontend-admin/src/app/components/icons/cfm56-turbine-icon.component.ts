@@ -1,0 +1,58 @@
+import { Component } from '@angular/core';
+
+/** Ícone vetorial — turbina CFM56 (737-800), vista frontal simplificada. */
+@Component({
+  selector: 'app-cfm56-turbine-icon',
+  standalone: true,
+  template: `
+    <svg
+      class="cfm56-icon"
+      viewBox="0 0 32 32"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="16" cy="16" r="13.25" stroke="currentColor" stroke-width="1.35" />
+      <circle cx="16" cy="16" r="10.75" stroke="currentColor" stroke-width="0.65" opacity="0.5" />
+      <g transform="translate(16 16)" fill="currentColor">
+        <path d="M-0.55 -1.1 L0.55 -1.1 L0.35 -10.2 L-0.35 -10.2 Z" opacity="0.92" />
+        <path d="M-0.55 -1.1 L0.55 -1.1 L0.35 -10.2 L-0.35 -10.2 Z" opacity="0.92" transform="rotate(45)" />
+        <path d="M-0.55 -1.1 L0.55 -1.1 L0.35 -10.2 L-0.35 -10.2 Z" opacity="0.92" transform="rotate(90)" />
+        <path d="M-0.55 -1.1 L0.55 -1.1 L0.35 -10.2 L-0.35 -10.2 Z" opacity="0.92" transform="rotate(135)" />
+        <path d="M-0.55 -1.1 L0.55 -1.1 L0.35 -10.2 L-0.35 -10.2 Z" opacity="0.92" transform="rotate(180)" />
+        <path d="M-0.55 -1.1 L0.55 -1.1 L0.35 -10.2 L-0.35 -10.2 Z" opacity="0.92" transform="rotate(225)" />
+        <path d="M-0.55 -1.1 L0.55 -1.1 L0.35 -10.2 L-0.35 -10.2 Z" opacity="0.92" transform="rotate(270)" />
+        <path d="M-0.55 -1.1 L0.55 -1.1 L0.35 -10.2 L-0.35 -10.2 Z" opacity="0.92" transform="rotate(315)" />
+      </g>
+      <circle cx="16" cy="16" r="3.1" fill="currentColor" />
+      <circle cx="16" cy="16" r="1.35" fill="currentColor" opacity="0.35" />
+      <!-- Cowling 737 — aba inferior característica -->
+      <path
+        d="M8.5 22.2 Q16 25.8 23.5 22.2"
+        stroke="currentColor"
+        stroke-width="1.1"
+        stroke-linecap="round"
+        fill="none"
+        opacity="0.75"
+      />
+    </svg>
+  `,
+  styles: [
+    `
+      :host {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 0;
+      }
+
+      .cfm56-icon {
+        width: 1.125rem;
+        height: 1.125rem;
+        flex-shrink: 0;
+      }
+    `,
+  ],
+})
+export class Cfm56TurbineIconComponent {}

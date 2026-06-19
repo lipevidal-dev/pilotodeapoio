@@ -12,10 +12,27 @@ import { normalizeOperationalLabel } from "../../domain/schedule/operational-lab
 import { compareEmployeesBySeniority } from "../../domain/employee/seniority.js";
 import { expandSpecificShiftRequests } from "../../domain/schedule/specific-shift-requests.js";
 import { iterDays } from "../../domain/rules/dates.js";
+import { parseFcfScheduleJson, type EmployeeFcfRule } from "../../domain/employee/fcf-config.js";
 import { prismaEmployeeToDomain } from "./employee.mapper.js";
 import { prismaShiftToDomain } from "./shift.mapper.js";
 
 type EmployeeWithRole = Employee & { role?: Role | null };
+
+export function buildFcfRules(employees: EmployeeWithRole[], shifts: Shift[]): EmployeeFcfRule[] {
+  const shiftById = new Map(shifts.map((s) => [s.id, s.code.toUpperCase()]));
+  const rules: EmployeeFcfRule[] = [];
+
+  for (const e of employees) {
+    if (!e.isFcf) continue;
+    for (const entry of parseFcfScheduleJson(e.fcfSchedule)) {
+      const code = shiftById.get(entry.shiftId);
+      if (!code) continue;
+      rules.push({ employeeUuid: e.id, shiftCode: code, weekday: entry.weekday });
+    }
+  }
+
+  return rules;
+}
 
 export function buildGenerationInput(params: {
   year: number;
@@ -50,6 +67,7 @@ export function buildGenerationInput(params: {
     days,
     specificShiftDayPreferences,
   );
+  const fcfRules = buildFcfRules(sorted, params.shifts);
 
   return {
     year: params.year,
@@ -68,6 +86,7 @@ export function buildGenerationInput(params: {
     noFlightDates: params.noFlightDates ?? [],
     specificShiftDayPreferences,
     specificShiftRequests,
+    fcfRules,
   };
 }
 

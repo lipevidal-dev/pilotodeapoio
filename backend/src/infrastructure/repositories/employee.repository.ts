@@ -1,4 +1,4 @@
-import type { EmployeeType } from "@prisma/client";
+import type { EmployeeType, Prisma } from "@prisma/client";
 import {
   compareEmployeesBySeniority,
   insertIdAtPosition,
@@ -6,6 +6,7 @@ import {
   reorderIdsInGroup,
 } from "../../domain/employee/seniority.js";
 import { dedupeIds, dedupeIsoDates } from "../../domain/employee/restrictions.js";
+import type { FcfScheduleEntry } from "../../domain/employee/fcf-config.js";
 import { toDbDate } from "../../domain/rules/date-keys.js";
 import {
   REGENERATION_CLEAR_LABELS,
@@ -67,6 +68,8 @@ export class EmployeeRepository {
       dayOfMonth?: number | null;
       weekday?: number | null;
     }>;
+    isFcf?: boolean;
+    fcfSchedule?: FcfScheduleEntry[];
   }) {
     const {
       birthDate,
@@ -76,6 +79,8 @@ export class EmployeeRepository {
       restrictedShiftIds,
       preferredShiftIds,
       specificShiftRequests,
+      isFcf,
+      fcfSchedule,
       ...rest
     } = data;
 
@@ -87,6 +92,8 @@ export class EmployeeRepository {
             type,
             seniorityNumber: position,
             birthDate: birthDate ? toDbDate(birthDate) : null,
+            isFcf: isFcf ?? false,
+            fcfSchedule: isFcf ? (fcfSchedule ?? []) as unknown as Prisma.InputJsonValue : [],
           },
           include: employeeInclude,
         }),
@@ -125,6 +132,8 @@ export class EmployeeRepository {
         dayOfMonth?: number | null;
         weekday?: number | null;
       }>;
+      isFcf?: boolean;
+      fcfSchedule?: FcfScheduleEntry[];
     },
   ) {
     const current = await prisma.employee.findUnique({ where: { id } });
@@ -138,6 +147,8 @@ export class EmployeeRepository {
       restrictedShiftIds,
       preferredShiftIds,
       specificShiftRequests,
+      isFcf,
+      fcfSchedule,
       ...rest
     } = data;
     const nextType = type ?? current.type;
@@ -167,6 +178,15 @@ export class EmployeeRepository {
       if (type !== undefined) patch.type = type;
       if (birthDate !== undefined) {
         patch.birthDate = birthDate ? toDbDate(birthDate) : null;
+      }
+      if (isFcf !== undefined) {
+        patch.isFcf = isFcf;
+        if (!isFcf) {
+          patch.fcfSchedule = [];
+        }
+      }
+      if (isFcf !== false && fcfSchedule !== undefined) {
+        patch.fcfSchedule = fcfSchedule as unknown as Prisma.InputJsonValue;
       }
 
       if (Object.keys(patch).length > 0) {

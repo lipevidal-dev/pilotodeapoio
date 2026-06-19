@@ -3,6 +3,8 @@ import { EmployeeHasOperationalHistoryError } from "../../../application/use-cas
 import { employeeUseCase } from "../../../application/use-cases/employee.use-case.js";
 import {
   EmployeeDuplicatePreferredShiftError,
+  EmployeeFcfConfigInvalidError,
+  EmployeeFcfShiftNotFoundError,
   EmployeePreferredShiftNotFoundError,
   EmployeeShiftPreferenceConflictError,
 } from "../../../application/errors/employee.errors.js";
@@ -45,7 +47,9 @@ export async function createEmployeeController(req: FastifyRequest, reply: Fasti
     if (
       err instanceof EmployeeShiftPreferenceConflictError ||
       err instanceof EmployeePreferredShiftNotFoundError ||
-      err instanceof EmployeeDuplicatePreferredShiftError
+      err instanceof EmployeeDuplicatePreferredShiftError ||
+      err instanceof EmployeeFcfConfigInvalidError ||
+      err instanceof EmployeeFcfShiftNotFoundError
     ) {
       return reply.status(400).send({ error: err.message, code: err.code });
     }
@@ -77,7 +81,9 @@ export async function updateEmployeeController(
     if (
       err instanceof EmployeeShiftPreferenceConflictError ||
       err instanceof EmployeePreferredShiftNotFoundError ||
-      err instanceof EmployeeDuplicatePreferredShiftError
+      err instanceof EmployeeDuplicatePreferredShiftError ||
+      err instanceof EmployeeFcfConfigInvalidError ||
+      err instanceof EmployeeFcfShiftNotFoundError
     ) {
       return reply.status(400).send({ error: err.message, code: err.code });
     }

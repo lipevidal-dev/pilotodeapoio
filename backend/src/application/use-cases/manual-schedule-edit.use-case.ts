@@ -11,6 +11,8 @@ import { operationalCadastroService } from "../services/operational-cadastro.ser
 import { CalendarRepository } from "../../infrastructure/repositories/calendar.repository.js";
 import { ManualScheduleEditRepository } from "../../infrastructure/repositories/manual-schedule-edit.repository.js";
 import { ScheduleRepository } from "../../infrastructure/repositories/schedule.repository.js";
+import { NextMotorConfigRepository } from "../../infrastructure/repositories/next-motor-config.repository.js";
+import { applyMotorEmployeeShiftPrefs } from "../../domain/schedule/next-motor/next-motor-employee-prefs.js";
 import { buildContextFromDbParts } from "../../infrastructure/mappers/schedule-context.mapper.js";
 import { employeeCargoCode } from "../../infrastructure/mappers/employee.mapper.js";
 import { validationIssuesToDb } from "../../infrastructure/mappers/violation.mapper.js";
@@ -57,6 +59,7 @@ export class ManualScheduleEditUseCase {
     private readonly editRepo = new ManualScheduleEditRepository(),
     private readonly scheduleRepo = new ScheduleRepository(),
     private readonly calendarRepo = new CalendarRepository(),
+    private readonly nextMotorRepo = new NextMotorConfigRepository(),
     private readonly cadastroService: OperationalCadastroService = operationalCadastroService,
     private readonly validator: ValidateScheduleService = validateScheduleService,
   ) {}
@@ -90,6 +93,7 @@ export class ManualScheduleEditUseCase {
       const n = srcOcc.preallocLabel.toUpperCase();
       if (n === "ND") moveType = "ND";
       else if (n.includes("FOLGA PEDIDA")) moveType = "FP";
+      else if (n === "FOLGA SOCIAL" || n === "FS") moveType = "FS";
       else if (n === "FOLGA") moveType = "FOLGA";
       else if (n === "SIMULADOR") moveType = "SIMULADOR";
       else if (n === "CURSO" || n === "CURSO ONLINE") moveType = "CURSO";
@@ -263,6 +267,13 @@ export class ManualScheduleEditUseCase {
       month.year,
       month.month,
     );
+    const motorCfg = await this.nextMotorRepo.getFullConfig();
+    const shiftPrefs = applyMotorEmployeeShiftPrefs({
+      preferredShiftRows,
+      shiftRestrictionRows,
+      employeePrefs: motorCfg.employeePrefs,
+      shifts,
+    });
     const noFlightDates = await this.scheduleRepo.listNoFlightDatesForMonth(month.year, month.month);
     const vacationDays = await this.calendarRepo.listVacationDaysForMonth(month.year, month.month);
     const approvedDayOff = await this.calendarRepo.listApprovedDayOffForMonth(month.year, month.month);
@@ -286,8 +297,8 @@ export class ManualScheduleEditUseCase {
         role: employeeCargoCode(e),
         seniorityNumber: e.seniorityNumber,
       })),
-      shiftRestrictionRows,
-      preferredShiftRows,
+      shiftRestrictionRows: shiftPrefs.shiftRestrictionRows,
+      preferredShiftRows: shiftPrefs.preferredShiftRows,
       noFlightDates,
       vacationDays,
       approvedDayOff,
