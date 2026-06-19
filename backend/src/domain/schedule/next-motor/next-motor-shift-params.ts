@@ -1,6 +1,7 @@
 import { RATEIO_TURN_CODES } from "../clean-engine/clean-types.js";
 
 export type PaoShiftParamKind =
+  | "agrupamento_turnos"
   | "meta_turnos"
   | "espacamento"
   | "meta_dias_trabalhados"
@@ -25,6 +26,18 @@ export const PAO_SHIFT_PARAM_DEFS: Record<
     legacyGlobalId?: string;
   }
 > = {
+  agrupamento_turnos: {
+    label: "Agrupamento de turnos",
+    description: (code) =>
+      code === "T8"
+        ? "Padrão fixo T8/T8/ND — um bloco antes do espaçamento entre blocos."
+        : `Turnos ${code} alocados em sequência antes do espaçamento entre grupos.`,
+    ruleId: "pao_espacamento_turnos",
+    defaultValue: 1,
+    min: 1,
+    max: 6,
+    locked: false,
+  },
   meta_turnos: {
     label: "Meta de turnos",
     description: (code) => `Quantidade de turnos ${code} alocados por PAO no mês.`,
@@ -169,11 +182,26 @@ export function listPaoRateioShiftCodesFromShifts(
   );
 }
 
+export function shiftParamDefaultValue(kind: PaoShiftParamKind, shiftCode: string): number {
+  const def = PAO_SHIFT_PARAM_DEFS[kind];
+  if (kind === "agrupamento_turnos") {
+    const code = shiftCode.toUpperCase();
+    if (code === "T6" || code === "T7") return 4;
+    if (code === "T9") return 1;
+    if (code === "T8") return 1;
+  }
+  return def.defaultValue;
+}
+
 function clampShiftParam(
   raw: number | undefined,
   bounds: { defaultValue: number; min: number; max: number },
+  shiftCode?: string,
+  kind?: PaoShiftParamKind,
 ): number {
-  if (typeof raw !== "number" || !Number.isFinite(raw)) return bounds.defaultValue;
+  const fallback =
+    kind && shiftCode ? shiftParamDefaultValue(kind, shiftCode) : bounds.defaultValue;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return fallback;
   return Math.min(bounds.max, Math.max(bounds.min, Math.round(raw)));
 }
 
@@ -205,10 +233,9 @@ export function mergePaoShiftParams(
   for (const code of codes) {
     for (const kind of PAO_SHIFT_PARAM_KINDS) {
       const def = PAO_SHIFT_PARAM_DEFS[kind];
-      out[paoShiftParamId(kind, code)] = clampShiftParam(
-        migrated[paoShiftParamId(kind, code)],
-        def,
-      );
+      const clamped = clampShiftParam(migrated[paoShiftParamId(kind, code)], def, code, kind);
+      out[paoShiftParamId(kind, code)] =
+        kind === "agrupamento_turnos" && code.toUpperCase() === "T8" ? 1 : clamped;
     }
   }
   return out;
@@ -224,7 +251,16 @@ export function sanitizePaoShiftParamsPatch(
     const parsed = parsePaoShiftParamId(id);
     if (!parsed || !allowedCodes.has(parsed.shiftCode)) continue;
     if (typeof raw !== "number" || !Number.isFinite(raw)) continue;
-    out[id] = clampShiftParam(raw, PAO_SHIFT_PARAM_DEFS[parsed.kind]);
+    const clamped = clampShiftParam(
+      raw,
+      PAO_SHIFT_PARAM_DEFS[parsed.kind],
+      parsed.shiftCode,
+      parsed.kind,
+    );
+    out[id] =
+      parsed.kind === "agrupamento_turnos" && parsed.shiftCode.toUpperCase() === "T8"
+        ? 1
+        : clamped;
   }
   return out;
 }
@@ -242,7 +278,7 @@ export function motorShiftParamValue(
     const legacy = params?.[def.legacyGlobalId];
     if (typeof legacy === "number" && Number.isFinite(legacy)) return Math.round(legacy);
   }
-  return def.defaultValue;
+  return shiftParamDefaultValue(kind, shiftCode);
 }
 
 export interface PaoShiftParamFieldView {
@@ -255,6 +291,8 @@ export interface PaoShiftParamFieldView {
   min: number;
   max: number;
   locked: boolean;
+  inputMode?: "number" | "t8_block_pattern";
+  displayHint?: string;
 }
 
 export interface PaoShiftRuleFieldView {
@@ -326,16 +364,23 @@ export function buildPaoShiftParamsView(
     fields: PAO_SHIFT_PARAM_KINDS.map((kind) => {
       const def = PAO_SHIFT_PARAM_DEFS[kind];
       const id = paoShiftParamId(kind, code);
+      const isT8Agrupamento = kind === "agrupamento_turnos" && code === "T8";
       return {
         id,
         kind,
         label: def.label,
         description: def.description(code),
         ruleId: def.ruleId,
-        value: paramsMap[id] ?? def.defaultValue,
+        value: paramsMap[id] ?? shiftParamDefaultValue(kind, code),
         min: def.min,
         max: def.max,
-        locked: Boolean(def.locked),
+        locked: isT8Agrupamento ? true : Boolean(def.locked),
+        ...(isT8Agrupamento
+          ? {
+              inputMode: "t8_block_pattern" as const,
+              displayHint: "T8 · T8 · ND (1 bloco)",
+            }
+          : {}),
       };
     }),
     rules: buildShiftRuleViews(code, enabledMap, rulesCatalog),

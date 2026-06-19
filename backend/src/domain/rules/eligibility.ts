@@ -39,6 +39,8 @@ export interface CanWorkOptions {
   skipApaoOverlapCheck?: boolean;
   /** Edição manual: operador pode alocar além do limite físico de 2 estações. */
   skipSimultaneousStationsCheck?: boolean;
+  /** Alocação FCF prioritária (T9 no dia da semana): ignora meta mensal e exige preferência T9. */
+  fcfPriorityBypass?: boolean;
   /** Bloqueios do mês anterior + corrente para continuidade 6x1 (VOO, SIM, etc.). */
   continuityBlocked?: BlockedMap;
 }
@@ -75,6 +77,7 @@ export function canWork(
     skipApaoOverlapCheck = false,
     skipSimultaneousStationsCheck = false,
     maxConsecutiveWork,
+    fcfPriorityBypass = false,
   } = options;
 
   const empId = employee.id;
@@ -97,12 +100,14 @@ export function canWork(
       };
     }
     if (isT9 || isLegacyParallelShift) {
-      const preferred = preferredShifts?.get(empId);
-      if (!preferred?.has(normalizedCode)) {
-        return {
-          ok: false,
-          reason: `turno ${shiftCode} requer preferência de alocação no cadastro do funcionário`,
-        };
+      if (!fcfPriorityBypass) {
+        const preferred = preferredShifts?.get(empId);
+        if (!preferred?.has(normalizedCode)) {
+          return {
+            ok: false,
+            reason: `turno ${shiftCode} requer preferência de alocação no cadastro do funcionário`,
+          };
+        }
       }
     }
   }
@@ -156,7 +161,7 @@ export function canWork(
     }
   }
 
-  if (maxMonthlyWork != null && !coverageEmergency) {
+  if (maxMonthlyWork != null && !coverageEmergency && !fcfPriorityBypass) {
     if (monthlyWorkCount(empId, planned) >= maxMonthlyWork) {
       return { ok: false, reason: `limite mensal de ${maxMonthlyWork} turnos` };
     }

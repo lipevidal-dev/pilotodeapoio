@@ -121,10 +121,17 @@ function ndDayFree(ws: CleanWorkspace, uuid: string, ndDate: string): boolean {
   return !isOperationalHardBlock(block);
 }
 
-export function wouldExceedMetaTurnos(ws: CleanWorkspace, uuid: string, extraTurnos: number): boolean {
-  if (!motorShiftRuleEnabled(ws.options, "pao_meta_turnos", "T8")) return false;
-  const meta = motorShiftMetaTurnos(ws.options, "T8", 20);
-  return ws.countRateioTurnsForShift(uuid, "T8") + extraTurnos > meta;
+export function wouldExceedMetaTurnos(
+  ws: CleanWorkspace,
+  uuid: string,
+  extraTurnos: number,
+  extraNd = 0,
+): boolean {
+  if (motorShiftRuleEnabled(ws.options, "pao_meta_turnos", "T8")) {
+    const meta = ws.effectiveMetaTurnosForShift(uuid, "T8");
+    if (ws.countRateioTurnsForShift(uuid, "T8") + extraTurnos > meta) return true;
+  }
+  return ws.wouldExceedPaoCapacity(uuid, extraTurnos, extraTurnos + extraNd);
 }
 
 function evaluateCanWork(
@@ -195,7 +202,13 @@ export function canPlaceT8Block(
 
   const newTurnos =
     (existing0 === "T8" ? 0 : 1) + (existing1 === "T8" ? 0 : 1);
-  if (wouldExceedMetaTurnos(ws, uuid, newTurnos)) return false;
+  let newNd = 0;
+  if (ws.days.includes(d2) && ndDayFree(ws, uuid, d2)) {
+    newNd = 1;
+  } else if (isDateBeyondCurrentMonth(ws, d2) && isNextMonthDayFreeForNd(ws, uuid, d2)) {
+    newNd = 0;
+  }
+  if (wouldExceedMetaTurnos(ws, uuid, newTurnos, newNd)) return false;
 
   const spacingDays = getTurnSpacingDays(ws, "T8");
   if (
@@ -467,17 +480,23 @@ function buildT8CoverageCandidatePool(
 ): Array<(typeof ws.paoEmployees)[number]> {
   const applyMeta =
     ws.usesNextMotorRules() && motorShiftRuleEnabled(ws.options, "pao_meta_turnos", "T8");
-  const metaTurnos = motorShiftMetaTurnos(ws.options, "T8", 20);
 
   const eligible = ws.paoEmployees.filter((c) => {
-    if (!applyMeta || ws.countRateioTurnsForShift(c.uuid, "T8") < metaTurnos) return true;
+    if (!applyMeta) return true;
+
+    const t8Meta = ws.effectiveMetaTurnosForShift(c.uuid, "T8");
+    const belowT8Meta = ws.countRateioTurnsForShift(c.uuid, "T8") < t8Meta;
+    if (belowT8Meta) {
+      return ws.hasTotalMetaHeadroom(c.uuid, 1) && ws.hasDiasTrabalhadosHeadroom(c.uuid, 1);
+    }
+
     if (
       isLastDayOfMonth(ws, gapDay) &&
       canPlaceT8BlockCrossMonthEnd(ws, c.uuid, gapDay, true, true)
     ) {
       return true;
     }
-    // No teto da meta: ainda pode fechar o furo realocando bloco que começa no dia seguinte.
+    // No teto da meta T8: ainda pode fechar o furo realocando bloco que começa no dia seguinte.
     const conflictStart = addDays(gapDay, 1);
     if (!ws.days.includes(conflictStart)) return false;
     return (
@@ -590,8 +609,14 @@ export function tryAssignT8CoverageGap(ws: CleanWorkspace, day: string): boolean
 export function employeeCanReceiveMoreT8Blocks(ws: CleanWorkspace, uuid: string): boolean {
   if (
     motorShiftRuleEnabled(ws.options, "pao_meta_turnos", "T8") &&
-    ws.countRateioTurnsForShift(uuid, "T8") >= motorShiftMetaTurnos(ws.options, "T8", 20)
+    ws.countRateioTurnsForShift(uuid, "T8") >= ws.effectiveMetaTurnosForShift(uuid, "T8")
   ) {
+    return false;
+  }
+  if (motorRuleEnabled(ws.options, "pao_meta_turnos") && ws.wouldExceedTotalMetaTurnos(uuid, 1)) {
+    return false;
+  }
+  if (motorRuleEnabled(ws.options, "pao_meta_dias_trabalhados") && ws.wouldExceedDiasTrabalhados(uuid, 1)) {
     return false;
   }
   return !employeeAtT8BlockLimit(ws, uuid);

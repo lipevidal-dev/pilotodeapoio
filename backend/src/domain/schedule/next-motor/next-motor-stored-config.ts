@@ -5,6 +5,10 @@ import { RATEIO_TURN_CODES } from "../clean-engine/clean-types.js";
 export interface EmployeeMotorPrefStored {
   preferredShiftId: string | null;
   restrictedShiftIds: string[];
+  /** Turno prioritário FCF (ex.: T9) — alocado no dia da semana antes das demais preferências. */
+  fcfPriorityShiftId?: string | null;
+  /** 0=domingo … 6=sábado — dia da semana para alocação FCF. */
+  fcfWeekday?: number | null;
 }
 
 /** Formato persistido em system_config (key: next_motor_rules). */

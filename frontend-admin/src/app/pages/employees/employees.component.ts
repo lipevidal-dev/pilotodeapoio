@@ -160,18 +160,6 @@ export class EmployeesComponent implements OnInit {
 
   formIsFcf = false;
 
-  formFcfSchedule: Array<{ shiftId: string; weekday: number }> = [];
-
-  readonly fcfWeekdayOptions = [
-    { label: 'Segunda', value: 1 },
-    { label: 'Terça', value: 2 },
-    { label: 'Quarta', value: 3 },
-    { label: 'Quinta', value: 4 },
-    { label: 'Sexta', value: 5 },
-    { label: 'Sábado', value: 6 },
-    { label: 'Domingo', value: 0 },
-  ];
-
   readonly weekdayOptions = [
     { label: 'Domingo', value: 0 },
     { label: 'Segunda', value: 1 },
@@ -443,8 +431,6 @@ export class EmployeesComponent implements OnInit {
 
     this.formIsFcf = false;
 
-    this.formFcfSchedule = [];
-
     this.dialogVisible.set(true);
 
   }
@@ -475,8 +461,6 @@ export class EmployeesComponent implements OnInit {
 
     this.formIsFcf = false;
 
-    this.formFcfSchedule = [];
-
     this.dialogVisible.set(true);
 
     this.loadingDetail.set(true);
@@ -498,11 +482,6 @@ export class EmployeesComponent implements OnInit {
         );
 
         this.formIsFcf = detail.isFcf ?? false;
-
-        this.formFcfSchedule = (detail.fcfSchedule ?? []).map((r) => ({
-          shiftId: r.shiftId,
-          weekday: r.weekday,
-        }));
 
         this.loadingDetail.set(false);
 
@@ -646,35 +625,6 @@ export class EmployeesComponent implements OnInit {
     return null;
   }
 
-  addFcfScheduleRow(): void {
-    const firstShift = this.shiftOptions()[0]?.value;
-    if (!firstShift) return;
-    const used = new Set(this.formFcfSchedule.map((r) => r.weekday));
-    const nextDay = this.fcfWeekdayOptions.find((d) => !used.has(d.value))?.value ?? 1;
-    this.formFcfSchedule = [...this.formFcfSchedule, { shiftId: firstShift, weekday: nextDay }];
-  }
-
-  removeFcfScheduleRow(index: number): void {
-    this.formFcfSchedule = this.formFcfSchedule.filter((_, i) => i !== index);
-  }
-
-  onFcfToggle(enabled: boolean): void {
-    this.formIsFcf = enabled;
-    if (!enabled) {
-      this.formFcfSchedule = [];
-      return;
-    }
-    if (this.formFcfSchedule.length === 0) {
-      this.addFcfScheduleRow();
-    }
-  }
-
-  fcfWeekdayLabel(weekday: number): string {
-    return this.fcfWeekdayOptions.find((d) => d.value === weekday)?.label ?? String(weekday);
-  }
-
-
-
   selectedRoleCode(): string {
 
     return this.roles().find((r) => r.id === this.formRoleId)?.code ?? 'PAO';
@@ -731,42 +681,13 @@ export class EmployeesComponent implements OnInit {
 
     }
 
-    if (this.formIsFcf) {
-      const schedule = this.formFcfSchedule.filter((r) => r.shiftId && r.weekday != null);
-      if (schedule.length === 0) {
-        this.messages.add({
-          severity: 'warn',
-          summary: 'Validação',
-          detail: 'Adicione ao menos uma alocação FCF (dia da semana + turno desejado).',
-        });
-        return;
-      }
-      const weekdays = schedule.map((r) => r.weekday);
-      if (weekdays.length !== new Set(weekdays).size) {
-        this.messages.add({
-          severity: 'warn',
-          summary: 'Validação',
-          detail: 'Cada dia da semana pode aparecer apenas uma vez na alocação FCF.',
-        });
-        return;
-      }
-    }
-
-
+    const isFcf = this.formIsFcf;
 
     this.saving.set(true);
 
     const birthDate = this.formBirthDate ? dateToIso(this.formBirthDate) : null;
 
     const noFlightDates = [...new Set(this.formNoFlightDates.map((d) => dateToIso(d)))].sort();
-
-    const isFcf = this.formIsFcf;
-
-    const fcfSchedule = isFcf
-      ? this.formFcfSchedule.filter((r) => r.shiftId && r.weekday != null)
-      : [];
-
-
 
     if (this.dialogMode === 'create') {
 
@@ -785,8 +706,6 @@ export class EmployeesComponent implements OnInit {
         noFlightDates,
 
         isFcf,
-
-        fcfSchedule,
 
       };
 
@@ -821,8 +740,6 @@ export class EmployeesComponent implements OnInit {
         noFlightDates,
 
         isFcf,
-
-        fcfSchedule,
 
       })
 

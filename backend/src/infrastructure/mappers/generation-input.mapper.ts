@@ -12,26 +12,24 @@ import { normalizeOperationalLabel } from "../../domain/schedule/operational-lab
 import { compareEmployeesBySeniority } from "../../domain/employee/seniority.js";
 import { expandSpecificShiftRequests } from "../../domain/schedule/specific-shift-requests.js";
 import { iterDays } from "../../domain/rules/dates.js";
-import { parseFcfScheduleJson, type EmployeeFcfRule } from "../../domain/employee/fcf-config.js";
+import type { EmployeeFcfRule } from "../../domain/employee/fcf-config.js";
+import { buildFcfRulesFromMotorPrefs } from "../../domain/schedule/next-motor/next-motor-employee-prefs.js";
+import type { EmployeeMotorPrefStored } from "../../domain/schedule/next-motor/next-motor-stored-config.js";
 import { prismaEmployeeToDomain } from "./employee.mapper.js";
 import { prismaShiftToDomain } from "./shift.mapper.js";
 
 type EmployeeWithRole = Employee & { role?: Role | null };
 
-export function buildFcfRules(employees: EmployeeWithRole[], shifts: Shift[]): EmployeeFcfRule[] {
-  const shiftById = new Map(shifts.map((s) => [s.id, s.code.toUpperCase()]));
-  const rules: EmployeeFcfRule[] = [];
-
-  for (const e of employees) {
-    if (!e.isFcf) continue;
-    for (const entry of parseFcfScheduleJson(e.fcfSchedule)) {
-      const code = shiftById.get(entry.shiftId);
-      if (!code) continue;
-      rules.push({ employeeUuid: e.id, shiftCode: code, weekday: entry.weekday });
-    }
-  }
-
-  return rules;
+export function buildFcfRules(
+  employees: EmployeeWithRole[],
+  shifts: Shift[],
+  employeePrefs?: Record<string, EmployeeMotorPrefStored>,
+): EmployeeFcfRule[] {
+  return buildFcfRulesFromMotorPrefs({
+    employees,
+    employeePrefs,
+    shifts,
+  });
 }
 
 export function buildGenerationInput(params: {
@@ -50,6 +48,7 @@ export function buildGenerationInput(params: {
   preferredShiftRows?: PreferredShiftRow[];
   specificShiftDayPreferences?: SpecificShiftDayPreferenceRow[];
   noFlightDates?: Array<{ employeeUuid: string; date: string }>;
+  employeePrefs?: Record<string, EmployeeMotorPrefStored>;
 }): GenerationInput {
   const sorted = [...params.employees].sort(compareEmployeesBySeniority);
   const genEmployees: GenerationInputEmployee[] = sorted.map((e, i) => ({
@@ -67,7 +66,7 @@ export function buildGenerationInput(params: {
     days,
     specificShiftDayPreferences,
   );
-  const fcfRules = buildFcfRules(sorted, params.shifts);
+  const fcfRules = buildFcfRules(sorted, params.shifts, params.employeePrefs);
 
   return {
     year: params.year,

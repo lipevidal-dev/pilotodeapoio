@@ -14,6 +14,8 @@ import { CheckboxModule } from 'primeng/checkbox';
 
 import { InputNumberModule } from 'primeng/inputnumber';
 
+import { SelectModule } from 'primeng/select';
+
 import { TagModule } from 'primeng/tag';
 
 import { MessageModule } from 'primeng/message';
@@ -57,6 +59,7 @@ import {
 import {
   PAO_SHIFT_PARAM_KINDS,
   paoShiftParamId,
+  shiftParamDefaultValue,
   type PaoShiftParamKind,
 } from '../../../utils/pao-shift-params.util';
 import {
@@ -86,6 +89,16 @@ const PAO_SHIFT_RULE_MATRIX: Array<{ id: string; label: string; shiftCodes?: Rat
   { id: 't8_t8_nd', label: 'T8, T8, ND', shiftCodes: ['T8'] },
 ];
 
+const FCF_WEEKDAY_OPTIONS = [
+  { label: 'Segunda', value: 1 },
+  { label: 'Terça', value: 2 },
+  { label: 'Quarta', value: 3 },
+  { label: 'Quinta', value: 4 },
+  { label: 'Sexta', value: 5 },
+  { label: 'Sábado', value: 6 },
+  { label: 'Domingo', value: 0 },
+];
+
 
 
 @Component({
@@ -109,6 +122,8 @@ const PAO_SHIFT_RULE_MATRIX: Array<{ id: string; label: string; shiftCodes?: Rat
     CheckboxModule,
 
     InputNumberModule,
+
+    SelectModule,
 
     TagModule,
 
@@ -185,8 +200,6 @@ export class MotorEscalaConfigComponent implements OnInit {
   private savedAllowedShiftCodes = new Set<string>();
 
   readonly allowedShiftsDraft = signal<Set<string>>(new Set());
-
-
 
   readonly groupedRules = computed(() => {
 
@@ -328,6 +341,8 @@ export class MotorEscalaConfigComponent implements OnInit {
       }))
       .sort((a, b) => (RATEIO_SHIFT_ORDER.get(a.code) ?? 99) - (RATEIO_SHIFT_ORDER.get(b.code) ?? 99)),
   );
+
+  readonly fcfWeekdayOptions = FCF_WEEKDAY_OPTIONS;
 
   readonly allowedShiftsSummary = computed(() => {
     const selected = [...this.allowedShiftsDraft()].sort();
@@ -802,6 +817,8 @@ export class MotorEscalaConfigComponent implements OnInit {
       restrictedShiftIds: preferredShiftId
         ? current.restrictedShiftIds.filter((id) => id !== preferredShiftId)
         : current.restrictedShiftIds,
+      fcfPriorityShiftId: current.fcfPriorityShiftId,
+      fcfWeekday: current.fcfWeekday,
     });
   }
 
@@ -819,7 +836,38 @@ export class MotorEscalaConfigComponent implements OnInit {
     this.patchEmployeePref(emp.id, {
       preferredShiftId,
       restrictedShiftIds: [...restricted],
+      fcfPriorityShiftId: current.fcfPriorityShiftId,
+      fcfWeekday: current.fcfWeekday,
     });
+  }
+
+  employeeFcfPriorityShiftId(emp: Employee): string | null {
+    return this.effectiveEmployeePref(emp).fcfPriorityShiftId ?? this.defaultT9ShiftId();
+  }
+
+  employeeFcfWeekday(emp: Employee): number | null {
+    return this.effectiveEmployeePref(emp).fcfWeekday ?? null;
+  }
+
+  onEmployeeFcfPriorityShiftChange(emp: Employee, shiftId: string | null): void {
+    const current = this.effectiveEmployeePref(emp);
+    this.patchEmployeePref(emp.id, {
+      ...current,
+      fcfPriorityShiftId: shiftId,
+    });
+  }
+
+  onEmployeeFcfWeekdayChange(emp: Employee, weekday: number | null): void {
+    const current = this.effectiveEmployeePref(emp);
+    this.patchEmployeePref(emp.id, {
+      ...current,
+      fcfWeekday: weekday,
+      fcfPriorityShiftId: current.fcfPriorityShiftId ?? this.defaultT9ShiftId(),
+    });
+  }
+
+  private defaultT9ShiftId(): string | null {
+    return this.rateioShiftOptions().find((s) => s.code === 'T9')?.value ?? null;
   }
 
 
@@ -919,6 +967,8 @@ export class MotorEscalaConfigComponent implements OnInit {
       if (!a && !b) continue;
       if (!a || !b) return true;
       if (a.preferredShiftId !== b.preferredShiftId) return true;
+      if ((a.fcfPriorityShiftId ?? null) !== (b.fcfPriorityShiftId ?? null)) return true;
+      if ((a.fcfWeekday ?? null) !== (b.fcfWeekday ?? null)) return true;
       const ra = [...a.restrictedShiftIds].sort().join(',');
       const rb = [...b.restrictedShiftIds].sort().join(',');
       if (ra !== rb) return true;
@@ -928,34 +978,52 @@ export class MotorEscalaConfigComponent implements OnInit {
 
   private effectiveEmployeePref(emp: Employee): EmployeeMotorPref {
     const draft = this.employeePrefsDraft()[emp.id];
-    if (draft) return draft;
+    if (draft) {
+      return {
+        preferredShiftId: draft.preferredShiftId,
+        restrictedShiftIds: [...draft.restrictedShiftIds],
+        fcfPriorityShiftId: draft.fcfPriorityShiftId ?? this.defaultT9ShiftId(),
+        fcfWeekday: draft.fcfWeekday ?? null,
+      };
+    }
     return {
       preferredShiftId: emp.preferredShiftIds?.[0] ?? null,
       restrictedShiftIds: [...(emp.restrictedShiftIds ?? [])],
+      fcfPriorityShiftId: this.defaultT9ShiftId(),
+      fcfWeekday: null,
     };
   }
 
   private buildLocalShiftField(kind: PaoShiftParamKind, shiftCode: string): PaoShiftParamFieldRow {
     const id = paoShiftParamId(kind, shiftCode);
-    const defaults: Record<PaoShiftParamKind, { label: string; ruleId: string; min: number; max: number; value: number }> = {
-      meta_turnos: { label: 'Meta de turnos', ruleId: 'pao_meta_turnos', min: 0, max: 31, value: 20 },
-      espacamento: { label: 'Espaçamento entre turnos', ruleId: 'pao_espacamento_turnos', min: 0, max: 15, value: 0 },
-      meta_dias_trabalhados: { label: 'Meta de dias trabalhados', ruleId: 'pao_meta_dias_trabalhados', min: 0, max: 31, value: 20 },
-      meta_folgas: { label: 'Meta de folgas', ruleId: 'pao_10_folgas', min: 0, max: 31, value: 10 },
-      meta_folga_social: { label: 'Folgas sociais', ruleId: 'pao_1_folga_social', min: 0, max: 4, value: 1 },
-      max_consecutivos: { label: 'Máx. dias consecutivos', ruleId: 'max_6_consecutive', min: 1, max: 15, value: 6 },
+    const code = shiftCode.toUpperCase();
+    const defaults: Record<PaoShiftParamKind, { label: string; ruleId: string; min: number; max: number }> = {
+      agrupamento_turnos: { label: 'Agrupamento de turnos', ruleId: 'pao_espacamento_turnos', min: 1, max: 6 },
+      meta_turnos: { label: 'Meta de turnos', ruleId: 'pao_meta_turnos', min: 0, max: 31 },
+      espacamento: { label: 'Espaçamento entre turnos', ruleId: 'pao_espacamento_turnos', min: 0, max: 15 },
+      meta_dias_trabalhados: { label: 'Meta de dias trabalhados', ruleId: 'pao_meta_dias_trabalhados', min: 0, max: 31 },
+      meta_folgas: { label: 'Meta de folgas', ruleId: 'pao_10_folgas', min: 0, max: 31 },
+      meta_folga_social: { label: 'Folgas sociais', ruleId: 'pao_1_folga_social', min: 0, max: 4 },
+      max_consecutivos: { label: 'Máx. dias consecutivos', ruleId: 'max_6_consecutive', min: 1, max: 15 },
     };
     const def = defaults[kind];
+    const isT8Agrupamento = kind === 'agrupamento_turnos' && code === 'T8';
     return {
       id,
       kind,
       label: def.label,
       description: '',
       ruleId: def.ruleId,
-      value: this.paramsDraft()[id] ?? def.value,
+      value: this.paramsDraft()[id] ?? shiftParamDefaultValue(kind, shiftCode),
       min: def.min,
       max: def.max,
-      locked: false,
+      locked: isT8Agrupamento,
+      ...(isT8Agrupamento
+        ? {
+            inputMode: 't8_block_pattern' as const,
+            displayHint: 'T8 · T8 · ND (1 bloco)',
+          }
+        : {}),
     };
   }
 
@@ -965,6 +1033,8 @@ export class MotorEscalaConfigComponent implements OnInit {
       [employeeId]: {
         preferredShiftId: pref.preferredShiftId,
         restrictedShiftIds: [...new Set(pref.restrictedShiftIds)],
+        fcfPriorityShiftId: pref.fcfPriorityShiftId ?? null,
+        fcfWeekday: pref.fcfWeekday ?? null,
       },
     }));
   }

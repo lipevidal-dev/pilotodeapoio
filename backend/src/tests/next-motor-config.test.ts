@@ -70,6 +70,22 @@ describe("next-motor-rules-catalog", () => {
     expect(merged[paoShiftParamId("meta_turnos", "T8")]).toBe(12);
   });
 
+  it("aplica defaults de agrupamento por turno", () => {
+    const merged = mergePaoShiftParams({}, ["T6", "T7", "T8", "T9"]);
+    expect(merged[paoShiftParamId("agrupamento_turnos", "T6")]).toBe(4);
+    expect(merged[paoShiftParamId("agrupamento_turnos", "T7")]).toBe(4);
+    expect(merged[paoShiftParamId("agrupamento_turnos", "T9")]).toBe(1);
+    expect(merged[paoShiftParamId("agrupamento_turnos", "T8")]).toBe(1);
+  });
+
+  it("agrupamento T8 permanece 1 mesmo com patch", () => {
+    const sanitized = sanitizeNextMotorParamsPatch(
+      { [paoShiftParamId("agrupamento_turnos", "T8")]: 4 },
+      ["T8"],
+    );
+    expect(sanitized[paoShiftParamId("agrupamento_turnos", "T8")]).toBe(1);
+  });
+
   it("parseNextMotorStored preserva allowedShiftCodes até sanitizar com turnos ativos", () => {
     const parsed = parseNextMotorStored({
       enabled: {},
@@ -104,5 +120,50 @@ describe("next-motor-employee-prefs", () => {
 
     expect(result.preferredShiftRows).toEqual([{ employeeUuid: "emp-a", shiftCode: "T8" }]);
     expect(result.shiftRestrictionRows).toEqual([{ employeeUuid: "emp-b", shiftCode: "T6" }]);
+  });
+
+  it("sanitize employeePrefs com campos FCF", () => {
+    const parsed = parseNextMotorStored({
+      enabled: {},
+      params: {},
+      scopeEmployeeIds: null,
+      employeePrefs: {
+        "emp-fcf": {
+          preferredShiftId: "s-t8",
+          restrictedShiftIds: [],
+          fcfPriorityShiftId: "s-t9",
+          fcfWeekday: 1,
+        },
+      },
+    });
+    expect(parsed.employeePrefs?.["emp-fcf"]).toEqual({
+      preferredShiftId: "s-t8",
+      restrictedShiftIds: [],
+      fcfPriorityShiftId: "s-t9",
+      fcfWeekday: 1,
+    });
+  });
+
+  it("buildFcfRulesFromMotorPrefs usa T9 e weekday do motor", async () => {
+    const { buildFcfRulesFromMotorPrefs } = await import(
+      "../domain/schedule/next-motor/next-motor-employee-prefs.js",
+    );
+    const shifts = [
+      { id: "s-t9", code: "T9", active: true, name: "T9" },
+      { id: "s-t8", code: "T8", active: true, name: "T8" },
+    ] as import("@prisma/client").Shift[];
+    const rules = buildFcfRulesFromMotorPrefs({
+      employees: [{ id: "uuid-luc", isFcf: true, fcfSchedule: [] }],
+      employeePrefs: {
+        "uuid-luc": {
+          preferredShiftId: "s-t8",
+          restrictedShiftIds: [],
+          fcfPriorityShiftId: "s-t9",
+          fcfWeekday: 3,
+        },
+      },
+      shifts,
+    });
+    expect(rules).toEqual([{ employeeUuid: "uuid-luc", shiftCode: "T9", weekday: 3 }]);
   });
 });

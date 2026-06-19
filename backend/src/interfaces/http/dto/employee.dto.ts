@@ -59,21 +59,12 @@ const fcfScheduleEntrySchema = z.object({
 
 const fcfScheduleArray = z.array(fcfScheduleEntrySchema).optional().default([]);
 
-function refineFcfConfig(
+function refineFcfSchedule(
   data: { isFcf?: boolean; fcfSchedule?: Array<{ shiftId: string; weekday: number }> },
   ctx: z.RefinementCtx,
 ): void {
-  const isFcf = data.isFcf ?? false;
-  if (!isFcf) return;
   const schedule = data.fcfSchedule ?? [];
-  if (schedule.length === 0) {
-    ctx.addIssue({
-      code: "custom",
-      message: "Adicione ao menos uma alocação FCF (dia da semana + turno desejado)",
-      path: ["fcfSchedule"],
-    });
-    return;
-  }
+  if (schedule.length === 0) return;
   const weekdays = schedule.map((r) => r.weekday);
   if (weekdays.length !== new Set(weekdays).size) {
     ctx.addIssue({
@@ -164,7 +155,7 @@ export const createEmployeeSchema = z
 
   .refine((d) => rejectRestrictedPreferredOverlap(d.restrictedShiftIds, d.preferredShiftIds))
 
-  .superRefine((d, ctx) => refineFcfConfig(d, ctx));
+  .superRefine((d, ctx) => refineFcfSchedule(d, ctx));
 
 
 
@@ -219,7 +210,7 @@ export const updateEmployeeSchema = z
         ctx.addIssue({ code: "custom", message: overlap.message, path: ["preferredShiftIds"] });
       }
     }
-    refineFcfConfig(
+    refineFcfSchedule(
       {
         isFcf: d.isFcf,
         fcfSchedule: d.fcfSchedule,

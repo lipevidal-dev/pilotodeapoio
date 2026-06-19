@@ -20,6 +20,10 @@ const employeeMotorPrefSchema = z.object({
 
   restrictedShiftIds: z.array(z.string().min(1)),
 
+  fcfPriorityShiftId: z.string().min(1).nullable().optional(),
+
+  fcfWeekday: z.number().int().min(0).max(6).nullable().optional(),
+
 });
 
 

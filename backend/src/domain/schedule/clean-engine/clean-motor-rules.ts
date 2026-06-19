@@ -36,6 +36,11 @@ export function motorShiftEspacamento(options: CleanEngineOptions, shiftCode: st
   return motorShiftParamValue(options.motorParams, shiftCode, "espacamento") ?? fallback;
 }
 
+export function motorShiftAgrupamento(options: CleanEngineOptions, shiftCode: string, fallback = 1): number {
+  if (shiftCode.toUpperCase() === "T8") return 1;
+  return motorShiftParamValue(options.motorParams, shiftCode, "agrupamento_turnos") ?? fallback;
+}
+
 export function motorShiftMaxConsecutivos(options: CleanEngineOptions, shiftCode: string, fallback = 6): number {
   return motorShiftParamValue(options.motorParams, shiftCode, "max_consecutivos") ?? fallback;
 }

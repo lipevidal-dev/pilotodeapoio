@@ -20,8 +20,29 @@ import { assignmentKey, type BlockedMap, type PlannedMap } from "../types.js";
 import { MOTOR_VERSION_NEXT } from "../engine-metadata.js";
 import { CleanAuditLog } from "./clean-audit.js";
 import { motorRuleEnabled, motorShiftMaxConsecutivos, motorShiftMetaTurnos, motorShiftRuleEnabled, sumMotorShiftMetaTurnos } from "./clean-motor-rules.js";
-import { compareCandidatesForShift, isBlockedOnlyByTurnSpacing, isT8PreferredPao, prefersRateioShift } from "./clean-preferences.js";
+import { motorShiftParamValue } from "../next-motor/next-motor-shift-params.js";
+import {
+  compareCandidatesForShift,
+  isBlockedOnlyByTurnSpacing,
+  isT8PreferredPao,
+  prefersRateioShift,
+  primaryPreferredRateio,
+} from "./clean-preferences.js";
 import { isRateioTurnCode, type CleanEngineOptions } from "./clean-types.js";
+import {
+  detectVacationFortnight,
+  vacationDatesForEmployee,
+  type VacationFortnight,
+} from "./clean-vacation-fortnight.js";
+
+function isProductiveAllocationLabel(label: string): boolean {
+  const u = normalizeOperationalLabel(label).toUpperCase();
+  if (u === "ND" || u === CROSS_MONTH_ND_LABEL.toUpperCase()) return true;
+  if (u === "VOO" || u === "SIMULADOR" || u === "CMA" || u === "OUTRO") return true;
+  if (u === "CURSO" || u === "CURSO ONLINE") return true;
+  return false;
+}
+import type { CanWorkOptions } from "../../rules/eligibility.js";
 
 export class CleanWorkspace {
   readonly input: GenerationInput;
@@ -42,6 +63,9 @@ export class CleanWorkspace {
   readonly allocations: GeneratedAllocation[] = [];
   readonly crossMonthPreAllocations: GeneratedAllocation[] = [];
   readonly audit = new CleanAuditLog();
+  /** PAOs em férias quinzenais — metas e alocações só na quinzena livre. */
+  readonly vacationFortnightByUuid = new Map<string, VacationFortnight>();
+
   constructor(input: GenerationInput, options: CleanEngineOptions = {}) {
     this.input = input;
     this.options = options;
@@ -69,6 +93,26 @@ export class CleanWorkspace {
     this.allowedShiftCodes = new Set(allowed.map((code) => code.toUpperCase()));
     this.loadCrossMonthHistory();
     this.loadCrossMonthPreAllocationsFromInput();
+    this.indexVacationFortnights();
+  }
+
+  private indexVacationFortnights(): void {
+    for (const emp of this.input.employees) {
+      const dates = vacationDatesForEmployee(this.input.vacationDays, emp.uuid);
+      const fortnight = detectVacationFortnight(this.days, dates);
+      if (fortnight) this.vacationFortnightByUuid.set(emp.uuid, fortnight);
+    }
+  }
+
+  hasHalfMonthVacation(uuid: string): boolean {
+    return this.vacationFortnightByUuid.has(uuid);
+  }
+
+  isEmployeeVacationDay(uuid: string, date: string): boolean {
+    const did = this.uuidToDomain.get(uuid);
+    if (did == null) return false;
+    const label = this.getBlockLabel(did, date);
+    return normalizeOperationalLabel(label ?? "").toUpperCase() === "FÉRIAS";
   }
 
   private loadCrossMonthPreAllocationsFromInput(): void {
@@ -171,10 +215,6 @@ export class CleanWorkspace {
 
     if (!this.usesNextMotorRules()) return opts;
 
-    if (motorRuleEnabled(this.options, "pao_meta_turnos")) {
-      opts.maxMonthlyWork = sumMotorShiftMetaTurnos(this.options, this.coverageShiftCodes);
-    }
-
     if (motorRuleEnabled(this.options, "max_6_consecutive")) {
       const codes = this.coverageShiftCodes.length ? this.coverageShiftCodes : ["T6", "T7", "T8", "T9"];
       const maxValues = codes.map((code) => motorShiftMaxConsecutivos(this.options, code, 6));
@@ -213,18 +253,167 @@ export class CleanWorkspace {
     date: string,
     shiftCode: string,
     plannedOverride?: PlannedMap,
+    overrides?: Partial<CanWorkOptions>,
   ): { ok: boolean; reason: string } {
     const emp = this.input.employees.find((e) => e.uuid === uuid);
     if (!emp) return { ok: false, reason: "funcionário não encontrado" };
     const employee = { ...emp.employee, id: emp.domainId };
+    const opts: CanWorkOptions = { ...this.canWorkOpts(), ...overrides };
+    const normalized = shiftCode.toUpperCase();
+    if (
+      this.usesNextMotorRules() &&
+      !opts.fcfPriorityBypass &&
+      isRateioTurnCode(normalized)
+    ) {
+      if (
+        motorRuleEnabled(this.options, "pao_meta_turnos") &&
+        this.wouldExceedTotalMetaTurnos(uuid, 1)
+      ) {
+        const limit = this.effectiveTotalMetaForEmployee(uuid);
+        return {
+          ok: false,
+          reason: `limite mensal de ${limit} turnos rateio (meta PAO)`,
+        };
+      }
+      if (
+        motorShiftRuleEnabled(this.options, "pao_meta_turnos", normalized) &&
+        this.countRateioTurnsForShift(uuid, normalized) >=
+          this.effectiveMetaTurnosForShift(uuid, normalized)
+      ) {
+        return {
+          ok: false,
+          reason: `meta de ${this.effectiveMetaTurnosForShift(uuid, normalized)} turno(s) ${normalized} atingida`,
+        };
+      }
+      if (
+        motorRuleEnabled(this.options, "pao_meta_dias_trabalhados") &&
+        this.wouldExceedDiasTrabalhados(uuid, 1)
+      ) {
+        const limit = this.effectiveDiasTrabalhadosForEmployee(uuid);
+        return {
+          ok: false,
+          reason: `limite mensal de ${limit} dias trabalhados (meta PAO)`,
+        };
+      }
+    }
     return canWork(
       employee,
       date,
       shiftCode,
       this.mergedBlocked(),
       plannedOverride ?? this.mergedPlanned(),
-      this.canWorkOpts(),
+      opts,
     );
+  }
+
+  effectiveMetaTurnosForShift(uuid: string, shiftCode: string): number {
+    if (!this.usesNextMotorRules()) return Number.POSITIVE_INFINITY;
+    if (!motorShiftRuleEnabled(this.options, "pao_meta_turnos", shiftCode)) {
+      return Number.POSITIVE_INFINITY;
+    }
+    const base = motorShiftMetaTurnos(this.options, shiftCode, 20);
+    if (this.hasHalfMonthVacation(uuid)) return Math.ceil(base / 2);
+    return base;
+  }
+
+  /** Teto mensal de turnos rateio do PAO (meta do turno preferido; soma se sem preferência). */
+  effectiveTotalMetaForEmployee(uuid: string): number {
+    if (!this.usesNextMotorRules()) return Number.POSITIVE_INFINITY;
+    if (!motorRuleEnabled(this.options, "pao_meta_turnos")) return Number.POSITIVE_INFINITY;
+
+    const did = this.uuidToDomain.get(uuid);
+    if (did == null) return Number.POSITIVE_INFINITY;
+
+    const preferred = primaryPreferredRateio(this, did);
+    if (preferred) {
+      const base = motorShiftMetaTurnos(this.options, preferred, 20);
+      if (this.hasHalfMonthVacation(uuid)) return Math.ceil(base / 2);
+      return base;
+    }
+
+    const sum = sumMotorShiftMetaTurnos(this.options, this.coverageShiftCodes);
+    if (this.hasHalfMonthVacation(uuid)) return Math.ceil(sum / 2);
+    return sum;
+  }
+
+  /** Alinhado ao `resolveEmployeeTurnoMeta` / scope-projection-summary. */
+  wouldExceedTotalMetaTurnos(uuid: string, extraTurnos = 1): boolean {
+    if (!this.usesNextMotorRules()) return false;
+    if (!motorRuleEnabled(this.options, "pao_meta_turnos")) return false;
+    const limit = this.effectiveTotalMetaForEmployee(uuid);
+    if (!Number.isFinite(limit)) return false;
+    return this.countRateioTurns(uuid) + extraTurnos > limit;
+  }
+
+  hasTotalMetaHeadroom(uuid: string, extraTurnos = 1): boolean {
+    return !this.wouldExceedTotalMetaTurnos(uuid, extraTurnos);
+  }
+
+  /** Meta de dias produtivos (turnos + ND + voo + simulador + curso + CMA + outros). */
+  effectiveDiasTrabalhadosForEmployee(uuid: string): number {
+    if (!this.usesNextMotorRules()) return Number.POSITIVE_INFINITY;
+    if (!motorRuleEnabled(this.options, "pao_meta_dias_trabalhados")) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    const did = this.uuidToDomain.get(uuid);
+    if (did == null) return Number.POSITIVE_INFINITY;
+
+    const preferred = primaryPreferredRateio(this, did);
+    if (!preferred) return Number.POSITIVE_INFINITY;
+
+    const base = motorShiftParamValue(this.options.motorParams, preferred, "meta_dias_trabalhados");
+    if (this.hasHalfMonthVacation(uuid)) return Math.ceil(base / 2);
+    return base;
+  }
+
+  /** Contagem alinhada ao resumo operacional / scope-projection-summary. */
+  countProductiveWorkDays(uuid: string): number {
+    const did = this.uuidToDomain.get(uuid);
+    if (did == null) return 0;
+
+    let n = 0;
+    for (const day of this.days) {
+      const key = assignmentKey(did, day);
+      if (this.planned.has(key) || this.historyPlanned.has(key)) {
+        n++;
+        continue;
+      }
+      const block = this.getBlockLabel(did, day);
+      if (block && isProductiveAllocationLabel(block)) {
+        n++;
+        continue;
+      }
+      const hasProductiveAlloc = this.allocations.some(
+        (a) =>
+          a.employeeUuid === uuid &&
+          a.date === day &&
+          isProductiveAllocationLabel(a.label),
+      );
+      if (hasProductiveAlloc) n++;
+    }
+    return n;
+  }
+
+  wouldExceedDiasTrabalhados(uuid: string, extraDays = 1): boolean {
+    if (!this.usesNextMotorRules()) return false;
+    if (!motorRuleEnabled(this.options, "pao_meta_dias_trabalhados")) return false;
+    const limit = this.effectiveDiasTrabalhadosForEmployee(uuid);
+    if (!Number.isFinite(limit)) return false;
+    return this.countProductiveWorkDays(uuid) + extraDays > limit;
+  }
+
+  hasDiasTrabalhadosHeadroom(uuid: string, extraDays = 1): boolean {
+    return !this.wouldExceedDiasTrabalhados(uuid, extraDays);
+  }
+
+  /** Verifica teto de turnos rateio e dias produtivos antes de blocos T8/T8/ND. */
+  wouldExceedPaoCapacity(uuid: string, extraTurnos: number, extraProductiveDays: number): boolean {
+    if (extraTurnos > 0 && this.wouldExceedTotalMetaTurnos(uuid, extraTurnos)) return true;
+    if (extraProductiveDays > 0 && this.wouldExceedDiasTrabalhados(uuid, extraProductiveDays)) {
+      return true;
+    }
+    return false;
   }
 
   unassignPlannedDay(domainId: number, date: string): void {
@@ -421,6 +610,38 @@ export class CleanWorkspace {
     return { assigned, reason: assigned ? undefined : "dia já ocupado" };
   }
 
+  /** FCF prioritário: T9 (ou turno configurado) no dia da semana, ignora meta e preferência T9. */
+  tryAssignFcfPriority(
+    employeeUuid: string,
+    date: string,
+    shiftCode: string,
+    phase: string,
+  ): { assigned: boolean; reason?: string; skippedVacation?: boolean } {
+    if (this.isEmployeeVacationDay(employeeUuid, date)) {
+      return { assigned: false, skippedVacation: true, reason: "férias" };
+    }
+    const emp = this.input.employees.find((e) => e.uuid === employeeUuid);
+    if (!emp) return { assigned: false, reason: "funcionário não encontrado" };
+    if (!this.isShiftAllowedForGeneration(shiftCode)) {
+      return {
+        assigned: false,
+        reason: `turno ${shiftCode.toUpperCase()} desabilitado na configuração do motor`,
+      };
+    }
+    const key = assignmentKey(emp.domainId, date);
+    if (this.planned.has(key)) {
+      return { assigned: false, reason: "dia já ocupado" };
+    }
+    const check = this.checkCanWork(employeeUuid, date, shiftCode, undefined, {
+      fcfPriorityBypass: true,
+    });
+    if (!check.ok) {
+      return { assigned: false, reason: check.reason };
+    }
+    const assigned = this.assignShift(employeeUuid, date, shiftCode, phase, "FCF prioritário");
+    return { assigned, reason: assigned ? undefined : "dia já ocupado" };
+  }
+
   hasPaoCoverage(date: string, shiftCode: string): boolean {
     const normalized = shiftCode.toUpperCase();
     for (const [key, code] of this.planned) {
@@ -467,12 +688,35 @@ export class CleanWorkspace {
           continue;
         }
 
-        const applyMeta =
+        const applyTotalMeta =
           this.usesNextMotorRules() &&
+          motorRuleEnabled(this.options, "pao_meta_turnos");
+        const applyPerShiftMeta =
+          applyTotalMeta &&
           motorShiftRuleEnabled(this.options, "pao_meta_turnos", normalized);
-        const metaTurnos = motorShiftMetaTurnos(this.options, normalized, 20);
+        const applyDiasMeta =
+          this.usesNextMotorRules() &&
+          motorRuleEnabled(this.options, "pao_meta_dias_trabalhados");
         const candidates = this.sortedCandidates(date, shiftCode)
-          .filter((c) => !applyMeta || this.countRateioTurnsForShift(c.uuid, normalized) < metaTurnos)
+          .filter((c) => {
+            if (applyPerShiftMeta) {
+              if (
+                this.countRateioTurnsForShift(c.uuid, normalized) >=
+                this.effectiveMetaTurnosForShift(c.uuid, normalized)
+              ) {
+                return false;
+              }
+            }
+            if (applyTotalMeta) {
+              if (this.countRateioTurns(c.uuid) >= this.effectiveTotalMetaForEmployee(c.uuid)) {
+                return false;
+              }
+            }
+            if (applyDiasMeta && !this.hasDiasTrabalhadosHeadroom(c.uuid, 1)) {
+              return false;
+            }
+            return true;
+          })
           .filter((c) => {
             if (!excludeT8PrefFromT6T7) return true;
             if (normalized !== "T6" && normalized !== "T7") return true;

@@ -249,11 +249,13 @@ export class EmployeeUseCase {
     if (!isFcf) {
       return { isFcf: false, fcfSchedule: [] };
     }
-    const shifts = await this.shiftRepo.findAll(false);
-    const activeIds = new Set(shifts.filter((s) => s.active).map((s) => s.id));
-    for (const entry of normalized) {
-      if (!activeIds.has(entry.shiftId)) {
-        throw new EmployeeFcfShiftNotFoundError(entry.shiftId);
+    if (normalized.length > 0) {
+      const shifts = await this.shiftRepo.findAll(false);
+      const activeIds = new Set(shifts.filter((s) => s.active).map((s) => s.id));
+      for (const entry of normalized) {
+        if (!activeIds.has(entry.shiftId)) {
+          throw new EmployeeFcfShiftNotFoundError(entry.shiftId);
+        }
       }
     }
     return { isFcf: true, fcfSchedule: normalized };

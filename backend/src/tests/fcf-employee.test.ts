@@ -4,10 +4,7 @@ import { EmployeeUseCase } from "../application/use-cases/employee.use-case.js";
 import { EmployeeRepository } from "../infrastructure/repositories/employee.repository.js";
 import type { RoleRepository } from "../infrastructure/repositories/role.repository.js";
 import type { ShiftRepository } from "../infrastructure/repositories/shift.repository.js";
-import {
-  EmployeeFcfConfigInvalidError,
-  EmployeeFcfShiftNotFoundError,
-} from "../application/errors/employee.errors.js";
+import { EmployeeFcfShiftNotFoundError } from "../application/errors/employee.errors.js";
 import { validateFcfConfig, normalizeFcfSchedule } from "../domain/employee/fcf-config.js";
 
 const rolePao: Role = {
@@ -63,8 +60,8 @@ describe("fcf-config", () => {
     ).toEqual([{ shiftId: "a", weekday: 1 }]);
   });
 
-  it("exige ao menos uma linha quando FCF ativo", () => {
-    expect(validateFcfConfig({ isFcf: true, fcfSchedule: [] })).toContain("alocação FCF");
+  it("permite FCF ativo sem alocações no cadastro", () => {
+    expect(validateFcfConfig({ isFcf: true, fcfSchedule: [] })).toBeNull();
     expect(
       validateFcfConfig({ isFcf: true, fcfSchedule: [{ shiftId: "x", weekday: 1 }] }),
     ).toBeNull();
@@ -110,10 +107,7 @@ describe("EmployeeUseCase — FCF", () => {
       active: true,
       birthDate: null,
       isFcf: true,
-      fcfSchedule: [
-        { shiftId: shiftT7.id, weekday: 1 },
-        { shiftId: shiftT8.id, weekday: 3 },
-      ],
+      fcfSchedule: [],
       createdAt: new Date(),
       updatedAt: new Date(),
       role: rolePao,
@@ -125,10 +119,36 @@ describe("EmployeeUseCase — FCF", () => {
     };
   }
 
-  it("cria funcionário com alocações FCF por dia", async () => {
+  it("cria funcionário FCF sem alocações no cadastro", async () => {
     create.mockResolvedValue(employeeRow());
 
     const api = await new EmployeeUseCase(empRepo, roleRepo, shiftRepo).create({
+      name: "PAO FCF",
+      roleId: rolePao.id,
+      isFcf: true,
+      fcfSchedule: [],
+    });
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isFcf: true,
+        fcfSchedule: [],
+      }),
+    );
+    expect(api.isFcf).toBe(true);
+  });
+
+  it("cria funcionário com alocações FCF legadas opcionais", async () => {
+    create.mockResolvedValue(
+      employeeRow({
+        fcfSchedule: [
+          { shiftId: shiftT7.id, weekday: 1 },
+          { shiftId: shiftT8.id, weekday: 3 },
+        ],
+      }),
+    );
+
+    await new EmployeeUseCase(empRepo, roleRepo, shiftRepo).create({
       name: "PAO FCF",
       roleId: rolePao.id,
       isFcf: true,
@@ -140,29 +160,15 @@ describe("EmployeeUseCase — FCF", () => {
 
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
-        isFcf: true,
         fcfSchedule: [
           { shiftId: shiftT7.id, weekday: 1 },
           { shiftId: shiftT8.id, weekday: 3 },
         ],
       }),
     );
-    expect(api.isFcf).toBe(true);
-    expect(api.fcfSchedule).toHaveLength(2);
   });
 
-  it("rejeita FCF sem alocações", async () => {
-    await expect(
-      new EmployeeUseCase(empRepo, roleRepo, shiftRepo).create({
-        name: "PAO FCF",
-        roleId: rolePao.id,
-        isFcf: true,
-        fcfSchedule: [],
-      }),
-    ).rejects.toBeInstanceOf(EmployeeFcfConfigInvalidError);
-  });
-
-  it("rejeita turno FCF inativo", async () => {
+  it("rejeita turno FCF inativo quando schedule informado", async () => {
     shiftFindAll.mockResolvedValue([{ ...shiftT7, active: false }]);
     await expect(
       new EmployeeUseCase(empRepo, roleRepo, shiftRepo).create({

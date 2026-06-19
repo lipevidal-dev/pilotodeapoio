@@ -1,4 +1,5 @@
 export type PaoShiftParamKind =
+  | 'agrupamento_turnos'
   | 'meta_turnos'
   | 'espacamento'
   | 'meta_dias_trabalhados'
@@ -9,6 +10,7 @@ export type PaoShiftParamKind =
 const PAO_SHIFT_PARAM_PREFIX = 'pao_shift_';
 
 export const PAO_SHIFT_PARAM_KINDS: PaoShiftParamKind[] = [
+  'agrupamento_turnos',
   'meta_turnos',
   'espacamento',
   'meta_dias_trabalhados',
@@ -16,6 +18,25 @@ export const PAO_SHIFT_PARAM_KINDS: PaoShiftParamKind[] = [
   'meta_folga_social',
   'max_consecutivos',
 ];
+
+export function shiftParamDefaultValue(kind: PaoShiftParamKind, shiftCode: string): number {
+  if (kind === 'agrupamento_turnos') {
+    const code = shiftCode.toUpperCase();
+    if (code === 'T6' || code === 'T7') return 4;
+    if (code === 'T9') return 1;
+    if (code === 'T8') return 1;
+  }
+  const defaults: Record<PaoShiftParamKind, number> = {
+    agrupamento_turnos: 1,
+    meta_turnos: 20,
+    espacamento: 0,
+    meta_dias_trabalhados: 20,
+    meta_folgas: 10,
+    meta_folga_social: 1,
+    max_consecutivos: 6,
+  };
+  return defaults[kind];
+}
 
 export function paoShiftParamId(kind: PaoShiftParamKind, shiftCode: string): string {
   return `${PAO_SHIFT_PARAM_PREFIX}${kind}__${shiftCode.toUpperCase()}`;

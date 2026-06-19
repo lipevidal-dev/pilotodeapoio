@@ -121,6 +121,7 @@ export class GenerateScheduleUseCase {
       noFlightDates,
       approvedDayOff,
       flightDays,
+      employeePrefs: motorCfg.employeePrefs,
     });
 
     const engineOptions = buildCleanEngineOptionsFromMotorConfig(motorCfg, shifts);

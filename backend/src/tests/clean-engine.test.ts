@@ -6,6 +6,7 @@ import { CleanWorkspace } from "../domain/schedule/clean-engine/clean-workspace.
 import { finalizeCrossMonthContinuations } from "../domain/schedule/clean-engine/clean-cross-month-continuity.js";
 import { validateCleanGenerationBeforeSave, filterPersistenceBlockingIssues } from "../domain/schedule/clean-engine/clean-validator.js";
 import { MOTOR_VERSION_CLEAN, MOTOR_VERSION_NEXT } from "../domain/schedule/engine-metadata.js";
+import { paoShiftParamId } from "../domain/schedule/next-motor/next-motor-shift-params.js";
 import type { GenerationInput, GenerationInputEmployee } from "../domain/schedule/generation-types.js";
 import type { Employee } from "../domain/employee/types.js";
 import type { Shift } from "../domain/shift/types.js";
@@ -381,6 +382,61 @@ describe("CleanEngine", () => {
     expect(countT8("uuid-junior")).toBe(6);
   });
 
+  it("agrupamento parcial: senior recebe 1 dia antes do junior no mesmo turno", () => {
+    const paos = [emp(1, "Senior", "PAO", 1), emp(2, "Junior", "PAO", 2)];
+    paos[0]!.uuid = "uuid-senior";
+    paos[1]!.uuid = "uuid-junior";
+    const input: GenerationInput = {
+      ...baseInput(paos),
+      preferredShifts: new Map([
+        [1, new Set(["T6"])],
+        [2, new Set(["T6"])],
+      ]),
+      lockedAllocations: [
+        { employeeUuid: "uuid-senior", date: "2026-07-02", label: "FOLGA PEDIDA" },
+        { employeeUuid: "uuid-senior", date: "2026-07-03", label: "FOLGA PEDIDA" },
+        { employeeUuid: "uuid-senior", date: "2026-07-04", label: "FOLGA PEDIDA" },
+      ],
+    };
+    const options = {
+      scopeEmployeeUuids: ["uuid-senior", "uuid-junior"],
+      motorVersion: MOTOR_VERSION_NEXT,
+      coverageShiftCodes: ["T6"],
+      enabledRules: {
+        preferred_shifts: true,
+        pao_meta_turnos: true,
+        pao_espacamento_turnos: true,
+        locked_preallocations: true,
+        coverage_t6: false,
+        coverage_t7: false,
+        coverage_t8: false,
+      },
+      motorParams: {
+        pao_meta_turnos: 4,
+        pao_espacamento_turnos: 0,
+        [paoShiftParamId("agrupamento_turnos", "T6")]: 4,
+      },
+    };
+    const result = generateCleanSchedule(input, options);
+
+    expect(
+      result.assignments.some(
+        (a) =>
+          a.employeeUuid === "uuid-senior" &&
+          a.date === "2026-07-01" &&
+          a.shiftCode.toUpperCase() === "T6",
+      ),
+    ).toBe(true);
+    expect(
+      result.assignments.some(
+        (a) =>
+          a.employeeUuid === "uuid-junior" &&
+          a.date === "2026-07-01" &&
+          a.shiftCode.toUpperCase() === "T6",
+      ),
+    ).toBe(false);
+  });
+
   it("espaça turnos preferidos e pula dias já ocupados", () => {
     const paos = [emp(1, "Ana")];
     paos[0]!.uuid = "uuid-a";
@@ -401,7 +457,11 @@ describe("CleanEngine", () => {
         coverage_t7: false,
         coverage_t8: false,
       },
-      motorParams: { pao_meta_turnos: 3, pao_espacamento_turnos: 2 },
+      motorParams: {
+        pao_meta_turnos: 3,
+        pao_espacamento_turnos: 2,
+        [paoShiftParamId("agrupamento_turnos", "T6")]: 1,
+      },
     };
     const result = generateCleanSchedule(input, options);
     const dates = result.assignments

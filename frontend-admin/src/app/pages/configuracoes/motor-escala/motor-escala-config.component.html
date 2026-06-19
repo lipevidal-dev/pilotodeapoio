@@ -163,6 +163,7 @@
 
     <p class="scope-hint">
       Marque os PAOs no escopo. Abaixo do resumo de dias, ajuste preferência e turnos a evitar.
+      Pilotos FCF também configuram turno prioritário (T9) e dia da semana aqui.
     </p>
 
 
@@ -336,6 +337,32 @@
                   </div>
                 </div>
               }
+
+              @if (emp.isFcf) {
+                <div class="employee-scope-fcf">
+                  <span class="employee-scope-prefs__label">FCF</span>
+                  <p-select
+                    [options]="rateioShiftOptions()"
+                    [ngModel]="employeeFcfPriorityShiftId(emp)"
+                    (ngModelChange)="onEmployeeFcfPriorityShiftChange(emp, $event)"
+                    optionLabel="code"
+                    optionValue="value"
+                    placeholder="Turno prioritário"
+                    class="employee-scope-fcf__field"
+                    [inputId]="'fcf-shift-' + emp.id"
+                  />
+                  <p-select
+                    [options]="fcfWeekdayOptions"
+                    [ngModel]="employeeFcfWeekday(emp)"
+                    (ngModelChange)="onEmployeeFcfWeekdayChange(emp, $event)"
+                    optionLabel="label"
+                    optionValue="value"
+                    placeholder="Dia da semana"
+                    class="employee-scope-fcf__field"
+                    [inputId]="'fcf-weekday-' + emp.id"
+                  />
+                </div>
+              }
             }
           </div>
 
@@ -453,19 +480,25 @@
                 @for (col of paoShiftColumns(); track col.code) {
                   <td class="pao-matrix__cell">
                     @if (shiftParamField(col.code, row.kind); as field) {
-                      <p-inputNumber
-                        styleClass="param-input-number pao-matrix__input"
-                        inputStyleClass="param-input-number__field"
-                        [ngModel]="paramValue(field.id)"
-                        (ngModelChange)="onShiftParamChange(field, $event)"
-                        [min]="field.min"
-                        [max]="field.max"
-                        [useGrouping]="false"
-                        [showButtons]="false"
-                        [disabled]="!isShiftRuleEnabled(col.code, field.ruleId)"
-                        [inputId]="'matrix-param-' + field.id"
-                        [attr.aria-label]="row.label + ' ' + col.code"
-                      />
+                      @if (field.inputMode === 't8_block_pattern' && col.code === 'T8') {
+                        <span class="pao-matrix__t8-pattern" [attr.title]="field.displayHint">
+                          {{ field.displayHint }}
+                        </span>
+                      } @else {
+                        <p-inputNumber
+                          styleClass="param-input-number pao-matrix__input"
+                          inputStyleClass="param-input-number__field"
+                          [ngModel]="paramValue(field.id)"
+                          (ngModelChange)="onShiftParamChange(field, $event)"
+                          [min]="field.min"
+                          [max]="field.max"
+                          [useGrouping]="false"
+                          [showButtons]="false"
+                          [disabled]="field.locked || !isShiftRuleEnabled(col.code, field.ruleId)"
+                          [inputId]="'matrix-param-' + field.id"
+                          [attr.aria-label]="row.label + ' ' + col.code"
+                        />
+                      }
                     } @else {
                       <span class="pao-matrix__empty">—</span>
                     }

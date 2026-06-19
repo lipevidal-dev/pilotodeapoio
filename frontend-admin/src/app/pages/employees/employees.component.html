@@ -340,8 +340,6 @@
 
           inputId="formIsFcf"
 
-          (ngModelChange)="onFcfToggle($event)"
-
         />
 
         <label for="formIsFcf" class="section-title inline-title">Cargo FCF</label>
@@ -349,85 +347,9 @@
       </div>
 
       <p class="section-hint">
-        Preferência de alocação deste funcionário: em cada dia da semana escolhido, o motor tentará colocá-lo no turno desejado.
-        Não restringe o cargo a um único turno — nos demais dias a escala segue normalmente.
+        Marque para identificar pilotos FCF. Configure o turno prioritário (T9) e o dia da semana em
+        <strong>Configurações → Motor de Escala → Funcionários no escopo</strong>.
       </p>
-
-
-
-      @if (formIsFcf) {
-
-        <div class="fcf-config">
-
-          <h4 class="subsection-title">Alocações FCF</h4>
-
-          <div class="restriction-toolbar">
-
-            <p-button
-
-              label="Adicionar dia"
-
-              icon="pi pi-plus"
-
-              severity="secondary"
-
-              [outlined]="true"
-
-              size="small"
-
-              (onClick)="addFcfScheduleRow()"
-
-            />
-
-          </div>
-
-
-
-          @for (row of formFcfSchedule; track $index) {
-
-            <div class="fcf-schedule-row">
-
-              <p-select
-
-                [options]="fcfWeekdayOptions"
-
-                [(ngModel)]="row.weekday"
-
-                optionLabel="label"
-
-                optionValue="value"
-
-                placeholder="Dia da semana"
-
-                class="fcf-schedule-field"
-
-              />
-
-              <p-select
-
-                [options]="shiftOptions()"
-
-                [(ngModel)]="row.shiftId"
-
-                optionLabel="label"
-
-                optionValue="value"
-
-                placeholder="Turno desejado"
-
-                class="fcf-schedule-field"
-
-              />
-
-              <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="removeFcfScheduleRow($index)" />
-
-            </div>
-
-          }
-
-        </div>
-
-      }
 
     </section>
 

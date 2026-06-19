@@ -403,6 +403,21 @@
   user-select: none;
 }
 
+.employee-scope-fcf {
+  margin-top: 0.45rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed #e8eaed;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+}
+
+.employee-scope-fcf__field {
+  min-width: 8.5rem;
+  max-width: 11rem;
+}
+
 .pao-day-budget-hint {
   margin: 0 1.25rem 0.85rem;
   font-size: 0.78rem;
@@ -742,6 +757,21 @@
 .pao-matrix__empty {
   color: #c5cad0;
   user-select: none;
+}
+
+.pao-matrix__t8-pattern {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 :host ::ng-deep .pao-matrix__input {

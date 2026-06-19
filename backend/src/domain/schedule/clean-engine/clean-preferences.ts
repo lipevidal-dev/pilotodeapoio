@@ -1,7 +1,7 @@
 import { assignmentKey } from "../types.js";
 import { addDays } from "../../rules/dates.js";
 import { isRateioTurnCode } from "./clean-types.js";
-import { motorRuleEnabled, motorShiftEspacamento, motorShiftMetaTurnos, motorShiftRuleEnabled } from "./clean-motor-rules.js";
+import { motorRuleEnabled, motorShiftAgrupamento, motorShiftEspacamento, motorShiftRuleEnabled } from "./clean-motor-rules.js";
 import { findLastT8BlockEndDate } from "./clean-t8-blocks.js";
 import type { CleanWorkspace } from "./clean-workspace.js";
 const RATEIO_PREF_ORDER = ["T8", "T6", "T7", "T9"] as const;
@@ -85,6 +85,92 @@ export function getTurnSpacingDays(ws: CleanWorkspace, shiftCode: string): numbe
   return motorShiftEspacamento(ws.options, shiftCode, 0);
 }
 
+export function getTurnAgrupamentoDays(ws: CleanWorkspace, shiftCode: string): number {
+  if (!motorShiftRuleEnabled(ws.options, "pao_espacamento_turnos", shiftCode)) return 1;
+  return motorShiftAgrupamento(ws.options, shiftCode, 1);
+}
+
+function blockDatesFromStart(ws: CleanWorkspace, startDate: string, blockSize: number): string[] | null {
+  const startIdx = ws.days.indexOf(startDate);
+  if (startIdx < 0) return null;
+  const dates: string[] = [];
+  for (let i = 0; i < blockSize; i++) {
+    const idx = startIdx + i;
+    if (idx >= ws.days.length) return null;
+    dates.push(ws.days[idx]!);
+  }
+  return dates;
+}
+
+function canPlacePreferredBlockDay(
+  ws: CleanWorkspace,
+  emp: (typeof ws.paoEmployees)[number],
+  pref: string,
+  date: string,
+  isFirstDayOfBlock: boolean,
+  spacingDays: number,
+): boolean {
+  if (ws.isEmployeeDayOccupied(emp.domainId, date)) return false;
+
+  if (
+    isFirstDayOfBlock &&
+    spacingDays > 0 &&
+    !respectsTurnSpacingBefore(
+      ws,
+      emp.domainId,
+      date,
+      spacingDays,
+      findLastRateioTurnEndDate(ws, emp.domainId, date),
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    ws.hasPaoCoverage(date, pref) &&
+    !employeeCoversShiftOnDay(ws, emp.domainId, date, pref)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+/** Tenta alocar bloco consecutivo de turnos preferidos; retorna quantos dias foram alocados. */
+export function tryPlacePreferredBlock(
+  ws: CleanWorkspace,
+  emp: (typeof ws.paoEmployees)[number],
+  pref: string,
+  startDate: string,
+  blockSize: number,
+  spacingDays: number,
+  phase: string,
+): number {
+  if (blockSize <= 0) return 0;
+
+  for (let size = blockSize; size >= 1; size--) {
+    const blockDates = blockDatesFromStart(ws, startDate, size);
+    if (!blockDates) continue;
+
+    let canPlaceAll = true;
+    for (let i = 0; i < blockDates.length; i++) {
+      if (!canPlacePreferredBlockDay(ws, emp, pref, blockDates[i]!, i === 0, spacingDays)) {
+        canPlaceAll = false;
+        break;
+      }
+    }
+    if (!canPlaceAll) continue;
+
+    let placed = 0;
+    for (const date of blockDates) {
+      if (!ws.tryAssign(emp.uuid, date, pref, phase)) return placed;
+      placed++;
+    }
+    return placed;
+  }
+  return 0;
+}
+
 export function respectsTurnSpacingBefore(
   ws: CleanWorkspace,
   domainId: number,
@@ -162,38 +248,6 @@ export function isBlockedOnlyByTurnSpacing(
   return !respectsTurnSpacingBefore(ws, domainId, date, spacingDays, lastEnd);
 }
 
-function canPlacePreferredShiftOnDay(
-  ws: CleanWorkspace,
-  emp: (typeof ws.paoEmployees)[number],
-  pref: string,
-  date: string,
-  spacingDays: number,
-): boolean {
-  if (ws.isEmployeeDayOccupied(emp.domainId, date)) return false;
-
-  if (
-    spacingDays > 0 &&
-    !respectsTurnSpacingBefore(
-      ws,
-      emp.domainId,
-      date,
-      spacingDays,
-      findLastRateioTurnEndDate(ws, emp.domainId, date),
-    )
-  ) {
-    return false;
-  }
-
-  if (
-    ws.hasPaoCoverage(date, pref) &&
-    !employeeCoversShiftOnDay(ws, emp.domainId, date, pref)
-  ) {
-    return false;
-  }
-
-  return true;
-}
-
 function tryPlaceNextPreferredShiftByDayAndSeniority(
   ws: CleanWorkspace,
   employees: (typeof ws.paoEmployees),
@@ -209,14 +263,36 @@ function tryPlaceNextPreferredShiftByDayAndSeniority(
 
       const target =
         applyMeta && motorShiftRuleEnabled(ws.options, "pao_meta_turnos", pref)
-          ? motorShiftMetaTurnos(ws.options, pref, 20)
+          ? ws.effectiveMetaTurnosForShift(emp.uuid, pref)
           : Number.POSITIVE_INFINITY;
 
-      if (ws.countRateioTurnsForShift(emp.uuid, pref) >= target) continue;
+      const currentCount = ws.countRateioTurnsForShift(emp.uuid, pref);
+      if (currentCount >= target) continue;
 
+      const totalLimit = applyMeta
+        ? ws.effectiveTotalMetaForEmployee(emp.uuid)
+        : Number.POSITIVE_INFINITY;
+      const totalCount = ws.countRateioTurns(emp.uuid);
+      if (totalCount >= totalLimit) continue;
+
+      const diasLimit = applyMeta
+        ? ws.effectiveDiasTrabalhadosForEmployee(emp.uuid)
+        : Number.POSITIVE_INFINITY;
+      const diasCount = ws.countProductiveWorkDays(emp.uuid);
+      if (diasCount >= diasLimit) continue;
+
+      const agrupamento = getTurnAgrupamentoDays(ws, pref);
+      const blockSize = Math.min(
+        agrupamento,
+        target - currentCount,
+        totalLimit - totalCount,
+        diasLimit - diasCount,
+      );
+      if (blockSize <= 0) continue;
       const spacingDays = getTurnSpacingDays(ws, pref);
-      if (!canPlacePreferredShiftOnDay(ws, emp, pref, date, spacingDays)) continue;
-      if (ws.tryAssign(emp.uuid, date, pref, phase)) return true;
+
+      const placed = tryPlacePreferredBlock(ws, emp, pref, date, blockSize, spacingDays, phase);
+      if (placed > 0) return true;
     }
   }
   return false;
@@ -255,7 +331,7 @@ export function fillPreferredShifts(ws: CleanWorkspace): void {
     if (!pref) continue;
     const target =
       applyMeta && motorShiftRuleEnabled(ws.options, "pao_meta_turnos", pref)
-        ? motorShiftMetaTurnos(ws.options, pref, 20)
+        ? ws.effectiveMetaTurnosForShift(emp.uuid, pref)
         : Number.POSITIVE_INFINITY;
     if (ws.countRateioTurnsForShift(emp.uuid, pref) >= target) {
       ws.audit.record("PREFERRED_META_REACHED", phase, `meta ${target} turno(s)`, {

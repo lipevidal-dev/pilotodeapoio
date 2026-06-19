@@ -694,6 +694,8 @@ export interface PaoShiftParamFieldRow {
   min: number;
   max: number;
   locked: boolean;
+  inputMode?: 'number' | 't8_block_pattern';
+  displayHint?: string;
 }
 
 export interface PaoShiftRuleFieldRow {
@@ -715,6 +717,10 @@ export interface PaoShiftParamsRow {
 export interface EmployeeMotorPref {
   preferredShiftId: string | null;
   restrictedShiftIds: string[];
+  /** Turno prioritário FCF (ex.: T9) — configurado no escopo do motor. */
+  fcfPriorityShiftId?: string | null;
+  /** 0=domingo … 6=sábado */
+  fcfWeekday?: number | null;
 }
 
 export interface NextMotorConfigResponse {

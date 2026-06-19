@@ -78,19 +78,11 @@ export function validateFcfConfig(input: {
 
   isFcf: boolean;
 
-  fcfSchedule: FcfScheduleEntry[] | undefined;
+  fcfSchedule?: FcfScheduleEntry[] | undefined;
 
 }): string | null {
 
   if (!input.isFcf) return null;
-
-  const schedule = input.fcfSchedule ?? [];
-
-  if (schedule.length === 0) {
-
-    return "Adicione ao menos uma alocação FCF (dia da semana + turno desejado)";
-
-  }
 
   return null;
 

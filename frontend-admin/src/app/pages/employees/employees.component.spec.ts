@@ -57,6 +57,8 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
     expect(html.textContent).not.toContain('Preferência de turno');
     expect(html.textContent).not.toContain('Preferência principal de turno');
     expect(html.textContent).toContain('Cargo FCF');
+    expect(html.textContent).toContain('Motor de Escala');
+    expect(html.textContent).not.toContain('Alocações FCF');
     expect(html.textContent).not.toContain('Preferência por dia específico');
     expect(html.textContent).not.toContain('Alocar em turno específico');
     expect(html.textContent).not.toContain('Alocar turno em dias específicos');
@@ -113,24 +115,18 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
     expect(component.formNoFlightDates.length).toBe(2);
   });
 
-  it('exibe configuração FCF ao marcar cargo FCF', () => {
+  it('marca cargo FCF sem exibir alocações por dia', () => {
     flushInit();
     component.openNew();
     component.formIsFcf = true;
-    component.addFcfScheduleRow();
-    component.formFcfSchedule = [{ shiftId: 's-t7', weekday: 1 }, { shiftId: 's-t8', weekday: 3 }];
     fixture.detectChanges();
     const html = fixture.nativeElement as HTMLElement;
-    expect(html.textContent).toContain('Alocações FCF');
-    expect(html.textContent).toContain('Turno desejado');
-    expect(html.textContent).toContain('Adicionar dia');
-    expect(component.formFcfSchedule).toEqual([
-      { shiftId: 's-t7', weekday: 1 },
-      { shiftId: 's-t8', weekday: 3 },
-    ]);
+    expect(html.textContent).toContain('Cargo FCF');
+    expect(html.textContent).not.toContain('Alocações FCF');
+    expect(html.textContent).not.toContain('Adicionar dia');
   });
 
-  it('ao editar carrega alocações FCF do GET /employees/:id', () => {
+  it('ao editar carrega flag isFcf do GET /employees/:id', () => {
     flushInit();
     component.openEdit({
       id: 'emp-1',
@@ -158,27 +154,11 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
       preferredShiftIds: [],
       preferredShifts: [],
       isFcf: true,
-      fcfSchedule: [
-        { shiftId: 's-t7', weekday: 1, shiftCode: 'T7', shiftName: 'Turno 7' },
-        { shiftId: 's-t8', weekday: 3, shiftCode: 'T8', shiftName: 'Turno 8' },
-      ],
+      fcfSchedule: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
     fixture.detectChanges();
     expect(component.formIsFcf).toBeTrue();
-    expect(component.formFcfSchedule).toEqual([
-      { shiftId: 's-t7', weekday: 1 },
-      { shiftId: 's-t8', weekday: 3 },
-    ]);
-  });
-
-  it('desmarcar FCF limpa alocações', () => {
-    flushInit();
-    component.openNew();
-    component.formIsFcf = true;
-    component.addFcfScheduleRow();
-    component.onFcfToggle(false);
-    expect(component.formFcfSchedule).toEqual([]);
   });
 });
