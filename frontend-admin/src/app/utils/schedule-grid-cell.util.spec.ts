@@ -21,4 +21,10 @@ describe('schedule-grid-cell.util', () => {
     expect(isProtectedDeletableCell({ display: 'FP', kind: 'fp' })).toBe(true);
     expect(isProtectedDeletableCell({ display: 'T6', kind: 't6' })).toBe(false);
   });
+
+  it('FP em fim de semana é deletável e protegida', () => {
+    const cell = { display: 'FP', kind: 'folga-weekend' as const, folgaBaseKind: 'fp' as const };
+    expect(isDeletableCell(cell)).toBe(true);
+    expect(isProtectedDeletableCell(cell)).toBe(true);
+  });
 });

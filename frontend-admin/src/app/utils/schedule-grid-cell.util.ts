@@ -11,6 +11,8 @@ const DRAGGABLE_KINDS = new Set<ScheduleCellKind>([
   'fa',
   'fani',
   'fp',
+  'fp-weekend',
+  'folga-weekend',
   'voo',
   'simulador',
   'curso',
@@ -36,5 +38,8 @@ export function isDeletableCell(cell: ScheduleCellData): boolean {
 
 /** Exclusão pode exigir confirmação forçada no backend (FP, ND, T8). */
 export function isProtectedDeletableCell(cell: ScheduleCellData): boolean {
+  if (cell.kind === 'folga-weekend' || cell.kind === 'fp-weekend') {
+    return cell.folgaBaseKind === 'fp' || cell.kind === 'fp-weekend';
+  }
   return cell.kind === 'fp' || cell.kind === 'nd' || cell.kind === 't8';
 }

@@ -1,5 +1,6 @@
 import type { GenerationInput, GenerationInputEmployee } from "../generation-types.js";
 import type { ValidationIssue } from "../types.js";
+import { baseShiftCode } from "../instruction-shift.js";
 
 export type CleanDecisionKind =
   | "APPLY_LOCKED"
@@ -58,5 +59,5 @@ export interface CleanValidationResult {
 export const RATEIO_TURN_CODES = ["T6", "T7", "T8", "T9"] as const;
 
 export function isRateioTurnCode(code: string): boolean {
-  return (RATEIO_TURN_CODES as readonly string[]).includes(code.toUpperCase());
+  return (RATEIO_TURN_CODES as readonly string[]).includes(baseShiftCode(code));
 }

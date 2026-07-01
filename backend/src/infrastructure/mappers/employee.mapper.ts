@@ -18,6 +18,7 @@ export function prismaEmployeeToDomain(row: PrismaEmployeeWithRole): DomainEmplo
     seniority: row.seniorityNumber,
     active: row.active,
     birthDate: row.birthDate ? isoDateKey(row.birthDate) : null,
+    inInstruction: row.inInstruction ?? false,
   };
 }
 

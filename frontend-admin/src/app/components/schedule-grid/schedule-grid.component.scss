@@ -1,8 +1,16 @@
 $col-employee-w: 7.5rem;
 $col-day-w: 2.35rem;
-$sum-narrow-w: 1.85rem;
-$sum-status-w: 5rem;
-$summary-block-w: calc(9 * #{$sum-narrow-w} + #{$sum-status-w});
+$sum-narrow-w: 2.1rem;
+$summary-block-w: calc(8 * #{$sum-narrow-w});
+
+$summary-peach-border: #f0c4b4;
+$summary-peach-bg: #fff2ed;
+$summary-peach-text: #b56b52;
+$summary-head-bg: #f3f4f6;
+
+// Opaque tints matching rgba(241, 90, 34, α) over white — sticky overlays must not show grid through.
+$crosshair-row-bg: #feefe9;
+$crosshair-focus-bg: #fce1d7;
 
 .summary-toolbar {
   display: flex;
@@ -89,8 +97,8 @@ $summary-block-w: calc(9 * #{$sum-narrow-w} + #{$sum-status-w});
   }
 
   thead th {
-    background: var(--gol-gray-dark);
-    color: var(--gol-white);
+    background: var(--gol-white);
+    color: var(--gol-gray-dark);
     font-weight: 600;
     text-align: center;
     position: sticky;
@@ -98,12 +106,16 @@ $summary-block-w: calc(9 * #{$sum-narrow-w} + #{$sum-status-w});
     z-index: 3;
   }
 
+  tbody td {
+    background: var(--gol-white);
+  }
+
   .col-summary-head {
     text-align: center;
     font-size: 0.7rem;
     vertical-align: top;
     padding: 0 !important;
-    background: var(--gol-gray-dark) !important;
+    background: var(--gol-white) !important;
   }
 
   .summary-head-stack {
@@ -111,7 +123,10 @@ $summary-block-w: calc(9 * #{$sum-narrow-w} + #{$sum-status-w});
     flex-direction: column;
     width: 100%;
     min-height: 100%;
-    background: var(--gol-gray-dark);
+    background: $summary-head-bg;
+    border: 1px solid $summary-peach-border;
+    border-radius: 4px 4px 0 0;
+    overflow: hidden;
   }
 
   .summary-head-title {
@@ -119,18 +134,18 @@ $summary-block-w: calc(9 * #{$sum-narrow-w} + #{$sum-status-w});
     align-items: center;
     justify-content: center;
     flex: 1 1 auto;
-    min-height: 2.35rem;
-    padding: 0.35rem 0.2rem;
-    font-size: 0.7rem;
+    min-height: 2rem;
+    padding: 0.25rem 0.2rem;
+    font-size: 0.78rem;
     font-weight: 600;
-    color: var(--gol-white);
-    background: var(--gol-gray-dark);
-    border-bottom: 1px solid #2d2d2d;
+    color: #4b5563;
+    background: $summary-head-bg;
+    border-bottom: 1px solid #e5e7eb;
   }
 
   .summary-block-inner--head {
     flex: 0 0 auto;
-    background: #3d3d3d;
+    background: $summary-head-bg;
   }
 
   .sticky-col {
@@ -146,7 +161,7 @@ $summary-block-w: calc(9 * #{$sum-narrow-w} + #{$sum-status-w});
 
   thead .sticky-col {
     z-index: 4;
-    background: var(--gol-gray-dark);
+    background: var(--gol-white);
   }
 
   // Bloco único de resumo — evita sanfonar colunas ao rolar.
@@ -167,7 +182,7 @@ $summary-block-w: calc(9 * #{$sum-narrow-w} + #{$sum-status-w});
   thead .sticky-summary-block {
     z-index: 5;
     top: 0;
-    background: var(--gol-gray-dark) !important;
+    background: var(--gol-white) !important;
   }
 
   tbody .sticky-summary-block {
@@ -192,16 +207,14 @@ $summary-block-w: calc(9 * #{$sum-narrow-w} + #{$sum-status-w});
     justify-content: center;
     text-align: center;
     font-size: 0.58rem !important;
-    line-height: 1.1;
-    padding: 0.15rem 0.05rem;
+    line-height: 1.15;
+    font-weight: 500;
+    color: #6b7280;
+    padding: 0.15rem 0.1rem;
+    white-space: normal;
+    word-break: break-word;
+    hyphens: auto;
     box-sizing: border-box;
-  }
-
-  .summary-block-head--status {
-    flex: 0 0 $sum-status-w;
-    width: $sum-status-w;
-    min-width: $sum-status-w;
-    max-width: $sum-status-w;
   }
 
   .summary-block-cell {
@@ -217,13 +230,6 @@ $summary-block-w: calc(9 * #{$sum-narrow-w} + #{$sum-status-w});
     overflow: hidden;
   }
 
-  .summary-block-cell--status {
-    flex: 0 0 $sum-status-w;
-    width: $sum-status-w;
-    min-width: $sum-status-w;
-    max-width: $sum-status-w;
-  }
-
   .col-employee {
     text-align: left;
     padding-left: 0.65rem !important;
@@ -231,6 +237,8 @@ $summary-block-w: calc(9 * #{$sum-narrow-w} + #{$sum-status-w});
   }
 
   .col-day {
+    position: relative;
+    overflow: visible;
     text-align: center;
     padding: 0.15rem !important;
     width: var(--col-day-w);
@@ -255,11 +263,41 @@ $summary-block-w: calc(9 * #{$sum-narrow-w} + #{$sum-status-w});
   }
 
   .col-weekend {
-    background: rgba(241, 90, 34, 0.04);
+    background: #fffaf5;
   }
 
   thead .col-weekend {
-    background: #4a3728;
+    background: var(--gol-white);
+  }
+
+  thead .col-day .day-head-stack {
+    min-height: 2rem;
+  }
+
+  thead .col-day .day-num {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--gol-gray-dark);
+    opacity: 1;
+  }
+
+  thead .col-day .day-wd {
+    font-size: 0.58rem;
+    font-weight: 500;
+    color: var(--gol-gray-dark);
+    opacity: 0.85;
+  }
+
+  thead .col-weekend .day-head-stack {
+    background: #fff2ed;
+    border-radius: 4px;
+    padding: 0.1rem 0.05rem;
+  }
+
+  thead .col-weekend .day-num,
+  thead .col-weekend .day-wd {
+    color: #b56b52;
+    opacity: 1;
   }
 
   .day-num {
@@ -287,13 +325,55 @@ $summary-block-w: calc(9 * #{$sum-narrow-w} + #{$sum-status-w});
     z-index: 1;
   }
 
-  .data-row:hover td {
-    background: #fffaf5;
+  .data-row .col-crosshair {
+    background: $crosshair-row-bg !important;
   }
 
-  .data-row:hover .sticky-col,
-  .data-row:hover .sticky-summary-block {
-    background: #fffaf5 !important;
+  .data-row .col-employee.col-crosshair {
+    background: $crosshair-row-bg !important;
+    box-shadow: inset 3px 0 0 var(--gol-orange, #f15a22);
+
+    .emp-name {
+      color: var(--gol-orange-dark);
+      font-weight: 700;
+    }
+  }
+
+  .data-row .sticky-summary-block.col-crosshair {
+    background: $crosshair-row-bg !important;
+    box-shadow: inset 3px 0 0 var(--gol-orange, #f15a22);
+
+    .summary-block-inner {
+      background: $crosshair-row-bg;
+    }
+  }
+
+  .data-row .col-crosshair-focus {
+    background: $crosshair-focus-bg !important;
+    box-shadow: inset 0 0 0 1px rgba(241, 90, 34, 0.35);
+  }
+
+  .data-row .sticky-summary-block.col-crosshair-focus {
+    background: $crosshair-focus-bg !important;
+    box-shadow: inset 0 0 0 1px rgba(241, 90, 34, 0.35);
+
+    .summary-block-inner {
+      background: $crosshair-focus-bg;
+    }
+  }
+
+  thead th.col-day.col-crosshair {
+    .day-head-stack {
+      background: #fff;
+      border-radius: 4px;
+    }
+
+    .day-num,
+    .day-wd {
+      color: var(--gol-orange-dark, #c2410c);
+      font-weight: 700;
+      opacity: 1;
+    }
   }
 
   .emp-name {

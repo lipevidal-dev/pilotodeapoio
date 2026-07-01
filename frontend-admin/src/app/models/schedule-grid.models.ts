@@ -9,6 +9,7 @@ export const SHIFT_DEFAULT_COLOR = {
 
 export type ScheduleCellKind =
   | 'shift'
+  | 'instruction-shift'
   | 't6'
   | 't7'
   | 't8'
@@ -19,6 +20,7 @@ export type ScheduleCellKind =
   | 'fani'
   | 'fp'
   | 'fp-weekend'
+  | 'folga-weekend'
   | 'ferias'
   | 'voo'
   | 'simulador'
@@ -31,7 +33,12 @@ export type ScheduleCellKind =
 export interface ScheduleCellData {
   display: string;
   kind: ScheduleCellKind;
+  /** Tipo original quando kind é folga-weekend (cor de folga social no sáb+dom). */
+  folgaBaseKind?: ScheduleCellKind;
+  /** @deprecated use hoverDetail */
   title?: string;
+  /** Texto do popup após ~1s com mouse sobre a célula (somente hover, não clique). */
+  hoverDetail?: string;
 }
 
 export interface EmployeeSummaryStats {

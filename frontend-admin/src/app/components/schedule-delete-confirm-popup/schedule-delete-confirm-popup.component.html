@@ -57,6 +57,7 @@
         label="Excluir"
         icon="pi pi-trash"
         severity="danger"
+        [disabled]="!canConfirmDelete()"
         (onClick)="confirm()"
       />
     </footer>

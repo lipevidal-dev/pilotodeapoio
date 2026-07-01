@@ -423,6 +423,19 @@ describe("manual-edit-validator", () => {
       true,
     );
   });
+
+  it("8. bloqueia CLEAR de folga pedida sem force; permite com force", () => {
+    const v = baseValidationCtx();
+    v.occupancy.set(`${EMP_A}|2026-07-15`, {
+      hasFlight: false,
+      hasVacation: false,
+      hasRequestedOff: true,
+    });
+    const ref = { employeeId: EMP_A, date: "2026-07-15" };
+    const blocked = validateManualSet(v, ref, "CLEAR");
+    expect(blocked.some((c) => c.code === "PROTECTED_FP")).toBe(true);
+    expect(validateManualSet(v, ref, "CLEAR", true)).toEqual([]);
+  });
 });
 
 describe("ManualScheduleEditUseCase", () => {

@@ -2,7 +2,7 @@ import { Component, input } from '@angular/core';
 import { TooltipModule } from 'primeng/tooltip';
 
 import type { EmployeeSummaryStats } from '../../models/schedule-grid.models';
-import { statusDetailTooltip, turnosTooltip } from '../../utils/operational-audit.util';
+import { turnosTooltip } from '../../utils/operational-audit.util';
 
 export type SummaryField =
   | 'turnos'
@@ -12,9 +12,7 @@ export type SummaryField =
   | 'fp'
   | 'fani'
   | 'ferias'
-  | 'vooDisp'
-  | 'maxConsec'
-  | 'status';
+  | 'voos';
 
 @Component({
   selector: 'app-employee-summary',
@@ -31,27 +29,15 @@ export class EmployeeSummaryComponent {
     return turnosTooltip(this.summary());
   }
 
-  statusDetail(): string {
-    return statusDetailTooltip(this.summary());
-  }
-
   displayValue(): string | number {
     const s = this.summary();
     const f = this.field();
     if (!f) return 0;
     if (f === 'folgaSocial') {
       if (s.fa > 0) return s.fa;
-      return s.folgaSocialOk ? 'Sim' : 'Não';
+      return s.folgaSocialOk ? 'S' : 'N';
     }
-    if (f === 'status') return s.status;
-    if (f === 'vooDisp') return s.vooDisp;
+    if (f === 'voos') return s.voos;
     return s[f];
-  }
-
-  statusClass(): string {
-    const st = this.summary().status;
-    if (st === 'OK') return 'status-ok';
-    if (st === 'ATENÇÃO') return 'status-warn';
-    return 'status-crit';
   }
 }

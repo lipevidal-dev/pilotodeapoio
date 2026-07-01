@@ -353,6 +353,33 @@
 
     </section>
 
+
+
+    <section class="restriction-section instruction-section">
+
+      <div class="flex align-items-center gap-2">
+
+        <p-checkbox
+
+          [(ngModel)]="formInInstruction"
+
+          [binary]="true"
+
+          inputId="formInInstruction"
+
+        />
+
+        <label for="formInInstruction" class="section-title inline-title">Em instrução</label>
+
+      </div>
+
+      <p class="section-hint">
+        Turnos alocados para este funcionário serão gravados como instrução (ex.: T6 → TI6) e exibidos em
+        amarelo na escala.
+      </p>
+
+    </section>
+
   </div>
 
   <ng-template pTemplate="footer">

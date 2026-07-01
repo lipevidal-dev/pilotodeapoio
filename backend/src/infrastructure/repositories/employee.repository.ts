@@ -70,6 +70,7 @@ export class EmployeeRepository {
     }>;
     isFcf?: boolean;
     fcfSchedule?: FcfScheduleEntry[];
+    inInstruction?: boolean;
   }) {
     const {
       birthDate,
@@ -81,6 +82,7 @@ export class EmployeeRepository {
       specificShiftRequests,
       isFcf,
       fcfSchedule,
+      inInstruction,
       ...rest
     } = data;
 
@@ -94,6 +96,7 @@ export class EmployeeRepository {
             birthDate: birthDate ? toDbDate(birthDate) : null,
             isFcf: isFcf ?? false,
             fcfSchedule: isFcf ? (fcfSchedule ?? []) as unknown as Prisma.InputJsonValue : [],
+            inInstruction: inInstruction ?? false,
           },
           include: employeeInclude,
         }),
@@ -134,6 +137,7 @@ export class EmployeeRepository {
       }>;
       isFcf?: boolean;
       fcfSchedule?: FcfScheduleEntry[];
+      inInstruction?: boolean;
     },
   ) {
     const current = await prisma.employee.findUnique({ where: { id } });
@@ -149,6 +153,7 @@ export class EmployeeRepository {
       specificShiftRequests,
       isFcf,
       fcfSchedule,
+      inInstruction,
       ...rest
     } = data;
     const nextType = type ?? current.type;
@@ -187,6 +192,9 @@ export class EmployeeRepository {
       }
       if (isFcf !== false && fcfSchedule !== undefined) {
         patch.fcfSchedule = fcfSchedule as unknown as Prisma.InputJsonValue;
+      }
+      if (inInstruction !== undefined) {
+        patch.inInstruction = inInstruction;
       }
 
       if (Object.keys(patch).length > 0) {

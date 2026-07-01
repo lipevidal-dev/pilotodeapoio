@@ -1,7 +1,3 @@
-@if (auditTotals(); as totals) {
-  <app-operational-totals-panel [totals]="totals" />
-}
-
 <div class="summary-toolbar">
   <p-button
     [label]="summaryToggleLabel()"
@@ -19,6 +15,7 @@
   [class.editable-grid]="editable()"
   [class.has-summary]="summaryVisible()"
   (selectstart)="$event.preventDefault()"
+  (mouseleave)="clearHoverCross()"
 >
   <div class="schedule-grid-scroller">
     <table class="schedule-grid">
@@ -26,7 +23,7 @@
         <tr>
           <th class="col-employee sticky-col">Funcionário</th>
           @for (day of grid().dayNumbers; track day; let i = $index) {
-            <th class="col-day" [class.col-weekend]="isWeekend(i)">
+            <th class="col-day" [class.col-weekend]="isWeekend(i)" [class.col-crosshair]="isColumnHovered(i)">
               <div class="day-head-stack">
                 @if (hasCoverageGap(day)) {
                   <img
@@ -56,9 +53,7 @@
                   <span class="summary-block-head">FP</span>
                   <span class="summary-block-head">FANI</span>
                   <span class="summary-block-head">Férias</span>
-                  <span class="summary-block-head" title="Dias disponíveis para voo">VOO DISP.</span>
-                  <span class="summary-block-head" title="Máx. dias consecutivos trabalhados">MAX CONSEC.</span>
-                  <span class="summary-block-head summary-block-head--status">STATUS</span>
+                  <span class="summary-block-head" title="Total de voos alocados no mês">Total Voo</span>
                 </div>
               </div>
             </th>
@@ -77,13 +72,19 @@
           </tr>
           @for (row of group.rows; track row.employeeId) {
             <tr class="data-row">
-              <td class="col-employee sticky-col">
+              <td
+                class="col-employee sticky-col"
+                [class.col-crosshair]="isRowHovered(row.employeeId)"
+                (mouseenter)="onRowMouseEnter(row.employeeId)"
+              >
                 <span class="emp-name">{{ row.name }}</span>
               </td>
               @for (cell of row.cells; track $index; let i = $index) {
                 <td
                   class="col-day"
                   [class.col-weekend]="isWeekend(i)"
+                  [class.col-crosshair]="isColumnHovered(i) || isRowHovered(row.employeeId)"
+                  [class.col-crosshair-focus]="isCrosshairFocus(row.employeeId, i)"
                   [class.cell-empty-select]="editable() && isSelectableCell(cell)"
                   [class.cell-filled-drag]="editable() && isDraggableCell(cell)"
                   [class.cell-filled-delete]="editable() && isDeletableCell(cell)"
@@ -93,7 +94,7 @@
                   [class.cell-dragging]="isDragging(row.employeeId, grid().dayNumbers[i])"
                   [attr.draggable]="editable() && isDraggableCell(cell)"
                   (mousedown)="onCellMouseDown($event, row.employeeId, grid().dayNumbers[i], cell)"
-                  (mouseenter)="onCellMouseEnter(row.employeeId, grid().dayNumbers[i])"
+                  (mouseenter)="onCellMouseEnter(row.employeeId, grid().dayNumbers[i], i)"
                   (dragstart)="onDragStart($event, row.employeeId, grid().dayNumbers[i], cell)"
                   (dragend)="onDragEnd()"
                   (dragover)="onDragOver($event, row.employeeId, grid().dayNumbers[i])"
@@ -104,13 +105,16 @@
                 </td>
               }
               @if (summaryVisible()) {
-                <td class="sticky-summary-block" [attr.colspan]="summaryColCount">
+                <td
+                  class="sticky-summary-block"
+                  [class.col-crosshair]="isRowHovered(row.employeeId)"
+                  [class.col-crosshair-focus]="isSummaryCrosshairFocus(row.employeeId)"
+                  [attr.colspan]="summaryColCount"
+                  (mouseenter)="onRowMouseEnter(row.employeeId)"
+                >
                   <div class="summary-block-inner">
                     @for (field of summaryFields; track field) {
-                      <div
-                        class="summary-block-cell"
-                        [class.summary-block-cell--status]="field === 'status'"
-                      >
+                      <div class="summary-block-cell">
                         <app-employee-summary [summary]="row.summary" [field]="field" />
                       </div>
                     }

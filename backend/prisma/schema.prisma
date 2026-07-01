@@ -103,6 +103,7 @@ model Employee {
   specificShiftRequests EmployeeSpecificShiftRequest[]
   isFcf               Boolean              @default(false) @map("is_fcf")
   fcfSchedule         Json                 @default("[]") @map("fcf_schedule")
+  inInstruction       Boolean              @default(false) @map("in_instruction")
 
   @@unique([type, seniorityNumber])
 }

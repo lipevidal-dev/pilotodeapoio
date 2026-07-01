@@ -1,7 +1,17 @@
 <div
-  class="schedule-cell"
-  [class]="cssClass()"
-  [attr.title]="cell().title || (cell().display || '—')"
+  class="schedule-cell-wrap"
+  (mouseenter)="onMouseEnter($event)"
+  (mouseleave)="onMouseLeave()"
+  (mousedown)="onMouseDown($event)"
 >
-  {{ cell().display || '·' }}
+  <div class="schedule-cell" [class]="cssClass()">
+    {{ cell().display || '·' }}
+  </div>
+  @if (hoverVisible() && hasHoverDetail()) {
+    <div class="schedule-cell-hover" role="tooltip">
+      @for (line of hoverLines(); track $index) {
+        <span class="schedule-cell-hover-line">{{ line }}</span>
+      }
+    </div>
+  }
 </div>

@@ -122,7 +122,7 @@ function isFullyFreeDay(cell: ScheduleCellData): boolean {
 
 /** Folgas que compõem bloco (não monofolga quando adjacentes). */
 function isMonofolgaRestCell(cell: ScheduleCellData): boolean {
-  return ['folga', 'fp', 'fp-weekend', 'fs', 'fa', 'fani'].includes(cell.kind);
+  return ['folga', 'fp', 'fp-weekend', 'folga-weekend', 'fs', 'fa', 'fani'].includes(cell.kind);
 }
 
 /** Folga isolada: sem folga no dia anterior nem no seguinte. */

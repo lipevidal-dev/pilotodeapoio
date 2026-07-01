@@ -160,6 +160,8 @@ export class EmployeesComponent implements OnInit {
 
   formIsFcf = false;
 
+  formInInstruction = false;
+
   readonly weekdayOptions = [
     { label: 'Domingo', value: 0 },
     { label: 'Segunda', value: 1 },
@@ -431,6 +433,8 @@ export class EmployeesComponent implements OnInit {
 
     this.formIsFcf = false;
 
+    this.formInInstruction = false;
+
     this.dialogVisible.set(true);
 
   }
@@ -461,6 +465,8 @@ export class EmployeesComponent implements OnInit {
 
     this.formIsFcf = false;
 
+    this.formInInstruction = false;
+
     this.dialogVisible.set(true);
 
     this.loadingDetail.set(true);
@@ -482,6 +488,8 @@ export class EmployeesComponent implements OnInit {
         );
 
         this.formIsFcf = detail.isFcf ?? false;
+
+        this.formInInstruction = detail.inInstruction ?? false;
 
         this.loadingDetail.set(false);
 
@@ -683,6 +691,8 @@ export class EmployeesComponent implements OnInit {
 
     const isFcf = this.formIsFcf;
 
+    const inInstruction = this.formInInstruction;
+
     this.saving.set(true);
 
     const birthDate = this.formBirthDate ? dateToIso(this.formBirthDate) : null;
@@ -706,6 +716,8 @@ export class EmployeesComponent implements OnInit {
         noFlightDates,
 
         isFcf,
+
+        inInstruction,
 
       };
 
@@ -740,6 +752,8 @@ export class EmployeesComponent implements OnInit {
         noFlightDates,
 
         isFcf,
+
+        inInstruction,
 
       })
 

@@ -382,7 +382,7 @@ describe("CleanEngine", () => {
     expect(countT8("uuid-junior")).toBe(6);
   });
 
-  it("agrupamento parcial: senior recebe 1 dia antes do junior no mesmo turno", () => {
+  it("bloco mínimo 3: senior com FP nos dias 2–4 não recebe T6 isolado no dia 1", () => {
     const paos = [emp(1, "Senior", "PAO", 1), emp(2, "Junior", "PAO", 2)];
     paos[0]!.uuid = "uuid-senior";
     paos[1]!.uuid = "uuid-junior";
@@ -426,15 +426,14 @@ describe("CleanEngine", () => {
           a.date === "2026-07-01" &&
           a.shiftCode.toUpperCase() === "T6",
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
-      result.assignments.some(
+      result.assignments.filter(
         (a) =>
           a.employeeUuid === "uuid-junior" &&
-          a.date === "2026-07-01" &&
           a.shiftCode.toUpperCase() === "T6",
-      ),
-    ).toBe(false);
+      ).map((a) => a.date).sort(),
+    ).toEqual(["2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04"]);
   });
 
   it("espaça turnos preferidos e pula dias já ocupados", () => {
@@ -460,7 +459,7 @@ describe("CleanEngine", () => {
       motorParams: {
         pao_meta_turnos: 3,
         pao_espacamento_turnos: 2,
-        [paoShiftParamId("agrupamento_turnos", "T6")]: 1,
+        [paoShiftParamId("agrupamento_turnos", "T6")]: 3,
       },
     };
     const result = generateCleanSchedule(input, options);
@@ -468,7 +467,7 @@ describe("CleanEngine", () => {
       .filter((a) => a.employeeUuid === "uuid-a")
       .map((a) => a.date)
       .sort();
-    expect(dates).toEqual(["2026-07-01", "2026-07-04", "2026-07-08"]);
+    expect(dates).toEqual(["2026-07-01", "2026-07-02", "2026-07-03"]);
     expect(result.assignments.every((a) => a.shiftCode.toUpperCase() === "T6")).toBe(true);
   });
 

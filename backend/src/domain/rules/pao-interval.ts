@@ -1,6 +1,7 @@
 import type { ShiftMap } from "../shift/types.js";
 import type { PlannedMap } from "../schedule/types.js";
 import { parseAssignmentKey } from "../schedule/types.js";
+import { baseShiftCode, isInstructionShiftCode } from "../schedule/instruction-shift.js";
 import { roleForShift, shiftStartEnd } from "./time.js";
 
 /**
@@ -16,11 +17,13 @@ export function intervalCoveredByPao(
   const segments: { start: Date; end: Date }[] = [];
 
   for (const [key, shiftCode] of planned) {
-    if (roleForShift(shiftCode, shiftMap) !== "PAO") continue;
+    if (isInstructionShiftCode(shiftCode)) continue;
+    const base = baseShiftCode(shiftCode);
+    if (roleForShift(base, shiftMap) !== "PAO") continue;
     const { employeeId, day } = parseAssignmentKey(key);
     if (roleByEmployeeId.get(employeeId) === "PAO FCF") continue;
 
-    const info = shiftMap[shiftCode];
+    const info = shiftMap[base];
     if (!info) continue;
 
     const { start, end } = shiftStartEnd(day, info.startTime, info.endTime);

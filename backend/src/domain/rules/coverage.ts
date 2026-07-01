@@ -1,6 +1,7 @@
 import type { ShiftMap } from "../shift/types.js";
 import type { ScheduleContext } from "../schedule/types.js";
 import { PAO_COVERAGE_SHIFTS } from "./constants.js";
+import { baseShiftCode, isInstructionShiftCode } from "../schedule/instruction-shift.js";
 import { iterDays, isInMonth } from "./dates.js";
 import { roleForShift, shiftStartEnd } from "./time.js";
 import { intervalCoveredByPao } from "./pao-interval.js";
@@ -52,7 +53,8 @@ export function listPaoCoverageGaps(ctx: ScheduleContext): PaoCoverageGap[] {
       const hasPao = ctx.assignments.some(
         (a) =>
           a.workDate === day &&
-          a.shiftCode === shiftCode &&
+          !isInstructionShiftCode(a.shiftCode) &&
+          baseShiftCode(a.shiftCode) === shiftCode &&
           roleMap.get(a.employeeId) === "PAO",
       );
       if (!hasPao) {

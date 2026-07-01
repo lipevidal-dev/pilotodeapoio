@@ -5,38 +5,37 @@
 <p-card styleClass="gol-card-accent schedule-ops-card mb-3">
   <ng-template pTemplate="header">
     <div class="ops-header">
-      <span><i class="pi pi-cog"></i> Parâmetros de geração</span>
+      <div class="ops-header__main">
+        <span class="ops-header__title"><i class="pi pi-cog"></i> Geração — {{ periodLabel() }}</span>
+        @if (gridAuditTotals(); as totals) {
+          <span class="ops-header__coverage" aria-label="Cobertura PAO">
+            <span class="ops-coverage__label">Cobertura</span>
+            <span
+              class="ops-coverage__chip"
+              [class.ops-coverage__chip--ok]="totals.coverageT6 >= 100"
+            >T6 {{ totals.coverageT6 }}%</span>
+            <span
+              class="ops-coverage__chip"
+              [class.ops-coverage__chip--ok]="totals.coverageT7 >= 100"
+            >T7 {{ totals.coverageT7 }}%</span>
+            <span
+              class="ops-coverage__chip"
+              [class.ops-coverage__chip--ok]="totals.coverageT8 >= 100"
+            >T8 {{ totals.coverageT8 }}%</span>
+          </span>
+        }
+      </div>
       <a routerLink="/configuracoes/motor-escala" class="ops-config-link">
         <i class="pi pi-sliders-h"></i> Regras do motor
       </a>
     </div>
   </ng-template>
-  <div class="ops-form">
-    <div class="field-group">
-      <label class="field-label">Ano</label>
-      <p-inputNumber
-        [ngModel]="yearSig()"
-        (ngModelChange)="yearSig.set($event)"
-        [useGrouping]="false"
-        [min]="2020"
-        [max]="2100"
-      />
-    </div>
-    <div class="field-group">
-      <label class="field-label">Mês</label>
-      <p-inputNumber
-        [ngModel]="monthSig()"
-        (ngModelChange)="monthSig.set($event)"
-        [useGrouping]="false"
-        [min]="1"
-        [max]="12"
-      />
-    </div>
+  <div class="ops-actions">
     <p-button
       styleClass="btn-gol-primary ops-btn-motor"
       [loading]="generatingNextMotor()"
       (onClick)="generateWithNextMotor()"
-      title="Gera escala com as regras configuradas em Motor de Escala"
+      [title]="'Gerar escala automática para ' + periodLabel()"
     >
       <span class="ops-btn-motor__inner">
         <app-cfm56-turbine-icon />
@@ -44,23 +43,6 @@
       </span>
     </p-button>
   </div>
-  <p class="ops-motor-hint">
-    @if (nextMotorSummary(); as s) {
-      Novo motor — {{ s.enabledCount }} de {{ s.totalCount }} regras ativas · turnos:
-      {{ s.allowedShiftCodes.join(', ') || 'nenhum' }} · metas PAO:
-      {{ s.paoMetaTurnos }} turnos / {{ s.paoMetaDias }} dias trabalhados ·
-      @if (s.scopeMode === 'all') {
-        todos os funcionários no escopo.
-      } @else {
-        {{ s.scopeSelectedCount ?? 0 }} funcionário(s) selecionado(s).
-      }
-      <a routerLink="/configuracoes/motor-escala">Ajustar</a>
-    } @else {
-      Configure regras, metas e funcionários em
-      <a routerLink="/configuracoes/motor-escala">Configurações → Motor de Escala</a>
-      antes de gerar.
-    }
-  </p>
 
   <div class="ops-secondary-actions">
     @if (scheduleData()?.scheduleMonth?.status === 'GENERATED') {

@@ -15,4 +15,6 @@ export interface Employee {
   noFlightEnd?: string | null;
   noFlightIndefinite?: boolean;
   notes?: string;
+  /** PAO/APAO em instrução — turnos alocados como TI6, TI7, etc. */
+  inInstruction?: boolean;
 }

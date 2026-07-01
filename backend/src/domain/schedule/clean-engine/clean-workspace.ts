@@ -27,8 +27,14 @@ import {
   isT8PreferredPao,
   prefersRateioShift,
   primaryPreferredRateio,
+  tryFillCoverageBlock,
 } from "./clean-preferences.js";
 import { isRateioTurnCode, type CleanEngineOptions } from "./clean-types.js";
+import {
+  applyInstructionShiftIfNeeded,
+  baseShiftCode,
+  isInstructionShiftCode,
+} from "../instruction-shift.js";
 import {
   detectVacationFortnight,
   vacationDatesForEmployee,
@@ -65,6 +71,7 @@ export class CleanWorkspace {
   readonly audit = new CleanAuditLog();
   /** PAOs em férias quinzenais — metas e alocações só na quinzena livre. */
   readonly vacationFortnightByUuid = new Map<string, VacationFortnight>();
+  readonly instructionByUuid = new Map<string, boolean>();
 
   constructor(input: GenerationInput, options: CleanEngineOptions = {}) {
     this.input = input;
@@ -91,6 +98,9 @@ export class CleanWorkspace {
       options.allowedShiftCodes ??
       (this.usesNextMotorRules() ? this.coverageShiftCodes : this.resolveCoverageShiftCodes());
     this.allowedShiftCodes = new Set(allowed.map((code) => code.toUpperCase()));
+    this.instructionByUuid = new Map(
+      input.employees.map((e) => [e.uuid, Boolean(e.employee.inInstruction)]),
+    );
     this.loadCrossMonthHistory();
     this.loadCrossMonthPreAllocationsFromInput();
     this.indexVacationFortnights();
@@ -576,6 +586,10 @@ export class CleanWorkspace {
     });
   }
 
+  isEmployeeInInstruction(employeeUuid: string): boolean {
+    return this.instructionByUuid.get(employeeUuid) ?? false;
+  }
+
   assignShift(
     employeeUuid: string,
     date: string,
@@ -585,7 +599,8 @@ export class CleanWorkspace {
   ): boolean {
     const emp = this.input.employees.find((e) => e.uuid === employeeUuid);
     if (!emp) return false;
-    const normalized = shiftCode.toUpperCase();
+    let normalized = shiftCode.toUpperCase();
+    normalized = applyInstructionShiftIfNeeded(normalized, this.isEmployeeInInstruction(employeeUuid));
     if (isRateioTurnCode(normalized) && !this.isShiftAllowedForGeneration(normalized)) {
       this.audit.record("COVERAGE_FAILED", phase, `turno ${normalized} desabilitado na configuração do motor`, {
         date,
@@ -680,7 +695,9 @@ export class CleanWorkspace {
     const normalized = shiftCode.toUpperCase();
     for (const [key, code] of this.planned) {
       const [didStr, day] = key.split("|");
-      if (day !== date || code.toUpperCase() !== normalized) continue;
+      if (day !== date) continue;
+      if (isInstructionShiftCode(code)) continue;
+      if (baseShiftCode(code) !== normalized) continue;
       const role = this.roleByDomain.get(Number(didStr));
       if (role && isMotorPaoRole(role, this.motorRoleCodes)) return true;
     }
@@ -694,7 +711,9 @@ export class CleanWorkspace {
     const normalized = shiftCode.toUpperCase();
     for (const [key, code] of this.planned) {
       const [didStr, day] = key.split("|");
-      if (day !== date || code.toUpperCase() !== normalized) continue;
+      if (day !== date) continue;
+      if (isInstructionShiftCode(code)) continue;
+      if (baseShiftCode(code) !== normalized) continue;
       if (Number(didStr) === did) continue;
       const role = this.roleByDomain.get(Number(didStr));
       if (role && isMotorPaoRole(role, this.motorRoleCodes)) return true;
@@ -805,7 +824,11 @@ export class CleanWorkspace {
           });
 
         let assigned = false;
+        if (this.usesNextMotorRules()) {
+          assigned = tryFillCoverageBlock(this, date, shiftCode, phase, candidates);
+        }
         for (const c of candidates) {
+          if (assigned) break;
           if (
             motorShiftRuleEnabled(this.options, "pao_espacamento_turnos", normalized) &&
             prefersRateioShift(this, c.domainId, normalized) &&
@@ -880,7 +903,7 @@ export class CleanWorkspace {
     for (const [key, code] of this.planned) {
       const [oid] = key.split("|");
       if (Number(oid) !== did) continue;
-      if (code.toUpperCase() === normalized) n++;
+      if (baseShiftCode(code) === normalized) n++;
     }
     return n;
   }

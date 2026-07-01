@@ -101,7 +101,8 @@ $glow-start: $escala-start + $escala-in;
   will-change: opacity, transform;
 }
 
-.transition-gol-logo {
+.transition-gol-logo,
+.transition-brand-logo {
   width: min(58vw, 220px);
   height: auto;
   display: block;
@@ -328,7 +329,8 @@ $glow-start: $escala-start + $escala-in;
     width: min(84vw, 320px);
   }
 
-  .transition-gol-logo {
+  .transition-gol-logo,
+.transition-brand-logo {
     width: min(68vw, 200px);
   }
 }

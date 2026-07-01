@@ -82,6 +82,8 @@ export interface EmployeeApiRecord {
 
   fcfSchedule: FcfScheduleSummary[];
 
+  inInstruction: boolean;
+
   createdAt: string;
 
   updatedAt: string;
@@ -198,6 +200,8 @@ export function employeeToApi(row: EmployeeWithRole, shiftById?: Map<string, Shi
       shiftCode: shiftById?.get(entry.shiftId)?.code,
       shiftName: shiftById?.get(entry.shiftId)?.name,
     })),
+
+    inInstruction: row.inInstruction ?? false,
 
     createdAt: row.createdAt.toISOString(),
 

@@ -127,6 +127,8 @@ export const createEmployeeSchema = z
 
     fcfSchedule: fcfScheduleArray,
 
+    inInstruction: z.boolean().optional().default(false),
+
   })
 
   .refine((d) => Boolean(d.roleId || d.type), {
@@ -186,6 +188,8 @@ export const updateEmployeeSchema = z
     isFcf: z.boolean().optional(),
 
     fcfSchedule: fcfScheduleArray.optional(),
+
+    inInstruction: z.boolean().optional(),
 
   })
 

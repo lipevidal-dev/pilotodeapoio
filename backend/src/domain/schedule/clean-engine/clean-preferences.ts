@@ -3,6 +3,7 @@ import { addDays } from "../../rules/dates.js";
 import { isRateioTurnCode } from "./clean-types.js";
 import { motorRuleEnabled, motorShiftAgrupamento, motorShiftEspacamento, motorShiftRuleEnabled } from "./clean-motor-rules.js";
 import { findLastT8BlockEndDate } from "./clean-t8-blocks.js";
+import { MIN_RATEIO_BLOCK_SIZE, minimumBlockSizeForShift } from "./clean-block-rules.js";
 import type { CleanWorkspace } from "./clean-workspace.js";
 const RATEIO_PREF_ORDER = ["T8", "T6", "T7", "T9"] as const;
 
@@ -145,10 +146,13 @@ export function tryPlacePreferredBlock(
   blockSize: number,
   spacingDays: number,
   phase: string,
+  minBlockSize = minimumBlockSizeForShift(pref),
 ): number {
   if (blockSize <= 0) return 0;
+  const floor = Math.max(1, minBlockSize);
+  if (blockSize < floor) return 0;
 
-  for (let size = blockSize; size >= 1; size--) {
+  for (let size = blockSize; size >= floor; size--) {
     const blockDates = blockDatesFromStart(ws, startDate, size);
     if (!blockDates) continue;
 
@@ -169,6 +173,64 @@ export function tryPlacePreferredBlock(
     return placed;
   }
   return 0;
+}
+
+/**
+ * Cobertura T6/T7: tenta fechar furo com bloco consecutivo (mín. 3 dias) antes de turno isolado.
+ */
+export function tryFillCoverageBlock(
+  ws: CleanWorkspace,
+  gapDate: string,
+  shiftCode: string,
+  phase: string,
+  candidates: (typeof ws.paoEmployees)[number][],
+): boolean {
+  const minSize = minimumBlockSizeForShift(shiftCode);
+  if (minSize < MIN_RATEIO_BLOCK_SIZE) return false;
+
+  const gapIdx = ws.days.indexOf(gapDate);
+  if (gapIdx < 0) return false;
+
+  const spacingDays = getTurnSpacingDays(ws, shiftCode);
+
+  for (let offset = 0; offset >= -(minSize - 1); offset--) {
+    const startIdx = gapIdx + offset;
+    if (startIdx < 0) break;
+    const startDate = ws.days[startIdx]!;
+    const blockDates = blockDatesFromStart(ws, startDate, minSize);
+    if (!blockDates || !blockDates.includes(gapDate)) continue;
+    if (!blockDates.every((d) => !ws.hasPaoCoverage(d, shiftCode))) continue;
+
+    for (const emp of candidates) {
+      if (
+        motorShiftRuleEnabled(ws.options, "pao_espacamento_turnos", shiftCode) &&
+        prefersRateioShift(ws, emp.domainId, shiftCode) &&
+        isBlockedOnlyByTurnSpacing(ws, emp.domainId, startDate, shiftCode)
+      ) {
+        continue;
+      }
+      const placed = tryPlacePreferredBlock(
+        ws,
+        emp,
+        shiftCode,
+        startDate,
+        minSize,
+        spacingDays,
+        phase,
+        minSize,
+      );
+      if (placed >= minSize) {
+        ws.audit.record("COVERAGE_ASSIGNED", phase, `bloco ${minSize} dias`, {
+          date: gapDate,
+          shiftCode: shiftCode.toUpperCase(),
+          employeeUuid: emp.uuid,
+          employeeName: emp.employee.name,
+        });
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 export function respectsTurnSpacingBefore(

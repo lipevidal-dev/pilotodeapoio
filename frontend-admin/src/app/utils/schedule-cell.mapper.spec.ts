@@ -9,17 +9,26 @@ import {
 } from './schedule-cell.mapper';
 import type { Employee } from '../models/api.models';
 
-describe('schedule-cell.mapper — cor única dos turnos', () => {
-  it('6. todos os turnos usam kind shift', () => {
-    for (const code of ['T6', 'T7', 'T8', 'T1', 'T2', 'T3', 'T4', 'TX']) {
+describe('schedule-cell.mapper — cores por turno', () => {
+  it('6. turnos T6–T9 usam kind shift', () => {
+    for (const code of ['T6', 'T7', 'T8', 'T9', 'T1', 'T2', 'T3', 'T4', 'TX']) {
       expect(mapShiftToCell(code).kind).toBe('shift');
     }
   });
 
-  it('7. legenda usa classe cell-shift', () => {
-    expect(cellKindClass('shift')).toBe('cell-shift');
-    expect(mapShiftToCell('T6').kind).toBe('shift');
-    expect(cellKindClass(mapShiftToCell('T6').kind)).toBe('cell-shift');
+  it('7. cellKindClass aplica classe por código de exibição', () => {
+    expect(cellKindClass('shift', 'T6')).toBe('cell-t6');
+    expect(cellKindClass('shift', 'T7')).toBe('cell-t7');
+    expect(cellKindClass('shift', 'T8')).toBe('cell-t8');
+    expect(cellKindClass('shift', 'T9')).toBe('cell-t9');
+    expect(cellKindClass('shift', 'T1')).toBe('cell-shift');
+    expect(cellKindClass('instruction-shift', 'TI6')).toBe('cell-instruction');
+  });
+
+  it('mapeia turno em instrução como TI*', () => {
+    const cell = mapShiftToCell('TI7');
+    expect(cell.display).toBe('TI7');
+    expect(cell.kind).toBe('instruction-shift');
   });
 
   it('ND permanece separado', () => {
@@ -530,13 +539,96 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
     });
     const cells = grid.groups[0].rows[0].cells;
     expect(cells[10].display).toBe('FP');
-    expect(cells[10].kind).toBe('fp-weekend');
+    expect(cells[10].kind).toBe('folga-weekend');
+    expect(cells[10].folgaBaseKind).toBe('fp');
     expect(cells[11].display).toBe('FP');
-    expect(cells[11].kind).toBe('fp-weekend');
-    expect(cellKindClass('fp-weekend')).toBe('cell-fp-weekend');
+    expect(cells[11].kind).toBe('folga-weekend');
+    expect(cellKindClass('folga-weekend')).toBe('cell-folga-weekend');
     expect(grid.groups[0].rows[0].summary.fp).toBe(2);
     expect(grid.groups[0].rows[0].summary.folgaSocial).toBe(2);
     expect(grid.groups[0].rows[0].summary.folgaSocialOk).toBe(true);
+  });
+
+  it('folga sábado+domingo usa cor de folga social mantendo siglas originais', () => {
+    const emp: Employee = {
+      id: 'pao-1',
+      name: 'Lucas Flavio',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 7,
+      employees: [emp],
+      assignments: [],
+      preAllocations: [
+        {
+          id: 'f-sat',
+          scheduleMonthId: 'm1',
+          employeeId: 'pao-1',
+          date: '2026-07-11T12:00:00.000Z',
+          label: 'FOLGA',
+        },
+        {
+          id: 'f-sun',
+          scheduleMonthId: 'm1',
+          employeeId: 'pao-1',
+          date: '2026-07-12T12:00:00.000Z',
+          label: 'FOLGA',
+        },
+      ],
+    });
+    const cells = grid.groups[0].rows[0].cells;
+    expect(cells[10].display).toBe('F');
+    expect(cells[10].kind).toBe('folga-weekend');
+    expect(cells[11].display).toBe('F');
+    expect(cells[11].kind).toBe('folga-weekend');
+    expect(grid.groups[0].rows[0].summary.folgaSocial).toBe(2);
+    expect(grid.groups[0].rows[0].summary.folgas).toBe(2);
+  });
+
+  it('FP sábado + folga domingo usa cor de folga social com siglas distintas', () => {
+    const emp: Employee = {
+      id: 'pao-1',
+      name: 'Lucas Flavio',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 7,
+      employees: [emp],
+      assignments: [],
+      preAllocations: [
+        {
+          id: 'fp-sat',
+          scheduleMonthId: 'm1',
+          employeeId: 'pao-1',
+          date: '2026-07-11T12:00:00.000Z',
+          label: 'FOLGA PEDIDA',
+        },
+        {
+          id: 'f-sun',
+          scheduleMonthId: 'm1',
+          employeeId: 'pao-1',
+          date: '2026-07-12T12:00:00.000Z',
+          label: 'FOLGA',
+        },
+      ],
+    });
+    const cells = grid.groups[0].rows[0].cells;
+    expect(cells[10].display).toBe('FP');
+    expect(cells[10].folgaBaseKind).toBe('fp');
+    expect(cells[11].display).toBe('F');
+    expect(cells[11].folgaBaseKind).toBe('folga');
+    expect(cells[10].kind).toBe('folga-weekend');
+    expect(cells[11].kind).toBe('folga-weekend');
   });
 
   it('operationalCadastros exibe FP sem gerar escala', () => {

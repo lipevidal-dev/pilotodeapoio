@@ -37,6 +37,11 @@ import type {
   ManualEditRangePayload,
 } from "../../domain/schedule/manual-edit-types.js";
 import { iterDateRange } from "../../domain/schedule/manual-edit-types.js";
+import {
+  applyInstructionShiftIfNeeded,
+  baseShiftCode,
+  isStationShiftCode,
+} from "../../domain/schedule/instruction-shift.js";
 
 export interface ManualEditResult {
   success: boolean;
@@ -81,8 +86,8 @@ export class ManualScheduleEditUseCase {
 
     const srcOcc = vctx.occupancy.get(`${payload.source.employeeId}|${payload.source.date}`);
     let moveType: ManualAllocationType | null = null;
-    if (srcOcc?.shiftCode && ["T6", "T7", "T8"].includes(srcOcc.shiftCode)) {
-      moveType = srcOcc.shiftCode as ManualAllocationType;
+    if (srcOcc?.shiftCode && ["T6", "T7", "T8"].includes(baseShiftCode(srcOcc.shiftCode))) {
+      moveType = baseShiftCode(srcOcc.shiftCode) as ManualAllocationType;
     } else if (
       srcOcc?.hasFlight ||
       (srcOcc?.preallocLabel &&
@@ -141,11 +146,12 @@ export class ManualScheduleEditUseCase {
     }
 
     await this.editRepo.clearDay(scheduleMonthId, payload.source.employeeId, payload.source.date);
-    await this.editRepo.applyAllocationType(
+    await this.applyAllocationType(
       scheduleMonthId,
       payload.target.employeeId,
       payload.target.date,
       moveType,
+      await this.scheduleRepo.listActiveEmployees(),
     );
 
     return this.buildResult(scheduleMonthId, 1, []);
@@ -163,6 +169,7 @@ export class ManualScheduleEditUseCase {
   ): Promise<ManualEditResult> {
     const month = await this.loadEditableMonth(scheduleMonthId);
     const vctx = await this.buildValidation(month);
+    const employees = await this.scheduleRepo.listActiveEmployees();
     const allConflicts: ManualEditConflict[] = [];
 
     if (payload.mode === "set" && payload.type === "T8_BLOCK") {
@@ -205,17 +212,34 @@ export class ManualScheduleEditUseCase {
           force: payload.force,
         });
       } else {
-        await this.editRepo.applyAllocationType(
+        await this.applyAllocationType(
           scheduleMonthId,
           payload.employeeId,
           date,
           payload.type,
+          employees,
         );
       }
       applied++;
     }
 
     return this.buildResult(scheduleMonthId, applied, []);
+  }
+
+  private async applyAllocationType(
+    scheduleMonthId: string,
+    employeeId: string,
+    date: string,
+    type: ManualAllocationType,
+    employees: Awaited<ReturnType<ScheduleRepository["listActiveEmployees"]>>,
+  ): Promise<void> {
+    if (!isStationShiftCode(type)) {
+      await this.editRepo.applyAllocationType(scheduleMonthId, employeeId, date, type);
+      return;
+    }
+    const emp = employees.find((e) => e.id === employeeId);
+    const stored = applyInstructionShiftIfNeeded(type, emp?.inInstruction ?? false);
+    await this.editRepo.upsertShiftAssignment(scheduleMonthId, employeeId, date, stored);
   }
 
   private async applyT8Block(
@@ -225,15 +249,17 @@ export class ManualScheduleEditUseCase {
     year: number,
     month: number,
     force?: boolean,
+    employees?: Awaited<ReturnType<ScheduleRepository["listActiveEmployees"]>>,
   ): Promise<void> {
+    const roster = employees ?? (await this.scheduleRepo.listActiveEmployees());
     const block = t8BlockFromStart(startDate);
     for (const date of [block.t8First, block.t8Second, block.nd]) {
       if (isDateInScheduleMonth(date, year, month)) {
         await this.editRepo.clearDay(scheduleMonthId, employeeId, date, { force });
       }
     }
-    await this.editRepo.applyAllocationType(scheduleMonthId, employeeId, block.t8First, "T8");
-    await this.editRepo.applyAllocationType(scheduleMonthId, employeeId, block.t8Second, "T8");
+    await this.applyAllocationType(scheduleMonthId, employeeId, block.t8First, "T8", roster);
+    await this.applyAllocationType(scheduleMonthId, employeeId, block.t8Second, "T8", roster);
     if (isDateInScheduleMonth(block.nd, year, month)) {
       await this.editRepo.applyAllocationType(scheduleMonthId, employeeId, block.nd, "ND");
     }

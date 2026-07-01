@@ -1,16 +1,5 @@
 @if (field(); as f) {
-  @if (f === 'status') {
-    <div
-      class="sum-status-wrap"
-      [pTooltip]="statusDetail()"
-      tooltipPosition="top"
-    >
-      <span class="sum-status" [class]="statusClass()">{{ displayValue() }}</span>
-      @if (summary().statusReason) {
-        <span class="sum-status-reason">{{ summary().statusReason }}</span>
-      }
-    </div>
-  } @else if (f === 'turnos') {
+  @if (f === 'turnos') {
     <span
       class="sum-cell sum-turnos"
       [pTooltip]="turnosDetail()"
@@ -24,17 +13,10 @@
     <span class="sum-item sum-turnos" [pTooltip]="turnosDetail()" tooltipPosition="top">{{ summary().turnos }}</span>
     <span class="sum-item sum-dias" title="Dias trabalhados">{{ summary().diasTrabalhados }}</span>
     <span class="sum-item sum-folgas" title="Folgas">{{ summary().folgas }}</span>
-    <span class="sum-item sum-fs" title="Folga social">{{ summary().folgaSocialOk ? 'Sim' : 'Não' }}</span>
+    <span class="sum-item sum-fs" title="Folga social">{{ summary().folgaSocialOk ? 'S' : 'N' }}</span>
     <span class="sum-item sum-fp" title="Folgas pedidas">{{ summary().fp }}</span>
     <span class="sum-item sum-fani" title="Folga aniversário">{{ summary().fani }}</span>
     <span class="sum-item sum-ferias" title="Férias">{{ summary().ferias }}</span>
-    <span class="sum-item sum-voodisp" title="Disponível para voo">{{ summary().vooDisp }}</span>
-    <span class="sum-item sum-maxconsec" title="Máx. dias consecutivos">{{ summary().maxConsec }}</span>
-    <div class="sum-status-wrap" [pTooltip]="statusDetail()" tooltipPosition="top">
-      <span class="sum-status" [class]="statusClass()">{{ summary().status }}</span>
-      @if (summary().statusReason) {
-        <span class="sum-status-reason">{{ summary().statusReason }}</span>
-      }
-    </div>
+    <span class="sum-item sum-voos" title="Total de voos">{{ summary().voos }}</span>
   </div>
 }

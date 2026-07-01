@@ -10,6 +10,7 @@ export interface DeletePopupCell {
   day: number;
   display: string;
   kind: ScheduleCellKind;
+  folgaBaseKind?: ScheduleCellKind;
 }
 
 export interface DeletePopupContext {
@@ -43,8 +44,18 @@ export class ScheduleDeleteConfirmPopupComponent {
     const ctx = this.context();
     if (!ctx) return false;
     return ctx.cells.some(
-      (c) => c.kind === 'fp' || c.kind === 'nd' || c.kind === 't8',
+      (c) =>
+        c.kind === 'fp' ||
+        c.kind === 'fp-weekend' ||
+        c.folgaBaseKind === 'fp' ||
+        c.kind === 'nd' ||
+        c.kind === 't8',
     );
+  });
+
+  readonly canConfirmDelete = computed(() => {
+    if (!this.hasProtectedCells()) return true;
+    return this.forceDelete();
   });
 
   constructor() {

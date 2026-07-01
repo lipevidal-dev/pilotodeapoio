@@ -71,6 +71,8 @@ type RestrictionFields = {
 
   fcfSchedule?: Parameters<typeof normalizeFcfSchedule>[0];
 
+  inInstruction?: boolean;
+
 };
 
 
@@ -329,6 +331,8 @@ export class EmployeeUseCase {
 
       fcfSchedule: fcf.fcfSchedule,
 
+      inInstruction: data.inInstruction ?? false,
+
     });
 
     return employeeToApi(row);
@@ -412,6 +416,8 @@ export class EmployeeUseCase {
       patch.isFcf = fcf.isFcf;
       patch.fcfSchedule = fcf.fcfSchedule;
     }
+
+    if (data.inInstruction !== undefined) patch.inInstruction = data.inInstruction;
 
     if (resolved) {
 

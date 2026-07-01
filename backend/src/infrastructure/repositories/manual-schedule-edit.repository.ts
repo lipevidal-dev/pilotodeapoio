@@ -116,7 +116,15 @@ export class ManualScheduleEditRepository {
     await prisma.flightAssignment.deleteMany({
       where: { employeeId, date: toDbDate(date) },
     });
-    void opts;
+    if (opts?.force) {
+      await prisma.requestedDayOff.deleteMany({
+        where: {
+          employeeId,
+          date: toDbDate(date),
+          status: "APPROVED",
+        },
+      });
+    }
   }
 
   private async clearDayAllocations(

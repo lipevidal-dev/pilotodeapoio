@@ -14,14 +14,18 @@ interface LegendItem {
 })
 export class ScheduleLegendComponent {
   readonly items: LegendItem[] = [
-    { id: 'shift', label: 'Turnos', cssClass: 'cell-shift' },
+    { id: 't6', label: 'T6', cssClass: 'cell-t6' },
+    { id: 't7', label: 'T7', cssClass: 'cell-t7' },
+    { id: 't8', label: 'T8', cssClass: 'cell-t8' },
+    { id: 't9', label: 'T9', cssClass: 'cell-t9' },
+    { id: 'instruction', label: 'Instrução', cssClass: 'cell-instruction' },
     { id: 'nd', label: 'ND', cssClass: 'cell-nd' },
     { id: 'folga', label: 'F', cssClass: 'cell-folga' },
     { id: 'fs', label: 'FS', cssClass: 'cell-fs' },
     { id: 'fa', label: 'FA', cssClass: 'cell-fa' },
     { id: 'fani', label: 'FANI', cssClass: 'cell-fani' },
     { id: 'fp', label: 'FP', cssClass: 'cell-fp' },
-    { id: 'fp-weekend', label: 'FP', cssClass: 'cell-fp-weekend' },
+    { id: 'folga-weekend', label: 'Sáb+Dom', cssClass: 'cell-folga-weekend' },
     { id: 'ferias', label: 'FÉRIAS', cssClass: 'cell-ferias' },
     { id: 'voo', label: 'Voo', cssClass: 'cell-voo' },
     { id: 'sim', label: 'Sim', cssClass: 'cell-simulador' },

@@ -60,6 +60,7 @@ export interface Employee {
   specificShiftRequests?: SpecificShiftRequestSummary[];
   isFcf?: boolean;
   fcfSchedule?: FcfScheduleEntry[];
+  inInstruction?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -75,6 +76,7 @@ export interface CreateEmployeePayload {
   preferredShiftIds?: string[];
   isFcf?: boolean;
   fcfSchedule?: FcfScheduleEntry[];
+  inInstruction?: boolean;
 }
 
 export interface UpdateEmployeePayload {
@@ -88,6 +90,7 @@ export interface UpdateEmployeePayload {
   preferredShiftIds?: string[];
   isFcf?: boolean;
   fcfSchedule?: FcfScheduleEntry[];
+  inInstruction?: boolean;
 }
 
 export interface JobRole {
@@ -408,6 +411,8 @@ export interface PreAllocationRow {
   date: string;
   label: string;
   notes?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
   employee?: Employee;
 }
 

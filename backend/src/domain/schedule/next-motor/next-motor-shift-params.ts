@@ -1,4 +1,5 @@
 import { RATEIO_TURN_CODES } from "../clean-engine/clean-types.js";
+import { agrupamentoMinForShift } from "../clean-engine/clean-block-rules.js";
 
 export type PaoShiftParamKind =
   | "agrupamento_turnos"
@@ -202,7 +203,11 @@ function clampShiftParam(
   const fallback =
     kind && shiftCode ? shiftParamDefaultValue(kind, shiftCode) : bounds.defaultValue;
   if (typeof raw !== "number" || !Number.isFinite(raw)) return fallback;
-  return Math.min(bounds.max, Math.max(bounds.min, Math.round(raw)));
+  const min =
+    kind === "agrupamento_turnos" && shiftCode
+      ? Math.max(bounds.min, agrupamentoMinForShift(shiftCode))
+      : bounds.min;
+  return Math.min(bounds.max, Math.max(min, Math.round(raw)));
 }
 
 export function migrateLegacyPaoShiftParams(

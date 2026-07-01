@@ -6,6 +6,7 @@ import {
   isOperationalHardBlock,
   normalizeOperationalLabel,
 } from "../schedule/operational-labels.js";
+import { baseShiftCode } from "../schedule/instruction-shift.js";
 import { PROTECTED_PREALLOC_TYPES } from "./constants.js";
 import {
   apaoHasNoOtherApaoOverlap,
@@ -83,12 +84,13 @@ export function canWork(
   const empId = employee.id;
   const cargo = employee.role;
   const blockKey = assignmentKey(empId, workDay);
+  const effectiveCode = baseShiftCode(shiftCode);
 
   if (cargo === "PAO") {
-    if (["T1", "T2", "T3", "T4"].includes(shiftCode)) {
+    if (["T1", "T2", "T3", "T4"].includes(effectiveCode)) {
       return { ok: false, reason: `PAO não pode assumir turno de APAO (${shiftCode})` };
     }
-    const normalizedCode = shiftCode.toUpperCase();
+    const normalizedCode = effectiveCode;
     const isPrimaryPaoShift = ["T6", "T7", "T8"].includes(normalizedCode);
     const isT9 = normalizedCode === "T9" || normalizedCode === "T09";
     const isLegacyParallelShift =
@@ -156,7 +158,7 @@ export function canWork(
 
   if (shiftRestrictions) {
     const restricted = shiftRestrictions.get(empId);
-    if (restricted?.has(shiftCode.toUpperCase()) && !coverageEmergency) {
+    if (restricted?.has(effectiveCode) && !coverageEmergency) {
       return { ok: false, reason: `turno ${shiftCode} restrito para o funcionário` };
     }
   }
@@ -171,30 +173,30 @@ export function canWork(
     return { ok: false, reason: "já alocado no dia" };
   }
 
-  const info = shiftMap[shiftCode];
+  const info = shiftMap[effectiveCode];
   if (info?.noWeekends && isWeekend(workDay)) {
     return { ok: false, reason: `turno ${shiftCode} não pode em fim de semana` };
   }
 
-  const rest = has12hRest(empId, workDay, shiftCode, planned, shiftMap);
+  const rest = has12hRest(empId, workDay, effectiveCode, planned, shiftMap);
   if (!rest.ok && !coverageEmergency) {
     return { ok: false, reason: rest.reason };
   }
 
   if (
     !skipSimultaneousStationsCheck &&
-    maxSimultaneousWorkersIfAdded(empId, workDay, shiftCode, planned, shiftMap, roleByEmployeeId) > 2
+    maxSimultaneousWorkersIfAdded(empId, workDay, effectiveCode, planned, shiftMap, roleByEmployeeId) > 2
   ) {
     return { ok: false, reason: "limite físico de 2 estações simultâneas" };
   }
 
-  const shiftRole = roleForShift(shiftCode, shiftMap);
+  const shiftRole = roleForShift(effectiveCode, shiftMap);
   const isApaoShift = shiftRole === "APAO" || shiftRole === "BOTH";
 
   if (isApaoShift && cargo === "APAO") {
     if (
       !skipApaoOverlapCheck &&
-      !apaoHasNoOtherApaoOverlap(empId, workDay, shiftCode, planned, shiftMap)
+      !apaoHasNoOtherApaoOverlap(empId, workDay, effectiveCode, planned, shiftMap)
     ) {
       return { ok: false, reason: "dois APAOs simultâneos não permitido" };
     }
@@ -202,7 +204,7 @@ export function canWork(
     if (!skipApaoPaoCoverageCheck) {
       const { start, end } = shiftStartEnd(workDay, info!.startTime, info!.endTime);
       const tempPlanned = new Map(planned);
-      tempPlanned.set(blockKey, shiftCode);
+      tempPlanned.set(blockKey, effectiveCode);
       if (!intervalCoveredByPao(start, end, tempPlanned, shiftMap, roleByEmployeeId)) {
         return { ok: false, reason: "APAO sem PAO cobrindo o turno" };
       }
@@ -221,7 +223,7 @@ export function canWork(
     if (consecutiveWorkCount(empId, workDay, planned, options.continuityBlocked) >= maxConsec) {
       return { ok: false, reason: "mais de 6 dias consecutivos" };
     }
-    if (shiftCode === "T8" && t8PreviousCount(empId, workDay, planned) >= 2) {
+    if (effectiveCode === "T8" && t8PreviousCount(empId, workDay, planned) >= 2) {
       return { ok: false, reason: "T8 após 2 dias consecutivos" };
     }
   }

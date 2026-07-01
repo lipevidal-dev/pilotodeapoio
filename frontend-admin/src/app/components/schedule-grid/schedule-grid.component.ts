@@ -8,7 +8,6 @@ import {
 import { ButtonModule } from 'primeng/button';
 import { ScheduleCellComponent } from '../schedule-cell/schedule-cell.component';
 import { EmployeeSummaryComponent } from '../employee-summary/employee-summary.component';
-import { OperationalTotalsPanelComponent } from '../operational-totals-panel/operational-totals-panel.component';
 import type { EmployeeType } from '../../models/api.models';
 import type { ScheduleCellData, ScheduleCellKind, ScheduleGridData } from '../../models/schedule-grid.models';
 import type { GridAuditTotals } from '../../utils/operational-audit.util';
@@ -59,7 +58,6 @@ export interface GridDeletionSelectionComplete {
   imports: [
     ScheduleCellComponent,
     EmployeeSummaryComponent,
-    OperationalTotalsPanelComponent,
     ButtonModule,
   ],
   templateUrl: './schedule-grid.component.html',
@@ -74,7 +72,7 @@ export class ScheduleGridComponent {
   readonly deletionSelectionCompleted = output<GridDeletionSelectionComplete>();
   readonly moveRequested = output<GridMoveRequest>();
 
-  readonly summaryVisible = signal(true);
+  readonly summaryVisible = signal(false);
 
   private dragAnchor: GridCellCoordinate | null = null;
   private isSelecting = false;
@@ -90,6 +88,10 @@ export class ScheduleGridComponent {
   readonly deleteSelectedCells = signal<Set<string>>(new Set());
   readonly dragOverKey = signal<string | null>(null);
   readonly draggingKey = signal<string | null>(null);
+  readonly hoverCross = signal<{ employeeId: string | null; dayIndex: number | null }>({
+    employeeId: null,
+    dayIndex: null,
+  });
 
   readonly summaryFields = [
     'turnos',
@@ -99,9 +101,7 @@ export class ScheduleGridComponent {
     'fp',
     'fani',
     'ferias',
-    'vooDisp',
-    'maxConsec',
-    'status',
+    'voos',
   ] as const;
 
   readonly summaryColCount = this.summaryFields.length;
@@ -237,10 +237,41 @@ export class ScheduleGridComponent {
     this.previewSelection.set(new Set(cells.map(selectionKey)));
   }
 
-  onCellMouseEnter(employeeId: string, day: number): void {
+  onCellMouseEnter(employeeId: string, day: number, dayIndex: number): void {
+    this.hoverCross.set({ employeeId, dayIndex });
     if (!this.editable() || !this.isSelecting || !this.dragAnchor) return;
     const cells = buildHorizontalSelection(this.dragAnchor, { employeeId, day });
     this.previewSelection.set(new Set(cells.map(selectionKey)));
+  }
+
+  onRowMouseEnter(employeeId: string): void {
+    const current = this.hoverCross();
+    this.hoverCross.set({
+      employeeId,
+      dayIndex: current.employeeId === employeeId ? current.dayIndex : null,
+    });
+  }
+
+  clearHoverCross(): void {
+    this.hoverCross.set({ employeeId: null, dayIndex: null });
+  }
+
+  isRowHovered(employeeId: string): boolean {
+    return this.hoverCross().employeeId === employeeId;
+  }
+
+  isColumnHovered(dayIndex: number): boolean {
+    return this.hoverCross().dayIndex === dayIndex;
+  }
+
+  isCrosshairFocus(employeeId: string, dayIndex: number): boolean {
+    const hover = this.hoverCross();
+    return hover.employeeId === employeeId && hover.dayIndex === dayIndex;
+  }
+
+  isSummaryCrosshairFocus(employeeId: string): boolean {
+    const hover = this.hoverCross();
+    return hover.employeeId === employeeId && hover.dayIndex !== null;
   }
 
   @HostListener('document:keyup', ['$event'])
@@ -307,6 +338,7 @@ export class ScheduleGridComponent {
         day,
         display: cell?.display ?? '',
         kind: cell?.kind ?? ('empty' as ScheduleCellKind),
+        folgaBaseKind: cell?.folgaBaseKind,
       };
     });
 

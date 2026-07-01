@@ -3,9 +3,11 @@ import type {
   OperationalCadastroRow,
   PreAllocationRow,
   ScheduleAssignmentRow,
+  Shift,
 } from '../models/api.models';
 import { compareEmployeesBySeniority } from './employee-sort.util';
-import type { Shift } from '../models/api.models';
+import { buildCellHoverDetail, type CellHoverContext } from './schedule-cell-hover.util';
+import { baseShiftCode, isInstructionShiftCode } from './instruction-shift.util';
 
 import type {
 
@@ -26,6 +28,14 @@ import type {
 
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+function shiftTimesByCode(shifts: Shift[] | undefined): Map<string, { start: string; end: string }> {
+  const map = new Map<string, { start: string; end: string }>();
+  for (const s of shifts ?? []) {
+    map.set(s.code.toUpperCase(), { start: s.startTime, end: s.endTime });
+  }
+  return map;
+}
 
 
 
@@ -60,6 +70,9 @@ export function mapShiftToCell(shiftCode: string): ScheduleCellData {
   }
   if (!code) {
     return emptyCell();
+  }
+  if (isInstructionShiftCode(code)) {
+    return { display: code, kind: 'instruction-shift', title: 'Turno em Instrução' };
   }
   return { display: code, kind: 'shift', title: `Turno ${code}` };
 }
@@ -191,7 +204,12 @@ function buildCadastroPreallocSourceMap(
     if (!isCadastroPreallocDisplayLabel(row.label)) continue;
     const key = `${row.employeeId}|${dateKey(row.date)}`;
     const labels = map.get(key) ?? [];
-    labels.push({ label: row.label, notes: row.notes ?? null });
+    labels.push({
+      label: row.label,
+      notes: row.notes ?? null,
+      startTime: row.startTime ?? null,
+      endTime: row.endTime ?? null,
+    });
     map.set(key, labels);
   }
   return map;
@@ -227,6 +245,8 @@ export function mapCellToCalendarDisplay(cell: ScheduleCellData): { display: str
     case 'fp':
     case 'fp-weekend':
       return { display: 'FP', title };
+    case 'folga-weekend':
+      return { display: cell.display, title };
     case 'fani':
       return { display: 'FANI', title };
     case 'voo':
@@ -247,18 +267,47 @@ export function mapCellToCalendarDisplay(cell: ScheduleCellData): { display: str
 export interface OperationalLabelSource {
   label: string;
   notes?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+}
+
+interface ResolvedCellCandidate {
+  priority: number;
+  cell: ScheduleCellData;
+  hover: CellHoverContext;
+}
+
+function withHoverDetail(cell: ScheduleCellData, hover: CellHoverContext): ScheduleCellData {
+  const hoverDetail = buildCellHoverDetail(cell.kind, cell.display, hover);
+  return hoverDetail ? { ...cell, hoverDetail, title: hoverDetail.split('\n')[0] } : cell;
+}
+
+function hoverForShift(shiftCode: string, shiftTimes: Map<string, { start: string; end: string }>): CellHoverContext {
+  const base = baseShiftCode(shiftCode);
+  const t = shiftTimes.get(base) ?? shiftTimes.get(shiftCode.toUpperCase());
+  return t ? { shiftStart: t.start, shiftEnd: t.end } : {};
+}
+
+function hoverForOperational(source: OperationalLabelSource): CellHoverContext {
+  return {
+    notes: source.notes ?? null,
+    startTime: source.startTime ?? null,
+    endTime: source.endTime ?? null,
+  };
 }
 
 export function resolveScheduleCell(
   assignment: ScheduleAssignmentRow | undefined,
   operationalSources: OperationalLabelSource[],
+  shiftTimes: Map<string, { start: string; end: string }> = new Map(),
 ): ScheduleCellData {
-  const candidates: Array<{ priority: number; cell: ScheduleCellData }> = [];
+  const candidates: ResolvedCellCandidate[] = [];
 
   for (const source of operationalSources) {
     candidates.push({
       priority: labelDisplayPriority(source.label),
       cell: mapLabelToCell(source.label, source.notes),
+      hover: hoverForOperational(source),
     });
   }
 
@@ -266,13 +315,16 @@ export function resolveScheduleCell(
     candidates.push({
       priority: labelDisplayPriority(assignment.label),
       cell: mapLabelToCell(assignment.label),
+      hover: {},
     });
   }
 
   if (assignment?.shiftCode) {
+    const code = assignment.shiftCode.toUpperCase();
     candidates.push({
       priority: shiftDisplayPriority(),
-      cell: mapShiftToCell(assignment.shiftCode),
+      cell: mapShiftToCell(code),
+      hover: hoverForShift(code, shiftTimes),
     });
   }
 
@@ -280,7 +332,8 @@ export function resolveScheduleCell(
     return emptyCell();
   }
 
-  return candidates.sort((a, b) => b.priority - a.priority)[0].cell;
+  const winner = candidates.sort((a, b) => b.priority - a.priority)[0];
+  return withHoverDetail(winner.cell, winner.hover);
 }
 
 
@@ -312,6 +365,23 @@ function countForSummary(cell: ScheduleCellData, stats: EmployeeSummaryStats): v
         stats.t8++;
         stats.turnos++;
       } else if (['T1', 'T2', 'T3', 'T4'].includes(d)) {
+        stats.turnos++;
+      } else {
+        stats.turnos++;
+      }
+      break;
+    }
+
+    case 'instruction-shift': {
+      const base = baseShiftCode(cell.display);
+      if (base === 'T6') {
+        stats.t6++;
+        stats.turnos++;
+      } else if (base === 'T7') {
+        stats.t7++;
+        stats.turnos++;
+      } else if (base === 'T8') {
+        stats.t8++;
         stats.turnos++;
       } else {
         stats.turnos++;
@@ -388,13 +458,8 @@ function countForSummary(cell: ScheduleCellData, stats: EmployeeSummaryStats): v
       break;
 
     case 'fp-weekend':
-
-      stats.fp++;
-
-      stats.folgaSocial++;
-
-      stats.folgas++;
-
+    case 'folga-weekend':
+      incrementWeekendFolgaStats(stats, cell.folgaBaseKind ?? 'fp');
       break;
 
     case 'empty':
@@ -524,12 +589,41 @@ function daysInMonth(year: number, month: number): number {
 
 
 
-function isFpCell(cell: ScheduleCellData): boolean {
-  return cell.kind === 'fp';
+function isFolgaCell(cell: ScheduleCellData): boolean {
+  return cell.kind === 'folga' || cell.kind === 'fp' || cell.kind === 'fs' || cell.kind === 'fa' || cell.kind === 'fani';
 }
 
-/** FP em sábado e domingo consecutivos equivale a folga social (fundo verde, sigla FP). */
-function applyWeekendFpAsFolgaSocial(cells: ScheduleCellData[], year: number, month: number): void {
+function incrementWeekendFolgaStats(stats: EmployeeSummaryStats, baseKind: ScheduleCellKind): void {
+  switch (baseKind) {
+    case 'fp':
+      stats.fp++;
+      break;
+    case 'fa':
+      stats.fa++;
+      break;
+    case 'fani':
+      stats.fani++;
+      break;
+    case 'folga':
+    case 'fs':
+      break;
+  }
+  stats.folgaSocial++;
+  stats.folgas++;
+}
+
+function asWeekendFolgaSocial(cell: ScheduleCellData): ScheduleCellData {
+  const baseDetail = cell.hoverDetail ?? buildCellHoverDetail(cell.kind, cell.display);
+  return {
+    ...cell,
+    kind: 'folga-weekend',
+    folgaBaseKind: cell.kind,
+    hoverDetail: baseDetail ? `${baseDetail}\n(sáb+dom — folga social)` : '(sáb+dom — folga social)',
+  };
+}
+
+/** Sábado e domingo com qualquer folga usam cor de folga social, mantendo a sigla original. */
+function applyWeekendFolgaSocialStyle(cells: ScheduleCellData[], year: number, month: number): void {
   for (let day = 1; day <= cells.length; day++) {
     const satIdx = day - 1;
     const satDate = new Date(year, month - 1, day);
@@ -537,15 +631,10 @@ function applyWeekendFpAsFolgaSocial(cells: ScheduleCellData[], year: number, mo
 
     const satCell = cells[satIdx];
     const domCell = cells[satIdx + 1];
-    if (!isFpCell(satCell) || !isFpCell(domCell)) continue;
+    if (!isFolgaCell(satCell) || !isFolgaCell(domCell)) continue;
 
-    const weekendFp: ScheduleCellData = {
-      display: 'FP',
-      kind: 'fp-weekend',
-      title: 'Folga pedida (sáb+dom — folga social)',
-    };
-    cells[satIdx] = weekendFp;
-    cells[satIdx + 1] = { ...weekendFp };
+    cells[satIdx] = asWeekendFolgaSocial(satCell);
+    cells[satIdx + 1] = asWeekendFolgaSocial(domCell);
   }
 }
 
@@ -556,6 +645,7 @@ function buildEmployeeRow(
   days: number,
   assignmentMap: Map<string, ScheduleAssignmentRow>,
   operationalSourceMap: Map<string, OperationalLabelSource[]>,
+  shiftTimes: Map<string, { start: string; end: string }>,
 ): EmployeeRowData {
   const cells: ScheduleCellData[] = [];
   const summary = emptySummary();
@@ -565,11 +655,12 @@ function buildEmployeeRow(
     const cell = resolveScheduleCell(
       sanitizeAssignmentForGrid(assignmentMap.get(key)),
       operationalSourceMap.get(key) ?? [],
+      shiftTimes,
     );
     cells.push(cell);
   }
 
-  applyWeekendFpAsFolgaSocial(cells, year, month);
+  applyWeekendFolgaSocialStyle(cells, year, month);
 
   for (const cell of cells) {
     countForSummary(cell, summary);
@@ -612,13 +703,20 @@ export interface BuildGridInput {
 
 function buildOperationalSourceMap(
   operationalCadastros: OperationalCadastroRow[] | undefined,
+  preAllocById: Map<string, PreAllocationRow>,
 ): Map<string, OperationalLabelSource[]> {
   const map = new Map<string, OperationalLabelSource[]>();
 
   for (const row of operationalCadastros ?? []) {
     const key = `${row.employeeId}|${dateKey(row.date)}`;
     const labels = map.get(key) ?? [];
-    labels.push({ label: row.label, notes: row.notes ?? null });
+    const pre = row.source === 'pre_allocation' ? preAllocById.get(row.id) : undefined;
+    labels.push({
+      label: row.label,
+      notes: row.notes ?? pre?.notes ?? null,
+      startTime: pre?.startTime ?? null,
+      endTime: pre?.endTime ?? null,
+    });
     map.set(key, labels);
   }
   return map;
@@ -634,7 +732,12 @@ function buildGeneratorPreallocSourceMap(
     if (!isGeneratorPreallocDisplayLabel(row.label)) continue;
     const key = `${row.employeeId}|${dateKey(row.date)}`;
     const labels = map.get(key) ?? [];
-    labels.push({ label: row.label, notes: row.notes ?? null });
+    labels.push({
+      label: row.label,
+      notes: row.notes ?? null,
+      startTime: row.startTime ?? null,
+      endTime: row.endTime ?? null,
+    });
     map.set(key, labels);
   }
   return map;
@@ -653,8 +756,9 @@ function mergeSourceMaps(
 }
 
 export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
-  const { year, month, employees, assignments, preAllocations, operationalCadastros } = input;
+  const { year, month, employees, assignments, preAllocations, operationalCadastros, shifts } = input;
   const days = daysInMonth(year, month);
+  const shiftTimes = shiftTimesByCode(shifts);
   const dayNumbers = Array.from({ length: days }, (_, i) => i + 1);
   const weekdayLabels = dayNumbers.map((d) => {
     const wd = new Date(year, month - 1, d).getDay();
@@ -666,8 +770,10 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
     assignmentMap.set(`${a.employeeId}|${dateKey(a.date)}`, a);
   }
 
+  const preAllocById = new Map(preAllocations.map((p) => [p.id, p]));
+
   const operationalSourceMap = mergeSourceMaps(
-    buildOperationalSourceMap(operationalCadastros),
+    buildOperationalSourceMap(operationalCadastros, preAllocById),
     mergeSourceMaps(
       buildCadastroPreallocSourceMap(preAllocations),
       buildGeneratorPreallocSourceMap(preAllocations),
@@ -706,6 +812,7 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
       days,
       assignmentMap,
       operationalSourceMap,
+      shiftTimes,
     );
     if (emp.type === 'PAO') {
       paoRows.push(row);
@@ -752,10 +859,16 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
 
 
 
-export function cellKindClass(kind: ScheduleCellKind): string {
-
-  return kind === 'empty' ? 'cell-empty' : `cell-${kind}`;
-
+export function cellKindClass(kind: ScheduleCellKind, display?: string): string {
+  if (kind === 'empty') return 'cell-empty';
+  if (kind === 'instruction-shift') return 'cell-instruction';
+  if (kind === 'fp-weekend' || kind === 'folga-weekend') return 'cell-folga-weekend';
+  if (kind === 'shift' && display) {
+    const code = display.toUpperCase();
+    if (code === 'T6' || code === 'T7' || code === 'T8' || code === 'T9') {
+      return `cell-${code.toLowerCase()}`;
+    }
+  }
+  return `cell-${kind}`;
 }
-
 
