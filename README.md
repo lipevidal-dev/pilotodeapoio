@@ -1,5 +1,7 @@
 # Escala Piloto de Apoio v2
 
+**Versão atual:** `1.0.0` — ver [CHANGELOG.md](docs/CHANGELOG.md) e tag Git `v1.0.0`.
+
 Reescrita profissional do sistema de escala PAO/APAO.
 
 Versão anterior (referência funcional): `pilotodeapoio` (v1 Streamlit).
@@ -12,6 +14,7 @@ Versão anterior (referência funcional): `pilotodeapoio` (v1 Streamlit).
 | [docs/arquitetura-v2.md](docs/arquitetura-v2.md) | Arquitetura alvo e fases |
 | [docs/decisoes-tecnicas.md](docs/decisoes-tecnicas.md) | Decisões técnicas |
 | [docs/versionamento-git.md](docs/versionamento-git.md) | Git orquestrador + repos por módulo |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | Histórico de releases |
 
 ## Estrutura
 

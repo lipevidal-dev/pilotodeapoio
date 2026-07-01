@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '../services/auth.service';
+import { environment } from '../../environments/environment';
 
 interface NavItem {
   label: string;
@@ -24,6 +25,7 @@ export class AdminLayoutComponent {
   private readonly auth = inject(AuthService);
 
   readonly systemName = 'Escala Piloto de Apoio v2';
+  readonly appVersion = environment.appVersion;
   readonly userName = () => this.auth.user()?.name ?? 'Administrador';
 
   readonly navSections: NavSection[] = [
