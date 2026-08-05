@@ -8,7 +8,9 @@ import { SelectModule } from 'primeng/select';
 import { CheckboxModule } from 'primeng/checkbox';
 import { TagModule } from 'primeng/tag';
 import { MessageModule } from 'primeng/message';
+import { MessageService } from 'primeng/api';
 import { ScheduleService } from '../../services/schedule.service';
+import { ScheduleExportService } from '../../services/schedule-export.service';
 import { ScheduleGridComponent } from '../../components/schedule-grid/schedule-grid.component';
 import { ScheduleLegendComponent } from '../../components/schedule-legend/schedule-legend.component';
 import { buildScheduleGrid } from '../../utils/schedule-cell.mapper';
@@ -39,6 +41,8 @@ import type { ScheduleGridData } from '../../models/schedule-grid.models';
 })
 export class PortalScheduleComponent implements OnInit {
   private readonly scheduleService = inject(ScheduleService);
+  private readonly exportService = inject(ScheduleExportService);
+  private readonly messages = inject(MessageService);
 
   readonly yearSig = signal(new Date().getFullYear());
   readonly monthSig = signal(new Date().getMonth() + 1);
@@ -63,10 +67,10 @@ export class PortalScheduleComponent implements OnInit {
     return `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)} / ${y}`;
   });
 
-  readonly displayGrid = computed((): ScheduleGridData | null => {
+  readonly rawGrid = computed((): ScheduleGridData | null => {
     const data = this.scheduleData();
     if (!data) return null;
-    const grid = buildScheduleGrid({
+    return buildScheduleGrid({
       year: this.yearSig(),
       month: this.monthSig(),
       employees: data.employees,
@@ -75,6 +79,11 @@ export class PortalScheduleComponent implements OnInit {
       operationalCadastros: data.operationalCadastros,
       shifts: data.shifts,
     });
+  });
+
+  readonly displayGrid = computed((): ScheduleGridData | null => {
+    const grid = this.rawGrid();
+    if (!grid) return null;
     return applyGridFilters(grid, {
       type: this.filterType(),
       employeeId: this.filterEmployeeId(),
@@ -153,6 +162,34 @@ export class PortalScheduleComponent implements OnInit {
     if (this.singleEmployeeOnly() && !this.filterEmployeeId()) {
       const first = this.scheduleData()?.employees[0];
       if (first) this.filterEmployeeId.set(first.id);
+    }
+  }
+
+  /** Sempre exporta a grade completa, ignorando filtro da tela. */
+  exportSchedulePdf(): void {
+    const grid = this.rawGrid();
+    if (!grid || !this.hasVisibleRows(grid)) {
+      this.messages.add({
+        severity: 'warn',
+        summary: 'Exportar PDF',
+        detail: 'Não há escala carregada para exportar.',
+      });
+      return;
+    }
+    try {
+      const month = String(grid.month).padStart(2, '0');
+      const payload = this.exportService.prepareExportPayload(grid);
+      payload.format = 'pdf';
+      this.exportService.exportPdf(payload, `Escala ${month}/${grid.year} — Completa`);
+      this.messages.add({
+        severity: 'success',
+        summary: 'Exportar PDF',
+        detail: 'Documento aberto. Use “Salvar como PDF” no diálogo de impressão.',
+        life: 5000,
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : 'Falha ao exportar PDF.';
+      this.messages.add({ severity: 'error', summary: 'Exportar PDF', detail });
     }
   }
 

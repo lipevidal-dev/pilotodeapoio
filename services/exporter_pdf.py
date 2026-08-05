@@ -5,7 +5,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from reportlab.platypus import SimpleDocTemplate, Spacer, Paragraph, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Spacer, Paragraph, Table, TableStyle, PageBreak
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import landscape, A4
@@ -145,45 +145,75 @@ def generate_schedule_png(df, output_path):
     return output_path
 
 def generate_schedule_pdf(df, output_path, title="Escala Operacional"):
-    """Gera um PDF elegante e alinhado no padrão clássico paisagem A4."""
+    """Gera PDF paisagem A4 fatiando colunas de dias — evita corte horizontal."""
+    if df is None or df.empty:
+        doc = SimpleDocTemplate(str(output_path), pagesize=landscape(A4))
+        doc.build([Paragraph(title, getSampleStyleSheet()["Heading1"])])
+        return output_path
+
+    fixed_cols = [c for c in df.columns if c in ("Cargo", "Sen.", "Funcionário")]
+    day_cols = [c for c in df.columns if c not in fixed_cols]
+    # ~16 dias por página + colunas fixas cabem em A4 paisagem com fonte 6pt
+    chunk_size = 16
+    day_chunks = [day_cols[i : i + chunk_size] for i in range(0, max(len(day_cols), 1), chunk_size)] or [[]]
+
     doc = SimpleDocTemplate(
         str(output_path),
         pagesize=landscape(A4),
-        leftMargin=0.5*cm,
-        rightMargin=0.5*cm,
-        topMargin=0.5*cm,
-        bottomMargin=0.5*cm,
+        leftMargin=0.5 * cm,
+        rightMargin=0.5 * cm,
+        topMargin=0.5 * cm,
+        bottomMargin=0.5 * cm,
     )
 
-    elements = []
     styles = getSampleStyleSheet()
+    elements = []
 
-    elements.append(Paragraph(title, styles['Heading1']))
-    elements.append(Spacer(1, 8))
+    for chunk_idx, days in enumerate(day_chunks):
+        cols = fixed_cols + days
+        chunk_df = df[cols] if cols else df
+        data = [list(chunk_df.columns)] + chunk_df.values.tolist()
 
-    data = [list(df.columns)] + df.values.tolist()
+        name_w = 3.2 * cm
+        fixed_other = 1.1 * cm
+        usable = landscape(A4)[0] - 1.0 * cm
+        fixed_width = name_w + fixed_other * max(len(fixed_cols) - 1, 0)
+        day_count = max(len(days), 1)
+        day_w = max(0.55 * cm, (usable - fixed_width) / day_count)
+        col_widths = []
+        for c in cols:
+            if c == "Funcionário":
+                col_widths.append(name_w)
+            elif c in ("Cargo", "Sen."):
+                col_widths.append(fixed_other)
+            else:
+                col_widths.append(day_w)
 
-    table = Table(data, repeatRows=1)
+        page_title = title if chunk_idx == 0 else f"{title} (cont.)"
+        elements.append(Paragraph(page_title, styles["Heading1"]))
+        elements.append(Spacer(1, 6))
 
-    style_cmds = [
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#0f172a")),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('GRID', (0,0), (-1,-1), 0.4, colors.black),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 6),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-    ]
+        table = Table(data, colWidths=col_widths, repeatRows=1)
+        style_cmds = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f172a")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 6),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]
+        for r in range(1, len(data)):
+            for c in range(len(fixed_cols), len(data[0])):
+                color = get_visual_cell_color(data[r][c])
+                if color != "white":
+                    style_cmds.append(("BACKGROUND", (c, r), (c, r), colors.HexColor(color)))
 
-    for r in range(1, len(data)):
-        for c in range(3, len(data[0])):
-            color = get_visual_cell_color(data[r][c])
-            if color != "white":
-                style_cmds.append(('BACKGROUND', (c, r), (c, r), colors.HexColor(color)))
+        table.setStyle(TableStyle(style_cmds))
+        elements.append(table)
+        if chunk_idx < len(day_chunks) - 1:
+            elements.append(Spacer(1, 12))
+            elements.append(PageBreak())
 
-    table.setStyle(TableStyle(style_cmds))
-
-    elements.append(table)
     doc.build(elements)
-
     return output_path

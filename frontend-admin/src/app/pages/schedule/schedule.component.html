@@ -209,6 +209,17 @@
         />
         <label for="singleEmp" class="check-label">Somente selecionado</label>
       </div>
+      <div class="field-group">
+        <p-button
+          label="Exportar PDF"
+          icon="pi pi-file-pdf"
+          severity="secondary"
+          [outlined]="true"
+          [disabled]="!rawGrid()"
+          (onClick)="exportSchedulePdf()"
+          title="Exporta a escala completa (não usa print da tela)"
+        />
+      </div>
     </div>
   </div>
 

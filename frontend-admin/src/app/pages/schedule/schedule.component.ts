@@ -805,6 +805,34 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Sempre exporta a grade completa (rawGrid), ignorando filtro "Somente selecionado". */
+  exportSchedulePdf(): void {
+    const grid = this.rawGrid();
+    if (!grid || !this.hasVisibleRows(grid)) {
+      this.messages.add({
+        severity: 'warn',
+        summary: 'Exportar PDF',
+        detail: 'Não há escala carregada para exportar.',
+      });
+      return;
+    }
+    try {
+      const month = String(grid.month).padStart(2, '0');
+      const payload = this.exportService.prepareExportPayload(grid);
+      payload.format = 'pdf';
+      this.exportService.exportPdf(payload, `Escala ${month}/${grid.year} — Completa`);
+      this.messages.add({
+        severity: 'success',
+        summary: 'Exportar PDF',
+        detail: 'Documento aberto. Use “Salvar como PDF” no diálogo de impressão.',
+        life: 5000,
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : 'Falha ao exportar PDF.';
+      this.messages.add({ severity: 'error', summary: 'Exportar PDF', detail });
+    }
+  }
+
   summaryValue(key: string): string | number | boolean {
     const gen = this.generation();
     if (!gen) return '—';
