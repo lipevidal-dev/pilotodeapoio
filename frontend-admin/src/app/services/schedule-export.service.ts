@@ -19,8 +19,7 @@ export class ScheduleExportService {
   }
 
   /**
-   * Abre documento A4 paisagem com a grade completa (dias fatiados em páginas)
-   * e dispara o diálogo de impressão / "Salvar como PDF".
+   * Abre 1 folha A4 paisagem com a grade completa e dispara Salvar como PDF.
    */
   exportPdf(payload: ScheduleExportPayload, title?: string): void {
     const html = buildSchedulePdfHtml(payload.grid, title);
@@ -31,15 +30,7 @@ export class ScheduleExportService {
     win.document.open();
     win.document.write(html);
     win.document.close();
-    // Aguarda fontes/layout antes de imprimir.
     win.focus();
-    setTimeout(() => {
-      try {
-        win.print();
-      } catch {
-        // Usuário ainda pode usar Ctrl+P / Salvar como PDF na janela aberta.
-      }
-    }, 250);
   }
 
   /** Reservado: exportar PNG */

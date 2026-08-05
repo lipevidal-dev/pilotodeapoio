@@ -1,4 +1,4 @@
-import { buildSchedulePdfHtml, PDF_DAYS_PER_PAGE } from './schedule-pdf-html.util';
+import { buildSchedulePdfHtml } from './schedule-pdf-html.util';
 import type { ScheduleGridData } from '../models/schedule-grid.models';
 
 function emptySummary() {
@@ -30,7 +30,7 @@ function emptySummary() {
 }
 
 describe('schedule-pdf-html.util', () => {
-  it('gera HTML com todos os funcionários e fatia dias em páginas', () => {
+  it('gera 1 página A4 paisagem com a escala completa', () => {
     const days = Array.from({ length: 31 }, (_, i) => i + 1);
     const grid: ScheduleGridData = {
       year: 2026,
@@ -79,13 +79,11 @@ describe('schedule-pdf-html.util', () => {
     const html = buildSchedulePdfHtml(grid);
     expect(html).toContain('Felipe Vidal');
     expect(html).toContain('Cesar Rocha');
-    expect(html).toContain('APAO');
     expect(html).toContain('T8');
     expect(html).toContain('T4');
-    // 31 dias => 2 páginas com PDF_DAYS_PER_PAGE=16
-    const expectedPages = Math.ceil(31 / PDF_DAYS_PER_PAGE);
-    expect((html.match(/class="page"/g) ?? []).length).toBe(expectedPages);
-    expect(html).toContain('@page');
-    expect(html).toContain('landscape');
+    expect(html).toContain('A4 landscape');
+    expect(html).toContain('1 folha A4 paisagem');
+    expect(html).not.toContain('class="page"');
+    expect((html.match(/<\/table>/g) ?? []).length).toBe(1);
   });
 });

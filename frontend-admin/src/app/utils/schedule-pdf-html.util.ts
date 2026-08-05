@@ -1,9 +1,6 @@
 import type { ScheduleCellData, ScheduleGridData } from '../models/schedule-grid.models';
 import { cellKindClass } from './schedule-cell.mapper';
 
-/** Quantidade de dias por página no PDF — evita corte horizontal em A4 paisagem. */
-export const PDF_DAYS_PER_PAGE = 16;
-
 const CELL_COLORS: Record<string, { bg: string; fg: string }> = {
   'cell-shift': { bg: '#dbeafe', fg: '#1d4ed8' },
   'cell-t6': { bg: '#dbeafe', fg: '#1d4ed8' },
@@ -43,37 +40,27 @@ function cellStyle(cell: ScheduleCellData): string {
   return `background:${colors.bg};color:${colors.fg};`;
 }
 
-function chunkDays(dayNumbers: number[], size: number): number[][] {
-  const chunks: number[][] = [];
-  for (let i = 0; i < dayNumbers.length; i += size) {
-    chunks.push(dayNumbers.slice(i, i + size));
-  }
-  return chunks.length > 0 ? chunks : [[]];
-}
+/** HTML em 1 página A4 paisagem — escala completa, sem fatiar dias. */
+export function buildSchedulePdfHtml(grid: ScheduleGridData, title?: string): string {
+  const monthLabel = String(grid.month).padStart(2, '0');
+  const docTitle = title ?? `Escala ${monthLabel}/${grid.year} — Completa`;
 
-function weekdayLabel(grid: ScheduleGridData, day: number): string {
-  const idx = grid.dayNumbers.indexOf(day);
-  return idx >= 0 ? (grid.weekdayLabels[idx] ?? '') : '';
-}
-
-function buildTableChunk(grid: ScheduleGridData, days: number[], title: string): string {
-  const headDays = days
-    .map((d) => {
-      const wd = weekdayLabel(grid, d);
+  const headDays = grid.dayNumbers
+    .map((d, i) => {
+      const wd = grid.weekdayLabels[i] ?? '';
       return `<th><span class="day">${d}</span><span class="wd">${escapeHtml(wd)}</span></th>`;
     })
     .join('');
 
   const body = grid.groups
     .map((group) => {
-      const groupRow = `<tr class="group-row"><td colspan="${days.length + 1}">${escapeHtml(group.label)}</td></tr>`;
+      const groupRow = `<tr class="group-row"><td colspan="${grid.dayNumbers.length + 1}">${escapeHtml(group.label)}</td></tr>`;
       const employeeRows = group.rows
         .map((row) => {
-          const cells = days
+          const cells = grid.dayNumbers
             .map((day) => {
               const cell = row.cells[day - 1] ?? { display: '', kind: 'empty' as const };
-              const text = escapeHtml(cell.display || '');
-              return `<td style="${cellStyle(cell)}">${text}</td>`;
+              return `<td style="${cellStyle(cell)}">${escapeHtml(cell.display || '')}</td>`;
             })
             .join('');
           return `<tr><th class="emp">${escapeHtml(row.name)}</th>${cells}</tr>`;
@@ -83,12 +70,96 @@ function buildTableChunk(grid: ScheduleGridData, days: number[], title: string):
     })
     .join('');
 
-  return `
-    <section class="page">
-      <header>
-        <h1>${escapeHtml(title)}</h1>
-        <p>Dias ${days[0] ?? '-'}–${days[days.length - 1] ?? '-'} · gerado em ${new Date().toLocaleString('pt-BR')}</p>
-      </header>
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(docTitle)}</title>
+  <style>
+    @page { size: A4 landscape; margin: 4mm; }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #111827;
+      background: #fff;
+    }
+    .sheet {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      flex: 0 0 auto;
+      margin-bottom: 3px;
+    }
+    h1 { font-size: 11px; margin: 0; }
+    header p { margin: 0; font-size: 7px; color: #6b7280; }
+    .table-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    table {
+      width: 100%;
+      height: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 5.5px;
+    }
+    th, td {
+      border: 0.35px solid #9ca3af;
+      padding: 0;
+      text-align: center;
+      vertical-align: middle;
+      overflow: hidden;
+      white-space: nowrap;
+      line-height: 1.05;
+    }
+    thead th {
+      background: #111827;
+      color: #fff;
+      font-weight: 700;
+    }
+    th.emp {
+      width: 78px;
+      text-align: left;
+      padding-left: 2px;
+      background: #111827;
+      color: #fff;
+      font-size: 5.5px;
+    }
+    tbody th.emp {
+      background: #f3f4f6;
+      color: #111827;
+      font-weight: 600;
+    }
+    .day { display: block; }
+    .wd { display: block; font-size: 4.5px; font-weight: 500; opacity: 0.9; }
+    .group-row td {
+      background: #ff6900;
+      color: #fff;
+      font-weight: 700;
+      text-align: left;
+      padding-left: 4px;
+      font-size: 6px;
+    }
+    @media print {
+      html, body, .sheet { height: 100%; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <header>
+      <h1>${escapeHtml(docTitle)}</h1>
+      <p>1 folha A4 paisagem · ${new Date().toLocaleString('pt-BR')}</p>
+    </header>
+    <div class="table-wrap">
       <table>
         <thead>
           <tr>
@@ -98,81 +169,13 @@ function buildTableChunk(grid: ScheduleGridData, days: number[], title: string):
         </thead>
         <tbody>${body}</tbody>
       </table>
-    </section>
-  `;
-}
-
-/** HTML independente do viewport — usado para imprimir/salvar PDF completo. */
-export function buildSchedulePdfHtml(grid: ScheduleGridData, title?: string): string {
-  const monthLabel = String(grid.month).padStart(2, '0');
-  const docTitle = title ?? `Escala ${monthLabel}/${grid.year} — Completa`;
-  const chunks = chunkDays(grid.dayNumbers, PDF_DAYS_PER_PAGE);
-  const pages = chunks.map((days) => buildTableChunk(grid, days, docTitle)).join('\n');
-
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8" />
-  <title>${escapeHtml(docTitle)}</title>
-  <style>
-    @page { size: A4 landscape; margin: 8mm; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Arial, Helvetica, sans-serif;
-      color: #111827;
-      background: #fff;
-    }
-    .page { page-break-after: always; }
-    .page:last-child { page-break-after: auto; }
-    header { margin-bottom: 8px; }
-    h1 { font-size: 14px; margin: 0 0 2px; }
-    header p { margin: 0; font-size: 9px; color: #6b7280; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      table-layout: fixed;
-      font-size: 7px;
-    }
-    th, td {
-      border: 0.4px solid #9ca3af;
-      padding: 2px 1px;
-      text-align: center;
-      vertical-align: middle;
-      overflow: hidden;
-      white-space: nowrap;
-    }
-    thead th {
-      background: #111827;
-      color: #fff;
-      font-weight: 700;
-    }
-    th.emp, td.emp, .emp {
-      width: 92px;
-      text-align: left;
-      padding-left: 4px;
-      font-size: 7px;
-      background: #f3f4f6;
-      color: #111827;
-    }
-    thead th.emp { background: #111827; color: #fff; }
-    .day { display: block; line-height: 1.1; }
-    .wd { display: block; font-size: 6px; font-weight: 500; opacity: 0.85; }
-    .group-row td {
-      background: #ff6900;
-      color: #fff;
-      font-weight: 700;
-      text-align: left;
-      padding-left: 6px;
-      font-size: 8px;
-    }
-    @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    }
-  </style>
-</head>
-<body>
-  ${pages}
+    </div>
+  </div>
+  <script>
+    window.onload = function () {
+      setTimeout(function () { window.print(); }, 200);
+    };
+  </script>
 </body>
 </html>`;
 }
