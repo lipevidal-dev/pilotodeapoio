@@ -2,6 +2,7 @@ import { wouldApaoFolgaBlockOffice } from "../rules/apao-availability.js";
 import { addDays } from "../rules/dates.js";
 import { canWork } from "../rules/eligibility.js";
 import { buildShiftMap } from "../shift/default-shifts.js";
+import { baseShiftCode } from "./instruction-shift.js";
 import { normalizeOperationalLabel } from "./operational-labels.js";
 import type {
   ManualAllocationType,
@@ -565,8 +566,9 @@ export function validateManualMove(
   }
 
   let moveType: ManualAllocationType | null = null;
-  if (src.shiftCode && SHIFT_ALLOCATION_TYPES.has(src.shiftCode as ManualAllocationType)) {
-    moveType = src.shiftCode as ManualAllocationType;
+  const sourceShiftBase = src.shiftCode ? baseShiftCode(src.shiftCode) : null;
+  if (sourceShiftBase && SHIFT_ALLOCATION_TYPES.has(sourceShiftBase as ManualAllocationType)) {
+    moveType = sourceShiftBase as ManualAllocationType;
   } else if (src.hasFlight || isPreallocVoo(src)) {
     moveType = "VOO";
   } else if (src.preallocLabel) {
@@ -584,6 +586,21 @@ export function validateManualMove(
   if (!moveType || moveType === "CLEAR") {
     conflicts.push({ code: "UNMOVABLE", message: "Conflito: este tipo de alocação não pode ser movido." });
     return conflicts;
+  }
+
+  // APAO: folga normal não pode ser arrastada/trocada — use exclusão + realoque turno.
+  if (moveType === "FOLGA") {
+    const did = employeeDomainId(v, source.employeeId);
+    const emp = v.scheduleContext.employees.find((e) => e.id === did);
+    const role = String(emp?.role ?? "").toUpperCase();
+    if (role === "APAO" || role.startsWith("APAO")) {
+      conflicts.push({
+        code: "UNMOVABLE",
+        message:
+          "Conflito: folga normal de APAO não pode ser movida. Exclua a folga e aloque o turno desejado.",
+      });
+      return conflicts;
+    }
   }
 
   const t8BlockStart = resolveT8BlockStart(

@@ -80,7 +80,7 @@ describe('ScheduleGridComponent — edição interativa 8.1A', () => {
       2,
       { display: '', kind: 'empty' },
     );
-    comp.onCellMouseEnter('emp-1', 3);
+    comp.onCellMouseEnter('emp-1', 3, 2);
     comp.onDocumentMouseUp();
     expect(emitted.length).toBe(1);
   });
@@ -163,7 +163,7 @@ describe('ScheduleGridComponent — edição interativa 8.1A', () => {
       2,
       { display: '', kind: 'empty' },
     );
-    comp.onCellMouseEnter('emp-1', 2);
+    comp.onCellMouseEnter('emp-1', 2, 1);
     expect(comp.isCellHighlighted('emp-1', 2)).toBe(true);
   });
 

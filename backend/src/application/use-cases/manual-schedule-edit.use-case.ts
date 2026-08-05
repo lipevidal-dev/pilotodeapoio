@@ -36,7 +36,7 @@ import type {
   ManualEditMovePayload,
   ManualEditRangePayload,
 } from "../../domain/schedule/manual-edit-types.js";
-import { iterDateRange } from "../../domain/schedule/manual-edit-types.js";
+import { iterDateRange, SHIFT_ALLOCATION_TYPES } from "../../domain/schedule/manual-edit-types.js";
 import {
   applyInstructionShiftIfNeeded,
   baseShiftCode,
@@ -86,8 +86,10 @@ export class ManualScheduleEditUseCase {
 
     const srcOcc = vctx.occupancy.get(`${payload.source.employeeId}|${payload.source.date}`);
     let moveType: ManualAllocationType | null = null;
-    if (srcOcc?.shiftCode && ["T6", "T7", "T8"].includes(baseShiftCode(srcOcc.shiftCode))) {
-      moveType = baseShiftCode(srcOcc.shiftCode) as ManualAllocationType;
+    const sourceShiftBase = srcOcc?.shiftCode ? baseShiftCode(srcOcc.shiftCode) : null;
+    // Inclui turnos PAO (T6–T9) e APAO (T1–T4); antes só T6/T7/T8 eram aplicados.
+    if (sourceShiftBase && SHIFT_ALLOCATION_TYPES.has(sourceShiftBase as ManualAllocationType)) {
+      moveType = sourceShiftBase as ManualAllocationType;
     } else if (
       srcOcc?.hasFlight ||
       (srcOcc?.preallocLabel &&

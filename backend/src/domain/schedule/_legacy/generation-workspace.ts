@@ -1854,6 +1854,18 @@ export class GenerationWorkspace {
     return n;
   }
 
+  /** Preferência de turno APAO (T1–T4) quando cadastrada no motor / funcionário. */
+  private preferredShiftCodeForApao(c: GenerationInputEmployee): string | null {
+    const prefs = this.input.preferredShifts?.get(c.domainId);
+    if (!prefs || prefs.size === 0) return null;
+    const active = new Set(this.activeApaoShiftCodes());
+    for (const code of prefs) {
+      const upper = code.toUpperCase();
+      if (active.has(upper)) return upper;
+    }
+    return null;
+  }
+
   isApaoDayEmpty(uuid: string, day: string): boolean {
     const did = this.uuidToDomain.get(uuid);
     if (!did) return false;
@@ -1915,9 +1927,14 @@ export class GenerationWorkspace {
         .sort((a, b) => this.compareApaoForDay(a, b, day));
 
       for (const c of candidates) {
-        const ordered = [...apaoShiftPriority].sort(
-          (a, b) => this.apaoShiftCount(c.uuid, a) - this.apaoShiftCount(c.uuid, b),
-        );
+        const preferred = this.preferredShiftCodeForApao(c);
+        const ordered = [...apaoShiftPriority].sort((a, b) => {
+          if (preferred) {
+            if (a === preferred && b !== preferred) return -1;
+            if (b === preferred && a !== preferred) return 1;
+          }
+          return this.apaoShiftCount(c.uuid, a) - this.apaoShiftCount(c.uuid, b);
+        });
         for (const code of ordered) {
           if (this.tryAssignShift(c.uuid, day, code)) break;
         }

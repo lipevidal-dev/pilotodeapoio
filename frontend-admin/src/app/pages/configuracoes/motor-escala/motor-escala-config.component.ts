@@ -45,8 +45,11 @@ import type {
   Shift,
 } from '../../../models/api.models';
 import {
+  isApaoShiftCode,
   isRateioShiftCode,
+  APAO_SHIFT_ORDER,
   RATEIO_SHIFT_ORDER,
+  type ApaoShiftCode,
   type RateioShiftCode,
 } from '../../../utils/shift-code.util';
 import {
@@ -341,6 +344,22 @@ export class MotorEscalaConfigComponent implements OnInit {
       }))
       .sort((a, b) => (RATEIO_SHIFT_ORDER.get(a.code) ?? 99) - (RATEIO_SHIFT_ORDER.get(b.code) ?? 99)),
   );
+
+  /** Turnos APAO (T1–T4) para preferência / evitar no escopo do motor. */
+  readonly apaoShiftOptions = computed(() =>
+    this.shifts()
+      .filter((s) => s.active && isApaoShiftCode(s.code))
+      .map((s) => ({
+        label: s.code.toUpperCase(),
+        value: s.id,
+        code: s.code.toUpperCase() as ApaoShiftCode,
+      }))
+      .sort((a, b) => (APAO_SHIFT_ORDER.get(a.code) ?? 99) - (APAO_SHIFT_ORDER.get(b.code) ?? 99)),
+  );
+
+  preferenceShiftOptionsFor(emp: Employee): Array<{ label: string; value: string; code: string }> {
+    return this.employeeRoleKind(emp) === 'APAO' ? this.apaoShiftOptions() : this.rateioShiftOptions();
+  }
 
   readonly fcfWeekdayOptions = FCF_WEEKDAY_OPTIONS;
 

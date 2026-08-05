@@ -15,6 +15,13 @@ describe('schedule-grid-cell.util', () => {
     expect(isSelectableCell({ display: 'T6', kind: 't6' })).toBe(false);
   });
 
+  it('APAO: turno é arrastável; folga normal não', () => {
+    expect(isDraggableCell({ display: 'T1', kind: 'shift' }, 'APAO')).toBe(true);
+    expect(isDraggableCell({ display: 'F', kind: 'folga' }, 'APAO')).toBe(false);
+    expect(isDraggableCell({ display: 'F', kind: 'folga' }, 'PAO')).toBe(true);
+    expect(isDeletableCell({ display: 'F', kind: 'folga' })).toBe(true);
+  });
+
   it('célula preenchida é deletável e férias não', () => {
     expect(isDeletableCell({ display: 'T6', kind: 't6' })).toBe(true);
     expect(isDeletableCell({ display: 'FER', kind: 'ferias' })).toBe(false);

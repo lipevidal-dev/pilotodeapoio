@@ -423,7 +423,13 @@ export class ScheduleGridComponent {
 
   /** Modo 2 — drag/drop: células preenchidas. */
   onDragStart(event: DragEvent, employeeId: string, day: number, cell: ScheduleCellData): void {
-    if (!this.editable() || !isDraggableCell(cell) || this.shiftDeleteMultiActive) return;
+    if (
+      !this.editable() ||
+      !isDraggableCell(cell, this.employeeType(employeeId)) ||
+      this.shiftDeleteMultiActive
+    ) {
+      return;
+    }
     event.stopPropagation();
     this.isSelecting = false;
     this.dragAnchor = null;

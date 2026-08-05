@@ -305,11 +305,14 @@
                 }
               }
 
-              @if (employeeRoleKind(emp) === 'PAO' && rateioShiftOptions().length > 0) {
+              @if (
+                (employeeRoleKind(emp) === 'PAO' && rateioShiftOptions().length > 0) ||
+                (employeeRoleKind(emp) === 'APAO' && apaoShiftOptions().length > 0)
+              ) {
                 <div class="employee-scope-prefs">
                   <div class="employee-scope-prefs__row">
                     <span class="employee-scope-prefs__label">Pref.</span>
-                    @for (shift of rateioShiftOptions(); track shift.value) {
+                    @for (shift of preferenceShiftOptionsFor(emp); track shift.value) {
                       <label class="employee-scope-prefs__item">
                         <p-checkbox
                           [binary]="true"
@@ -323,7 +326,7 @@
                   </div>
                   <div class="employee-scope-prefs__row">
                     <span class="employee-scope-prefs__label">Evitar</span>
-                    @for (shift of rateioShiftOptions(); track shift.value) {
+                    @for (shift of preferenceShiftOptionsFor(emp); track shift.value) {
                       <label class="employee-scope-prefs__item">
                         <p-checkbox
                           [binary]="true"

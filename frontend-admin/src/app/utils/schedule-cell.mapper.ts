@@ -677,7 +677,7 @@ function buildEmployeeRow(
 
     name: employee.name,
 
-    type: employee.type,
+    type: resolveEmployeeGridType(employee),
 
     cells,
 
@@ -685,6 +685,15 @@ function buildEmployeeRow(
 
   };
 
+}
+
+/** Cargo efetivo na grade: prioriza Role (cargoCode) sobre enum legado `type`. */
+function resolveEmployeeGridType(employee: Employee): 'PAO' | 'APAO' {
+  const raw = String(employee.cargoCode ?? employee.type ?? '')
+    .trim()
+    .toUpperCase();
+  if (raw === 'APAO' || raw.startsWith('APAO')) return 'APAO';
+  return 'PAO';
 }
 
 
@@ -814,7 +823,7 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
       operationalSourceMap,
       shiftTimes,
     );
-    if (emp.type === 'PAO') {
+    if (resolveEmployeeGridType(emp) === 'PAO') {
       paoRows.push(row);
     } else {
       apaoRows.push(row);

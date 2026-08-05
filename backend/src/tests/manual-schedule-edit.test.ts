@@ -278,6 +278,198 @@ describe("manual-edit-validator", () => {
     ).toBe(false);
   });
 
+  it("3f. permite mover turno APAO T1 para dia vazio (antes UNMOVABLE)", () => {
+    const EMP_APAO = "11111111-1111-1111-1111-111111111199";
+    const shifts = DEFAULT_SHIFTS.map((s, i) => ({
+      id: `s-${i}`,
+      code: s.code,
+      name: s.name,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      durationHours: 8,
+      employeeTypeAllowed: s.role === "APAO" ? "APAO" : "PAO",
+      active: true,
+      displayOrder: i,
+      mandatoryCoverage: true,
+      requiresT8PairNd: s.code === "T8",
+      coverageType: "REQUIRED" as const,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+
+    const { context: ctx, uuidToDomainId } = buildContextFromDbParts({
+      year: 2026,
+      month: 6,
+      employees: [
+        {
+          id: EMP_APAO,
+          name: "APAO Lima",
+          type: "APAO",
+          roleId: "role-apao",
+          seniorityNumber: 1,
+          active: true,
+          birthDate: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          role: {
+            id: "role-apao",
+            name: "APAO",
+            code: "APAO",
+            description: null,
+            active: true,
+            displayOrder: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        } as never,
+      ],
+      shifts: shifts as never,
+      assignments: [
+        {
+          id: "a-apao-t1",
+          scheduleMonthId: MONTH_ID,
+          employeeId: EMP_APAO,
+          date: new Date("2026-06-01T12:00:00.000Z"),
+          shiftCode: "T1",
+          label: null,
+          source: "GENERATOR",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          employee: {
+            id: EMP_APAO,
+            name: "APAO Lima",
+            type: "APAO",
+            roleId: "role-apao",
+            seniorityNumber: 1,
+            active: true,
+            birthDate: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as never,
+        },
+      ],
+      preAllocations: [],
+    });
+
+    const v = buildManualEditValidationContext({
+      ctx,
+      uuidToDomainId,
+      employees: [{ id: EMP_APAO, name: "APAO Lima", role: "APAO", seniorityNumber: 1 }],
+      shiftRestrictionRows: [],
+      preferredShiftRows: [],
+      noFlightDates: [],
+      vacationDays: [],
+      approvedDayOff: [],
+      assignments: [{ employeeId: EMP_APAO, date: "2026-06-01", shiftCode: "T1" }],
+      preAllocations: [],
+      flightDays: [],
+    });
+
+    const conflicts = validateManualMove(
+      v,
+      { employeeId: EMP_APAO, date: "2026-06-01" },
+      { employeeId: EMP_APAO, date: "2026-06-03" },
+    );
+    expect(conflicts.some((c) => c.code === "UNMOVABLE")).toBe(false);
+    expect(conflicts.some((c) => c.code === "EMPTY_SOURCE")).toBe(false);
+  });
+
+  it("3g. APAO: bloqueia mover folga normal (FOLGA)", () => {
+    const EMP_APAO = "11111111-1111-1111-1111-111111111198";
+    const shifts = DEFAULT_SHIFTS.map((s, i) => ({
+      id: `s-${i}`,
+      code: s.code,
+      name: s.name,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      durationHours: 8,
+      employeeTypeAllowed: s.role === "APAO" ? "APAO" : "PAO",
+      active: true,
+      displayOrder: i,
+      mandatoryCoverage: true,
+      requiresT8PairNd: s.code === "T8",
+      coverageType: "REQUIRED" as const,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+
+    const { context: ctx, uuidToDomainId } = buildContextFromDbParts({
+      year: 2026,
+      month: 6,
+      employees: [
+        {
+          id: EMP_APAO,
+          name: "APAO Costa",
+          type: "APAO",
+          roleId: "role-apao",
+          seniorityNumber: 1,
+          active: true,
+          birthDate: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          role: {
+            id: "role-apao",
+            name: "APAO",
+            code: "APAO",
+            description: null,
+            active: true,
+            displayOrder: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        } as never,
+      ],
+      shifts: shifts as never,
+      assignments: [],
+      preAllocations: [
+        {
+          id: "p-folga",
+          scheduleMonthId: MONTH_ID,
+          employeeId: EMP_APAO,
+          date: new Date("2026-06-05T12:00:00.000Z"),
+          shiftCode: "",
+          label: "FOLGA",
+          source: "generated",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          employee: {
+            id: EMP_APAO,
+            name: "APAO Costa",
+            type: "APAO",
+            roleId: "role-apao",
+            seniorityNumber: 1,
+            active: true,
+            birthDate: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as never,
+        },
+      ],
+    });
+
+    const v = buildManualEditValidationContext({
+      ctx,
+      uuidToDomainId,
+      employees: [{ id: EMP_APAO, name: "APAO Costa", role: "APAO", seniorityNumber: 1 }],
+      shiftRestrictionRows: [],
+      preferredShiftRows: [],
+      noFlightDates: [],
+      vacationDays: [],
+      approvedDayOff: [],
+      assignments: [],
+      preAllocations: [{ employeeId: EMP_APAO, date: "2026-06-05", label: "FOLGA" }],
+      flightDays: [],
+    });
+
+    const conflicts = validateManualMove(
+      v,
+      { employeeId: EMP_APAO, date: "2026-06-05" },
+      { employeeId: EMP_APAO, date: "2026-06-08" },
+    );
+    expect(conflicts.some((c) => c.code === "UNMOVABLE")).toBe(true);
+    expect(conflicts.some((c) => c.message.toLowerCase().includes("folga normal"))).toBe(true);
+  });
+
   it("6b. permite alocar dia antes do bloco T8/T8/ND", () => {
     const v = baseValidationCtx();
     v.occupancy.set(`${EMP_A}|2026-07-10`, {
@@ -453,9 +645,11 @@ describe("ManualScheduleEditUseCase", () => {
   function buildUseCase(overrides?: {
     applyAllocationType?: ReturnType<typeof vi.fn>;
     clearDay?: ReturnType<typeof vi.fn>;
+    upsertShiftAssignment?: ReturnType<typeof vi.fn>;
   }) {
     const applyAllocationType = overrides?.applyAllocationType ?? vi.fn(async () => ({}));
     const clearDay = overrides?.clearDay ?? vi.fn(async () => undefined);
+    const upsertShiftAssignment = overrides?.upsertShiftAssignment ?? vi.fn(async () => ({}));
 
     return new ManualScheduleEditUseCase(
       {
@@ -466,7 +660,7 @@ describe("ManualScheduleEditUseCase", () => {
         }),
         applyAllocationType,
         clearDay,
-        upsertShiftAssignment: vi.fn(),
+        upsertShiftAssignment,
         upsertPreAllocation: vi.fn(),
         upsertFlight: vi.fn(),
         formatAssignmentDate: (d: Date) => d.toISOString().slice(0, 10),
@@ -529,6 +723,13 @@ describe("ManualScheduleEditUseCase", () => {
         listVacationDaysForMonth: async () => [],
         listApprovedDayOffForMonth: async () => [],
         listFlightDaysForMonth: async () => [],
+      } as never,
+      {
+        getFullConfig: async () => ({
+          employeePrefs: {},
+          enabledRules: {},
+          motorParams: {},
+        }),
       } as never,
       {
         getOperationalCadastrosForMonth: async () => [],
@@ -600,6 +801,123 @@ describe("ManualScheduleEditUseCase", () => {
     }
   });
 
+  it("1b. moveCell aplica turno APAO T1 (não UNMOVABLE)", async () => {
+    const EMP_APAO = "11111111-1111-1111-1111-111111111199";
+    const clearDay = vi.fn(async () => undefined);
+    const upsertShiftAssignment = vi.fn(async () => ({}));
+
+    const monthWithApao = {
+      ...monthRecord,
+      year: 2026,
+      month: 6,
+      assignments: [
+        {
+          id: "a-t1",
+          scheduleMonthId: MONTH_ID,
+          employeeId: EMP_APAO,
+          date: new Date("2026-06-01T12:00:00.000Z"),
+          shiftCode: "T1",
+          label: null,
+          source: "GENERATOR",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          employee: {
+            id: EMP_APAO,
+            name: "APAO Lima",
+            type: "APAO",
+            roleId: "role-apao",
+            seniorityNumber: 1,
+            active: true,
+            birthDate: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            role: { id: "role-apao", code: "APAO", name: "APAO" },
+          },
+        },
+      ],
+      preAllocations: [],
+      ruleViolations: [],
+    };
+
+    const uc = new ManualScheduleEditUseCase(
+      {
+        findMonthById: async () => monthWithApao,
+        applyAllocationType: vi.fn(async () => ({})),
+        clearDay,
+        upsertShiftAssignment,
+        upsertPreAllocation: vi.fn(),
+        upsertFlight: vi.fn(),
+        formatAssignmentDate: (d: Date) => d.toISOString().slice(0, 10),
+      } as never,
+      {
+        listActiveEmployees: async () => [
+          {
+            id: EMP_APAO,
+            name: "APAO Lima",
+            type: "APAO",
+            seniorityNumber: 1,
+            active: true,
+            role: { id: "role-apao", code: "APAO", name: "APAO" },
+          },
+        ],
+        listShifts: async () =>
+          DEFAULT_SHIFTS.map((s, i) => ({
+            id: `s-${i}`,
+            code: s.code,
+            name: s.name,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            durationHours: 8,
+            employeeTypeAllowed: s.role,
+            active: true,
+            displayOrder: i,
+            mandatoryCoverage: true,
+            requiresT8PairNd: s.code === "T8",
+            coverageType: "REQUIRED" as const,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })),
+        listShiftRestrictionsForMonth: async () => [],
+        listPreferredShiftsForMonth: async () => [],
+        listNoFlightDatesForMonth: async () => [],
+        saveViolations: async () => undefined,
+        findMonthById: async () => monthWithApao,
+      } as never,
+      {
+        listVacationDaysForMonth: async () => [],
+        listApprovedDayOffForMonth: async () => [],
+        listFlightDaysForMonth: async () => [],
+      } as never,
+      {
+        getFullConfig: async () => ({
+          employeePrefs: {},
+          enabledRules: {},
+          motorParams: {},
+        }),
+      } as never,
+      {
+        getOperationalCadastrosForMonth: async () => [],
+      } as never,
+      {
+        execute: () => ({
+          valid: true,
+          violations: [],
+          summary: { total: 0, critica: 0, alta: 0, media: 0, baixa: 0 },
+        }),
+      } as never,
+    );
+
+    const result = await uc.moveCell(MONTH_ID, {
+      source: { employeeId: EMP_APAO, date: "2026-06-01" },
+      target: { employeeId: EMP_APAO, date: "2026-06-03" },
+      mode: "move",
+    });
+
+    expect(result.applied).toBe(1);
+    expect(clearDay).toHaveBeenCalledWith(MONTH_ID, EMP_APAO, "2026-06-01");
+    expect(upsertShiftAssignment).toHaveBeenCalledWith(MONTH_ID, EMP_APAO, "2026-06-03", "T1");
+  });
+
   it("2. manual-range retorna conflito com mensagem específica", async () => {
     const uc = buildUseCase();
     try {
@@ -618,8 +936,8 @@ describe("ManualScheduleEditUseCase", () => {
   });
 
   it("10a. T8 isolado aplica somente um dia", async () => {
-    const apply = vi.fn(async () => ({}));
-    const uc = buildUseCase({ applyAllocationType: apply });
+    const upsert = vi.fn(async () => ({}));
+    const uc = buildUseCase({ upsertShiftAssignment: upsert });
     const result = await uc.editCell(MONTH_ID, {
       employeeId: EMP_A,
       date: "2026-07-20",
@@ -627,13 +945,13 @@ describe("ManualScheduleEditUseCase", () => {
       mode: "set",
     });
     expect(result.applied).toBe(1);
-    expect(apply).toHaveBeenCalledTimes(1);
-    expect(apply).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-20", "T8");
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(upsert).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-20", "T8");
   });
 
   it("10a2. T9 paralelo aplica assignment de turno", async () => {
-    const apply = vi.fn(async () => ({}));
-    const uc = buildUseCase({ applyAllocationType: apply });
+    const upsert = vi.fn(async () => ({}));
+    const uc = buildUseCase({ upsertShiftAssignment: upsert });
     const result = await uc.editCell(MONTH_ID, {
       employeeId: EMP_A,
       date: "2026-07-18",
@@ -641,14 +959,19 @@ describe("ManualScheduleEditUseCase", () => {
       mode: "set",
     });
     expect(result.applied).toBe(1);
-    expect(apply).toHaveBeenCalledTimes(1);
-    expect(apply).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-18", "T9");
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(upsert).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-18", "T9");
   });
 
   it("10b. T8_BLOCK aplica bloco T8/T8/ND", async () => {
     const apply = vi.fn(async () => ({}));
+    const upsert = vi.fn(async () => ({}));
     const clear = vi.fn(async () => undefined);
-    const uc = buildUseCase({ applyAllocationType: apply, clearDay: clear });
+    const uc = buildUseCase({
+      applyAllocationType: apply,
+      clearDay: clear,
+      upsertShiftAssignment: upsert,
+    });
     const result = await uc.editCell(MONTH_ID, {
       employeeId: EMP_A,
       date: "2026-07-20",
@@ -656,8 +979,8 @@ describe("ManualScheduleEditUseCase", () => {
       mode: "set",
     });
     expect(result.applied).toBe(3);
-    expect(apply).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-20", "T8");
-    expect(apply).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-21", "T8");
+    expect(upsert).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-20", "T8");
+    expect(upsert).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-21", "T8");
     expect(apply).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-22", "ND");
   });
 
