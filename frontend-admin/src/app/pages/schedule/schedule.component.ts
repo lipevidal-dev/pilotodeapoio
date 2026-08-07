@@ -18,7 +18,11 @@ import { MessageService } from 'primeng/api';
 import { ScheduleService } from '../../services/schedule.service';
 import { ScheduleRefreshService } from '../../services/schedule-refresh.service';
 import { ScheduleWorkspaceService } from '../../services/schedule-workspace.service';
-import { ScheduleExportService } from '../../services/schedule-export.service';
+import {
+  ScheduleExportService,
+  SCHEDULE_EXPORT_SCOPE_OPTIONS,
+  type ScheduleExportScope,
+} from '../../services/schedule-export.service';
 import { NextMotorConfigService } from '../../services/next-motor-config.service';
 import {
   ScheduleGridComponent,
@@ -155,6 +159,11 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   readonly filterType = signal<'ALL' | EmployeeType>('ALL');
   readonly filterEmployeeId = signal<string | null>(null);
   readonly singleEmployeeOnly = signal(false);
+  readonly exportDialogVisible = signal(false);
+  readonly exportScope = signal<ScheduleExportScope>('ALL');
+  readonly exportingPdf = signal(false);
+  readonly exportingExcel = signal(false);
+  readonly exportScopeOptions = SCHEDULE_EXPORT_SCOPE_OPTIONS;
   /** IDs de painéis/subseções recolhidos pelo usuário após a geração. */
   private readonly collapsedSections = signal<Set<string>>(new Set());
 
@@ -805,31 +814,80 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Sempre exporta a grade completa (rawGrid), ignorando filtro "Somente selecionado". */
-  exportSchedulePdf(): void {
-    const grid = this.rawGrid();
-    if (!grid || !this.hasVisibleRows(grid)) {
+  openExportDialog(): void {
+    if (!this.rawGrid()) {
       this.messages.add({
         severity: 'warn',
-        summary: 'Exportar PDF',
+        summary: 'Exportar',
         detail: 'Não há escala carregada para exportar.',
       });
       return;
     }
+    this.exportScope.set('ALL');
+    this.exportDialogVisible.set(true);
+  }
+
+  async exportSchedule(format: 'pdf' | 'xlsx'): Promise<void> {
+    const raw = this.rawGrid();
+    if (!raw) {
+      this.messages.add({
+        severity: 'warn',
+        summary: 'Exportar',
+        detail: 'Não há escala carregada para exportar.',
+      });
+      return;
+    }
+
+    const scope = this.exportScope();
+    const grid = this.exportService.scopeGrid(raw, scope);
+    if (!this.hasVisibleRows(grid)) {
+      this.messages.add({
+        severity: 'warn',
+        summary: 'Exportar',
+        detail: 'Não há funcionários nesse escopo para exportar.',
+      });
+      return;
+    }
+
+    const title = this.exportService.scopeTitle(raw, scope);
+    const payload = this.exportService.prepareExportPayload(grid);
+    payload.format = format;
+
+    if (format === 'pdf') {
+      this.exportingPdf.set(true);
+      try {
+        this.exportService.exportPdf(payload, title);
+        this.exportDialogVisible.set(false);
+        this.messages.add({
+          severity: 'success',
+          summary: 'Gerar PDF',
+          detail: 'Download do PDF iniciado.',
+          life: 4000,
+        });
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : 'Falha ao gerar PDF.';
+        this.messages.add({ severity: 'error', summary: 'Gerar PDF', detail });
+      } finally {
+        this.exportingPdf.set(false);
+      }
+      return;
+    }
+
+    this.exportingExcel.set(true);
     try {
-      const month = String(grid.month).padStart(2, '0');
-      const payload = this.exportService.prepareExportPayload(grid);
-      payload.format = 'pdf';
-      this.exportService.exportPdf(payload, `Escala ${month}/${grid.year} — Completa`);
+      await this.exportService.exportExcel(payload, title);
+      this.exportDialogVisible.set(false);
       this.messages.add({
         severity: 'success',
-        summary: 'Exportar PDF',
-        detail: 'Download do PDF iniciado.',
+        summary: 'Gerar Excel',
+        detail: 'Download do Excel iniciado.',
         life: 4000,
       });
     } catch (err) {
-      const detail = err instanceof Error ? err.message : 'Falha ao exportar PDF.';
-      this.messages.add({ severity: 'error', summary: 'Exportar PDF', detail });
+      const detail = err instanceof Error ? err.message : 'Falha ao gerar Excel.';
+      this.messages.add({ severity: 'error', summary: 'Gerar Excel', detail });
+    } finally {
+      this.exportingExcel.set(false);
     }
   }
 

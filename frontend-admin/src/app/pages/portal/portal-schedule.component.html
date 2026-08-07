@@ -80,17 +80,71 @@
       </div>
       <div class="field-group">
         <p-button
-          label="Exportar PDF"
-          icon="pi pi-file-pdf"
+          label="Exportar"
+          icon="pi pi-download"
           severity="secondary"
           [outlined]="true"
           [disabled]="!scheduleData()"
-          (onClick)="exportSchedulePdf()"
-          title="Exporta a escala completa (não usa print da tela)"
+          (onClick)="openExportDialog()"
+          title="Exportar escala em PDF ou Excel"
         />
       </div>
     </div>
   </div>
+
+  <p-dialog
+    header="Exportar escala"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [style]="{ width: 'min(420px, 94vw)' }"
+    [visible]="exportDialogVisible()"
+    (visibleChange)="exportDialogVisible.set($event)"
+  >
+    <p class="export-dialog-hint">Escolha o escopo e o formato do arquivo.</p>
+
+    <div class="export-scope-list" role="radiogroup" aria-label="Escopo da exportação">
+      @for (opt of exportScopeOptions; track opt.value) {
+        <label class="export-scope-option" [class.export-scope-option--active]="exportScope() === opt.value">
+          <input
+            type="radio"
+            name="portalExportScope"
+            [value]="opt.value"
+            [checked]="exportScope() === opt.value"
+            (change)="exportScope.set(opt.value)"
+          />
+          <span class="export-scope-option__text">
+            <strong>{{ opt.label }}</strong>
+            <small>{{ opt.description }}</small>
+          </span>
+        </label>
+      }
+    </div>
+
+    <ng-template pTemplate="footer">
+      <p-button
+        label="Cancelar"
+        severity="secondary"
+        [text]="true"
+        (onClick)="exportDialogVisible.set(false)"
+      />
+      <p-button
+        label="Gerar Excel"
+        icon="pi pi-file-excel"
+        severity="success"
+        [outlined]="true"
+        [loading]="exportingExcel()"
+        (onClick)="exportSchedule('xlsx')"
+      />
+      <p-button
+        label="Gerar PDF"
+        icon="pi pi-file-pdf"
+        severity="danger"
+        [loading]="exportingPdf()"
+        (onClick)="exportSchedule('pdf')"
+      />
+    </ng-template>
+  </p-dialog>
 
   <app-schedule-legend />
 

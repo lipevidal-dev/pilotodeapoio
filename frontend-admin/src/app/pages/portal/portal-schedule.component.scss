@@ -75,3 +75,51 @@
   font-size: 0.85rem;
   cursor: pointer;
 }
+
+.export-dialog-hint {
+  margin: 0 0 0.85rem;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.export-scope-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.export-scope-option {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+
+  input {
+    margin-top: 0.2rem;
+  }
+
+  &--active {
+    border-color: #ff6900;
+    background: #fff7f2;
+  }
+}
+
+.export-scope-option__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+
+  strong {
+    color: #111827;
+    font-size: 0.95rem;
+  }
+
+  small {
+    color: #6b7280;
+    font-size: 0.8rem;
+  }
+}
