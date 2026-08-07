@@ -824,8 +824,8 @@ export class ScheduleComponent implements OnInit, OnDestroy {
       this.messages.add({
         severity: 'success',
         summary: 'Exportar PDF',
-        detail: 'Documento aberto. Use “Salvar como PDF” no diálogo de impressão.',
-        life: 5000,
+        detail: 'Download do PDF iniciado.',
+        life: 4000,
       });
     } catch (err) {
       const detail = err instanceof Error ? err.message : 'Falha ao exportar PDF.';
