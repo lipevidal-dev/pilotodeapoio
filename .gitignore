@@ -1,6 +1,8 @@
-# Ambiente local
+# Ambiente local / deploy (nunca versionar segredos)
 .env
 .env.local
+.env.deploy
+.env.prod
 *.env.local
 
 # Dependências e build
