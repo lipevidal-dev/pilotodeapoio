@@ -408,6 +408,64 @@
   }
 }
 
+.unpublish-confirm-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.65rem;
+  padding: 0.35rem 0.25rem 0.15rem;
+}
+
+.unpublish-confirm-icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+  font-size: 1.25rem;
+}
+
+.unpublish-confirm-message {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--gol-gray-dark, #2d2d2d);
+  line-height: 1.4;
+}
+
+.unpublish-confirm-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+  line-height: 1.45;
+}
+
+.unpublish-confirm-footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+:host ::ng-deep .unpublish-confirm-dialog {
+  .p-dialog-header {
+    padding: 1rem 1.1rem 0.65rem;
+  }
+
+  .p-dialog-content {
+    padding: 0.35rem 1.1rem 0.75rem;
+  }
+
+  .p-dialog-footer {
+    padding: 0.75rem 1.1rem 1rem;
+  }
+}
+
 .field-group--check {
   flex-direction: row;
   align-items: center;
@@ -440,6 +498,14 @@
 
   .ops-btn-primary,
   .ops-btn-publish {
+    width: 100%;
+  }
+
+  .unpublish-confirm-footer {
+    flex-direction: column-reverse;
+  }
+
+  :host ::ng-deep .unpublish-confirm-dialog .unpublish-confirm-footer .p-button {
     width: 100%;
   }
 }

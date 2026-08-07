@@ -70,6 +70,14 @@ export class ScheduleRepository {
     });
   }
 
+  /** Reverte publicação mantendo a grade — volta para GENERATED para edição/republicação. */
+  async unpublishMonth(id: string) {
+    return prisma.scheduleMonth.update({
+      where: { id },
+      data: { status: "GENERATED" },
+    });
+  }
+
   async clearForRegeneration(scheduleMonthId: string) {
     await prisma.scheduleAssignment.deleteMany({ where: { scheduleMonthId } });
     await prisma.preAllocation.deleteMany({

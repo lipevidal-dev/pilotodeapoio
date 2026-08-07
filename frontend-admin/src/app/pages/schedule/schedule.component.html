@@ -64,6 +64,17 @@
         (onClick)="publish()"
       />
     }
+    @if (scheduleData()?.scheduleMonth?.status === 'PUBLISHED') {
+      <p-button
+        label="Despublicar"
+        icon="pi pi-eye-slash"
+        severity="warn"
+        [outlined]="true"
+        [disabled]="!activeScheduleMonthId()"
+        [loading]="unpublishing()"
+        (onClick)="openUnpublishConfirm()"
+      />
+    }
     @if (
       scheduleData()?.scheduleMonth?.status === 'GENERATED' ||
       scheduleData()?.scheduleMonth?.status === 'DRAFT'
@@ -222,6 +233,49 @@
       </div>
     </div>
   </div>
+
+  <p-dialog
+    header="Despublicar escala"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [closable]="!unpublishing()"
+    [closeOnEscape]="!unpublishing()"
+    [dismissableMask]="!unpublishing()"
+    [style]="{ width: 'min(420px, 94vw)' }"
+    styleClass="unpublish-confirm-dialog"
+    [visible]="unpublishConfirmVisible()"
+    (visibleChange)="unpublishConfirmVisible.set($event)"
+  >
+    <div class="unpublish-confirm-body">
+      <div class="unpublish-confirm-icon" aria-hidden="true">
+        <i class="pi pi-exclamation-triangle"></i>
+      </div>
+      <p class="unpublish-confirm-message">Tem certeza que deseja despublicar a escala?</p>
+      <p class="unpublish-confirm-hint">
+        A escala deixa de ficar visível no portal do cliente e volta a poder ser editada.
+      </p>
+    </div>
+
+    <ng-template pTemplate="footer">
+      <div class="unpublish-confirm-footer">
+        <p-button
+          label="Cancelar"
+          severity="secondary"
+          [outlined]="true"
+          [disabled]="unpublishing()"
+          (onClick)="cancelUnpublish()"
+        />
+        <p-button
+          label="Despublicar"
+          icon="pi pi-eye-slash"
+          severity="warn"
+          [loading]="unpublishing()"
+          (onClick)="confirmUnpublish()"
+        />
+      </div>
+    </ng-template>
+  </p-dialog>
 
   <p-dialog
     header="Exportar escala"

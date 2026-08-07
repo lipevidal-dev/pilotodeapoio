@@ -142,6 +142,8 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   } | null>(null);
   readonly generatingFlights = signal(false);
   readonly publishing = signal(false);
+  readonly unpublishing = signal(false);
+  readonly unpublishConfirmVisible = signal(false);
   readonly clearing = signal(false);
   readonly loadingView = signal(false);
   readonly publishBlocked = signal<PublishBlockedResponse | null>(null);
@@ -546,6 +548,39 @@ export class ScheduleComponent implements OnInit, OnDestroy {
         }
         const msg = err.error?.message ?? err.error?.error ?? 'Erro ao publicar';
         this.messages.add({ severity: 'error', summary: 'Publicação', detail: msg });
+      },
+    });
+  }
+
+  openUnpublishConfirm(): void {
+    if (!this.activeScheduleMonthId()) return;
+    this.unpublishConfirmVisible.set(true);
+  }
+
+  cancelUnpublish(): void {
+    this.unpublishConfirmVisible.set(false);
+  }
+
+  confirmUnpublish(): void {
+    const id = this.activeScheduleMonthId();
+    if (!id) return;
+    this.unpublishing.set(true);
+    this.scheduleService.unpublishSchedule(id).subscribe({
+      next: (res) => {
+        this.unpublishing.set(false);
+        this.unpublishConfirmVisible.set(false);
+        this.publishResult.set(null);
+        this.messages.add({
+          severity: 'success',
+          summary: 'Despublicada',
+          detail: `Escala ${String(res.month).padStart(2, '0')}/${res.year} despublicada.`,
+        });
+        this.loadScheduleView();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.unpublishing.set(false);
+        const msg = err.error?.message ?? err.error?.error ?? 'Erro ao despublicar';
+        this.messages.add({ severity: 'error', summary: 'Despublicar', detail: msg });
       },
     });
   }

@@ -32,6 +32,14 @@ export class ScheduleCannotPublishError extends Error {
   }
 }
 
+export class ScheduleCannotUnpublishError extends Error {
+  readonly code = "CANNOT_UNPUBLISH";
+  constructor(message: string) {
+    super(message);
+    this.name = "ScheduleCannotUnpublishError";
+  }
+}
+
 export interface CriticalViolationDto {
   level: "CRITICAL";
   ruleCode: string;

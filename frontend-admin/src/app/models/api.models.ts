@@ -313,6 +313,13 @@ export interface PublishScheduleResponse {
   warnings?: number;
 }
 
+export interface UnpublishScheduleResponse {
+  scheduleMonthId: string;
+  year: number;
+  month: number;
+  status: 'GENERATED';
+}
+
 export interface PublishBlockedResponse {
   code: string;
   message: string;

@@ -56,6 +56,7 @@ import {
   getPublishedScheduleController,
   getScheduleMonthController,
   publishScheduleController,
+  unpublishScheduleController,
   validateScheduleController,
 } from "../controllers/schedule.controller.js";
 import {
@@ -171,6 +172,7 @@ export async function registerRoutes(app: FastifyInstance) {
   app.post("/schedules/:id/generate-apao", generateApaoScheduleController);
   app.get("/schedules/published/:year/:month", getPublishedScheduleController);
   app.post("/schedules/:id/publish", publishScheduleController);
+  app.post("/schedules/:id/unpublish", unpublishScheduleController);
   app.delete("/schedules/:id/generated-data", clearGeneratedScheduleController);
   app.get("/schedules/:year/:month", getScheduleMonthController);
   app.get("/operational-cadastros", listOperationalCadastrosController);

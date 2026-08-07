@@ -12,6 +12,7 @@ import type {
   PublishScheduleResponse,
   ScheduleMonthResponse,
   StepGenerationOptions,
+  UnpublishScheduleResponse,
 } from '../models/api.models';
 
 @Injectable({ providedIn: 'root' })
@@ -55,6 +56,13 @@ export class ScheduleService {
   publishSchedule(scheduleMonthId: string): Observable<PublishScheduleResponse> {
     return this.http.post<PublishScheduleResponse>(
       `${this.base}/schedules/${scheduleMonthId}/publish`,
+      {},
+    );
+  }
+
+  unpublishSchedule(scheduleMonthId: string): Observable<UnpublishScheduleResponse> {
+    return this.http.post<UnpublishScheduleResponse>(
+      `${this.base}/schedules/${scheduleMonthId}/unpublish`,
       {},
     );
   }

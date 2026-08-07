@@ -13,9 +13,12 @@ describe('ScheduleComponent — geração principal', () => {
   let http: HttpTestingController;
 
   const base = environment.apiBaseUrl;
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
 
   const emptyMonth = {
-    scheduleMonth: { id: 'sm-1', year: 2026, month: 6, status: 'DRAFT' },
+    scheduleMonth: { id: 'sm-1', year, month, status: 'DRAFT' },
     employees: [
       {
         id: 'emp-1',
@@ -42,6 +45,7 @@ describe('ScheduleComponent — geração principal', () => {
     scopeEmployeeIds: null,
     scopeMode: 'all' as const,
     scopeSelectedCount: null,
+    allowedShiftCodes: ['T6', 'T7', 'T8'],
     employeePrefs: {},
     categories: [],
     rules: [],
@@ -74,7 +78,7 @@ describe('ScheduleComponent — geração principal', () => {
 
   function flushScheduleView(): void {
     fixture.detectChanges();
-    http.expectOne(`${base}/schedules/2026/6`).flush(emptyMonth);
+    http.expectOne(`${base}/schedules/${year}/${month}`).flush(emptyMonth);
     http.expectOne(`${base}/config/next-motor`).flush(nextMotorConfig);
   }
 
@@ -92,7 +96,7 @@ describe('ScheduleComponent — geração principal', () => {
     component.generateWithNextMotor();
     const req = http.expectOne(`${base}/schedules/generate`);
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({ year: 2026, month: 6 });
+    expect(req.request.body).toEqual({ year, month });
     req.flush({
       scheduleMonthId: 'sm-1',
       status: 'GENERATED',
@@ -106,6 +110,36 @@ describe('ScheduleComponent — geração principal', () => {
       enginePath: 'domain/schedule/clean-engine/clean-engine.ts',
       realEngineExecuted: true,
     });
-    http.expectOne(`${base}/schedules/2026/6`);
+    http.expectOne(`${base}/schedules/${year}/${month}`);
+  });
+
+  it('Despublicar abre popup e confirma com POST /unpublish', () => {
+    flushScheduleView();
+    component.scheduleData.set({
+      ...emptyMonth,
+      scheduleMonth: { id: 'sm-1', year, month, status: 'PUBLISHED' },
+    });
+    fixture.detectChanges();
+
+    const html = fixture.nativeElement as HTMLElement;
+    expect(html.textContent).toContain('Despublicar');
+
+    component.openUnpublishConfirm();
+    expect(component.unpublishConfirmVisible()).toBe(true);
+
+    component.confirmUnpublish();
+    const req = http.expectOne(`${base}/schedules/sm-1/unpublish`);
+    expect(req.request.method).toBe('POST');
+    req.flush({
+      scheduleMonthId: 'sm-1',
+      year,
+      month,
+      status: 'GENERATED',
+    });
+    expect(component.unpublishConfirmVisible()).toBe(false);
+    http.expectOne(`${base}/schedules/${year}/${month}`).flush({
+      ...emptyMonth,
+      scheduleMonth: { id: 'sm-1', year, month, status: 'GENERATED' },
+    });
   });
 });

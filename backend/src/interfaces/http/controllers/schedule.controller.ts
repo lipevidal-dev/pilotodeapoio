@@ -6,6 +6,7 @@ import { generateScheduleByStepsUseCase } from "../../../application/use-cases/g
 import { generateFlightsUseCase } from "../../../application/use-cases/generate-flights.use-case.js";
 import { generateApaoScheduleUseCase } from "../../../application/use-cases/generate-apao-schedule.use-case.js";
 import { publishScheduleUseCase } from "../../../application/use-cases/publish-schedule.use-case.js";
+import { unpublishScheduleUseCase } from "../../../application/use-cases/unpublish-schedule.use-case.js";
 import { clearGeneratedScheduleUseCase } from "../../../application/use-cases/clear-generated-schedule.use-case.js";
 import {
   NextMotorScopeEmptyError,
@@ -13,6 +14,7 @@ import {
   PublishedScheduleCannotRegenerateError,
   PublishBlockedCriticalViolationsError,
   ScheduleCannotPublishError,
+  ScheduleCannotUnpublishError,
   ScheduleMonthNotFoundError,
   ScheduleNotGeneratedError,
   ScheduleNotPublishedError,
@@ -138,6 +140,25 @@ export async function publishScheduleController(
     }
     req.log.error(err);
     return reply.status(500).send({ error: "Erro ao publicar escala" });
+  }
+}
+
+export async function unpublishScheduleController(
+  req: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply,
+) {
+  try {
+    const result = await unpublishScheduleUseCase.execute(req.params.id);
+    return reply.send(result);
+  } catch (err) {
+    if (err instanceof ScheduleMonthNotFoundError) {
+      return reply.status(404).send({ error: err.message, code: err.code });
+    }
+    if (err instanceof ScheduleCannotUnpublishError) {
+      return reply.status(400).send({ error: err.message, code: err.code });
+    }
+    req.log.error(err);
+    return reply.status(500).send({ error: "Erro ao despublicar escala" });
   }
 }
 
