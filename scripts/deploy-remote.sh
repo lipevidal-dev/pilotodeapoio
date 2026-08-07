@@ -10,9 +10,39 @@ if [ ! -f "$ARCHIVE" ]; then
 fi
 
 mkdir -p "$DEPLOY_PATH"
-tar -xzf "$ARCHIVE" -C "$DEPLOY_PATH"
-find "$DEPLOY_PATH/scripts" -name '*.sh' -exec sed -i 's/\r$//' {} + 2>/dev/null || true
+
+# Extrai em pasta temporária e sincroniza com --delete para remover arquivos
+# antigos do servidor que não existem mais no pacote (evita build quebrado).
+TMP_DIR="$(mktemp -d /tmp/piloto-deploy-XXXXXX)"
+cleanup() { rm -rf "$TMP_DIR"; }
+trap cleanup EXIT
+
+tar -xzf "$ARCHIVE" -C "$TMP_DIR"
+find "$TMP_DIR/scripts" -name '*.sh' -exec sed -i 's/\r$//' {} + 2>/dev/null || true
 sed -i 's/\r$//' "$0" 2>/dev/null || true
+
+# Preserva segredos de produção já existentes no VPS
+if [ -f "$DEPLOY_PATH/.env.prod" ]; then
+  cp "$DEPLOY_PATH/.env.prod" "$TMP_DIR/.env.prod"
+fi
+
+if command -v rsync >/dev/null 2>&1; then
+  rsync -a --delete \
+    --exclude '.env.prod' \
+    --exclude 'docker-data' \
+    --exclude '.git' \
+    "$TMP_DIR"/ "$DEPLOY_PATH"/
+else
+  # Fallback sem rsync: limpa fontes e reextrai
+  rm -rf "$DEPLOY_PATH/backend/src" \
+         "$DEPLOY_PATH/frontend-admin/src" \
+         "$DEPLOY_PATH/backend/prisma" \
+         "$DEPLOY_PATH/scripts"
+  tar -xzf "$ARCHIVE" -C "$DEPLOY_PATH"
+  if [ -f "$TMP_DIR/.env.prod" ]; then
+    cp "$TMP_DIR/.env.prod" "$DEPLOY_PATH/.env.prod"
+  fi
+fi
 
 cd "$DEPLOY_PATH"
 
@@ -39,7 +69,6 @@ if [ -f "$DEPLOY_PATH/infra/nginx/production-site.conf" ] && [ -n "${APP_DOMAIN:
   NGINX_SITE="/etc/nginx/sites-available/pcoordenador"
   if [ -f "$NGINX_SITE" ]; then
     echo "==> Atualizando gzip no nginx (preserva SSL do Certbot via include parcial)..."
-    # Injeta gzip no server block se ainda não existir
     if ! grep -q "gzip_proxied" "$NGINX_SITE" 2>/dev/null; then
       sed -i '/server_name /a\    gzip on;\n    gzip_proxied any;\n    gzip_comp_level 5;\n    gzip_min_length 256;\n    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;' "$NGINX_SITE" || true
       nginx -t && systemctl reload nginx || true
