@@ -43,7 +43,7 @@ Na página **Escala** (somente **ADMIN**), o turno preferido do mês aparece em 
 
 ### Escala — lead-in do mês anterior (não publicada)
 
-Na escala **planejada não publicada** (DRAFT/GENERATED), a grade antepõe os **últimos 6 dias do mês anterior** (ex.: set/2026 mostra 26–31/ago antes do dia 01), com coluna `.col-lead` esmaecida e linha vermelha (`.col-month-start`) no dia 1. Dias lead são **somente leitura** (sem editar/arrastar). Escala publicada/realizada/portal **não** mostram lead-in. A grade usa `fit-width` (sem scroll horizontal).
+Na escala **planejada não publicada** (DRAFT/GENERATED), a grade antepõe os **últimos 6 dias do mês anterior** (ex.: set/2026 mostra 26–31/ago antes do dia 01), com coluna `.col-lead` esmaecida e linha vermelha (`.col-month-start`) no dia 1. O conteúdo do lead-in vem da **escala realizada** do mês anterior (`GET .../executed`), não da planejada. Dias lead são **somente leitura**. Escala publicada/realizada/portal **não** mostram lead-in. A grade usa `fit-width` (sem scroll horizontal).
 
 ### Serviços úteis (produção VPS)
 

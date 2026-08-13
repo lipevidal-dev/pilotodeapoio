@@ -152,7 +152,10 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   readonly generationBlocked = signal<GenerationPersistenceValidation | null>(null);
   readonly publishResult = signal<{ status: string } | null>(null);
   readonly scheduleData = signal<ScheduleMonthResponse | null>(null);
-  /** Mês anterior (contexto visual dos últimos 6 dias na escala não publicada). */
+  /**
+   * Escala **realizada** do mês anterior (contexto visual dos últimos 6 dias
+   * na escala planejada não publicada).
+   */
   readonly previousScheduleData = signal<ScheduleMonthResponse | null>(null);
   readonly executedScheduleData = signal<ScheduleMonthResponse | null>(null);
   readonly scheduleView = signal<ScheduleViewMode>('planned');
@@ -867,7 +870,10 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     forkJoin({
       schedule: this.scheduleService.getSchedule(year, month),
       prefs: prefs$,
-      previous: this.scheduleService.getSchedule(prevYear, prevMonth).pipe(catchError(() => of(null))),
+      // Lead-in espelha a escala REALIZADA do mês anterior (não a planejada).
+      previous: this.scheduleService
+        .getExecutedSchedule(prevYear, prevMonth)
+        .pipe(catchError(() => of(null))),
     }).subscribe({
       next: ({ schedule: data, prefs, previous }) => {
         this.loadingView.set(false);
