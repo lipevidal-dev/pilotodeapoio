@@ -79,7 +79,10 @@ export class ScheduleRepository {
   }
 
   async clearForRegeneration(scheduleMonthId: string) {
-    await prisma.scheduleAssignment.deleteMany({ where: { scheduleMonthId } });
+    // Preserva turnos manuais (ex.: T9) — o motor só regenera o restante.
+    await prisma.scheduleAssignment.deleteMany({
+      where: { scheduleMonthId, source: { not: "MANUAL" } },
+    });
     await prisma.preAllocation.deleteMany({
       where: {
         scheduleMonthId,
@@ -92,7 +95,11 @@ export class ScheduleRepository {
   async clearApaoGeneratedData(scheduleMonthId: string, apaoEmployeeIds: string[]) {
     if (apaoEmployeeIds.length === 0) return;
     await prisma.scheduleAssignment.deleteMany({
-      where: { scheduleMonthId, employeeId: { in: apaoEmployeeIds } },
+      where: {
+        scheduleMonthId,
+        employeeId: { in: apaoEmployeeIds },
+        source: { not: "MANUAL" },
+      },
     });
     await prisma.preAllocation.deleteMany({
       where: {
@@ -129,7 +136,10 @@ export class ScheduleRepository {
       },
     });
 
-    await prisma.scheduleAssignment.deleteMany({ where: { scheduleMonthId } });
+    // Turnos gerados pelo motor — alocações manuais na grade permanecem
+    await prisma.scheduleAssignment.deleteMany({
+      where: { scheduleMonthId, source: { not: "MANUAL" } },
+    });
 
     await prisma.ruleViolation.deleteMany({ where: { scheduleMonthId } });
 
@@ -144,8 +154,22 @@ export class ScheduleRepository {
     rows: Array<{ employeeUuid: string; date: string; shiftCode: string }>,
   ) {
     if (rows.length === 0) return;
+
+    // Não sobrescreve dias com turno MANUAL (unique scheduleMonthId+employeeId+date).
+    const manualRows = await prisma.scheduleAssignment.findMany({
+      where: { scheduleMonthId, source: "MANUAL" },
+      select: { employeeId: true, date: true },
+    });
+    const manualKeys = new Set(
+      manualRows.map((r) => `${r.employeeId}|${isoDateKey(r.date)}`),
+    );
+    const toCreate = rows.filter(
+      (r) => !manualKeys.has(`${r.employeeUuid}|${r.date}`),
+    );
+    if (toCreate.length === 0) return;
+
     await prisma.scheduleAssignment.createMany({
-      data: rows.map((r) => ({
+      data: toCreate.map((r) => ({
         scheduleMonthId,
         employeeId: r.employeeUuid,
         date: toDbDate(r.date),
