@@ -8,10 +8,49 @@ export interface CellHoverContext {
   notes?: string | null;
 }
 
+/** Prefixos/marcadores internos — não devem aparecer no hover. */
+const INTERNAL_NOTE_PREFIXES = [
+  '__PENDING__',
+  '__PORTAL_APPROVED__',
+  '__PORTAL_FP__',
+  'auto:',
+  'escala-manual',
+  'cross-month:',
+] as const;
+
+/**
+ * Extrai a observação legível para o hover (remove marcadores de portal/sistema).
+ */
+export function sanitizeHoverNotes(notes?: string | null): string | null {
+  if (!notes) return null;
+  let text = notes.trim();
+  if (!text) return null;
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const prefix of INTERNAL_NOTE_PREFIXES) {
+      if (text.toLowerCase().startsWith(prefix.toLowerCase())) {
+        text = text.slice(prefix.length).trim();
+        changed = true;
+      }
+    }
+  }
+
+  if (!text) return null;
+  // Marcador puro sem texto do usuário.
+  if (/^(auto:|escala-manual|cross-month:)/i.test(text)) return null;
+  return text;
+}
+
 function formatTimeRange(ctx: CellHoverContext): string | null {
   if (ctx.startTime && ctx.endTime) return `${ctx.startTime} – ${ctx.endTime}`;
   if (ctx.shiftStart && ctx.shiftEnd) return `${ctx.shiftStart} – ${ctx.shiftEnd}`;
   return null;
+}
+
+function withNotes(base: string, notes: string | null): string {
+  return notes ? `${base}\n${notes}` : base;
 }
 
 export function buildCellHoverDetail(
@@ -19,36 +58,42 @@ export function buildCellHoverDetail(
   display: string,
   ctx: CellHoverContext = {},
 ): string | undefined {
-  const notes = ctx.notes?.trim();
+  const notes = sanitizeHoverNotes(ctx.notes);
   const timeRange = formatTimeRange(ctx);
 
   switch (kind) {
     case 'shift':
     case 't6':
     case 't7':
-    case 't8':
-      return timeRange ? `Turno ${display}\n${timeRange}` : `Turno ${display}`;
-    case 'instruction-shift':
-      return timeRange ? `Turno em Instrução\n${timeRange}` : 'Turno em Instrução';
+    case 't8': {
+      const base = timeRange ? `Turno ${display}\n${timeRange}` : `Turno ${display}`;
+      return withNotes(base, notes);
+    }
+    case 'instruction-shift': {
+      const base = timeRange ? `Turno em Instrução\n${timeRange}` : 'Turno em Instrução';
+      return withNotes(base, notes);
+    }
     case 'nd':
-      return 'Não disponível';
+      return withNotes('Não disponível', notes);
     case 'folga':
-      return 'Folga';
+      return withNotes('Folga', notes);
     case 'fs':
-      return 'Folga social';
+      return withNotes('Folga social', notes);
     case 'fa':
-      return 'Folga agrupada';
+      return withNotes('Folga agrupada', notes);
     case 'fani':
-      return 'Folga aniversário';
+      return withNotes('Folga aniversário', notes);
     case 'fp':
     case 'fp-weekend':
-      return 'Folga pedida';
-    case 'folga-weekend':
-      return display ? `${display} (sáb+dom — folga social)` : 'Folga social (sáb+dom)';
+      return withNotes('Folga pedida', notes);
+    case 'folga-weekend': {
+      const base = display ? `${display} (sáb+dom — folga social)` : 'Folga social (sáb+dom)';
+      return withNotes(base, notes);
+    }
     case 'ferias':
-      return 'Férias';
+      return withNotes('Férias', notes);
     case 'voo':
-      return notes ? `Voo\n${notes}` : 'Voo';
+      return withNotes('Voo', notes);
     case 'simulador': {
       if (timeRange && notes) return `Simulador\n${timeRange}\n${notes}`;
       if (timeRange) return `Simulador\n${timeRange}`;
@@ -56,9 +101,9 @@ export function buildCellHoverDetail(
       return 'Simulador';
     }
     case 'curso':
-      return notes ? `Curso\n${notes}` : 'Curso';
+      return withNotes('Curso', notes);
     case 'cma':
-      return notes ? `CMA\n${notes}` : 'CMA';
+      return withNotes('CMA', notes);
     case 'outro':
       return notes || 'Outro';
     default:
