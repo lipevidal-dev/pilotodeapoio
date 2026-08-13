@@ -10,6 +10,42 @@ function minimalGrid(): ScheduleGridData {
     daysInMonth: 3,
     dayNumbers: [1, 2, 3],
     weekdayLabels: ['Qua', 'Qui', 'Sex'],
+    leadDayCount: 0,
+    columns: [
+      {
+        isoDate: '2026-07-01',
+        day: 1,
+        year: 2026,
+        month: 7,
+        weekdayLabel: 'Qua',
+        isWeekend: false,
+        isLead: false,
+        isMonthStart: true,
+        leadIndex: -1,
+      },
+      {
+        isoDate: '2026-07-02',
+        day: 2,
+        year: 2026,
+        month: 7,
+        weekdayLabel: 'Qui',
+        isWeekend: false,
+        isLead: false,
+        isMonthStart: false,
+        leadIndex: -1,
+      },
+      {
+        isoDate: '2026-07-03',
+        day: 3,
+        year: 2026,
+        month: 7,
+        weekdayLabel: 'Sex',
+        isWeekend: false,
+        isLead: false,
+        isMonthStart: false,
+        leadIndex: -1,
+      },
+    ],
     groups: [
       {
         type: 'PAO',
@@ -155,6 +191,75 @@ describe('ScheduleGridComponent — edição interativa 8.1A', () => {
     });
   });
 
+  it('Ctrl+clique em requestMode na própria linha emite ao soltar Control', () => {
+    const grid = minimalGrid();
+    grid.groups[0]!.rows[0]!.cells = [
+      { display: '', kind: 'empty' },
+      { display: '', kind: 'empty' },
+      { display: '', kind: 'empty' },
+    ];
+    fixture.componentRef.setInput('grid', grid);
+    fixture.componentRef.setInput('editable', false);
+    fixture.componentRef.setInput('requestMode', true);
+    fixture.componentRef.setInput('requestEmployeeId', 'emp-1');
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+    const emitted: unknown[] = [];
+    comp.selectionCompleted.subscribe((v) => emitted.push(v));
+    const ctrlDown = { button: 0, preventDefault: () => {}, ctrlKey: true } as MouseEvent;
+
+    comp.onCellMouseDown(ctrlDown, 'emp-1', 1, { display: '', kind: 'empty' });
+    comp.onCellMouseDown(ctrlDown, 'emp-1', 3, { display: '', kind: 'empty' });
+    comp.onDocumentKeyUp({ key: 'Control' } as KeyboardEvent);
+
+    expect(emitted.length).toBe(1);
+    expect(emitted[0]).toEqual({
+      employeeId: 'emp-1',
+      employeeName: 'PAO Test',
+      employeeType: 'PAO',
+      startDay: 1,
+      endDay: 3,
+      days: [1, 3],
+    });
+  });
+
+  it('requestMode ignora Ctrl+clique em linha de outro colaborador', () => {
+    const grid = minimalGrid();
+    grid.groups.push({
+      type: 'APAO',
+      label: 'APAO',
+      rows: [
+        {
+          employeeId: 'emp-2',
+          name: 'APAO Test',
+          type: 'APAO',
+          cells: [
+            { display: '', kind: 'empty' },
+            { display: '', kind: 'empty' },
+            { display: '', kind: 'empty' },
+          ],
+          summary: grid.groups[0]!.rows[0]!.summary,
+        },
+      ],
+    });
+    fixture.componentRef.setInput('grid', grid);
+    fixture.componentRef.setInput('editable', false);
+    fixture.componentRef.setInput('requestMode', true);
+    fixture.componentRef.setInput('requestEmployeeId', 'emp-1');
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+    const emitted: unknown[] = [];
+    comp.selectionCompleted.subscribe((v) => emitted.push(v));
+    const ctrlDown = { button: 0, preventDefault: () => {}, ctrlKey: true } as MouseEvent;
+
+    comp.onCellMouseDown(ctrlDown, 'emp-2', 1, { display: '', kind: 'empty' });
+    comp.onDocumentKeyUp({ key: 'Control' } as KeyboardEvent);
+
+    expect(emitted.length).toBe(0);
+  });
+
   it('destaca células selecionadas', () => {
     const comp = fixture.componentInstance;
     comp.onCellMouseDown(
@@ -222,10 +327,16 @@ describe('ScheduleGridComponent — edição interativa 8.1A', () => {
       coverageGapDays: {
         19: ['T7'],
       },
+      coverageSurplusDays: {
+        13: ['T6'],
+      },
     });
     fixture.detectChanges();
     expect(comp.hasCoverageGap(19)).toBe(true);
     expect(comp.hasCoverageGap(13)).toBe(false);
     expect(comp.coverageGapTooltip(19)).toContain('T7');
+    expect(comp.hasCoverageSurplus(13)).toBe(true);
+    expect(comp.hasCoverageSurplus(19)).toBe(false);
+    expect(comp.coverageSurplusTooltip(13)).toContain('T6');
   });
 });

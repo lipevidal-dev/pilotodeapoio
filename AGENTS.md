@@ -41,6 +41,10 @@ Ao **Gerar** / **Limpar**, assignments com `source=MANUAL` (ex.: T9 colocado na 
 
 Na página **Escala** (somente **ADMIN**), o turno preferido do mês aparece em **vermelho** ao lado do nome, ex.: `Luccas Flávio` + vermelho `(T6)`. Colaboradores no portal não veem. Fonte: `GET /employees/monthly-shift-preferences/:year/:month`.
 
+### Escala — lead-in do mês anterior (não publicada)
+
+Na escala **planejada não publicada** (DRAFT/GENERATED), a grade antepõe os **últimos 6 dias do mês anterior** (ex.: set/2026 mostra 26–31/ago antes do dia 01), com coluna `.col-lead` esmaecida e linha vermelha (`.col-month-start`) no dia 1. Dias lead são **somente leitura** (sem editar/arrastar). Escala publicada/realizada/portal **não** mostram lead-in. A grade usa `fit-width` (sem scroll horizontal).
+
 ### Serviços úteis (produção VPS)
 
 - Compose: `docker compose --env-file .env.prod -f docker-compose.prod.yml`

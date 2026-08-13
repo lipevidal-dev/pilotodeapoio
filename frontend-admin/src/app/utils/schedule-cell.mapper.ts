@@ -7,22 +7,17 @@ import type {
 } from '../models/api.models';
 import { compareEmployeesBySeniority } from './employee-sort.util';
 import { buildCellHoverDetail, type CellHoverContext } from './schedule-cell-hover.util';
-import { baseShiftCode, isInstructionShiftCode } from './instruction-shift.util';
+import { baseShiftCode, isInstructionShiftCode, isStationShiftCode, toInstructionShiftCode } from './instruction-shift.util';
+import { isEmployeeInInstructionOnDate } from './instruction-period.util';
 
 import type {
-
   EmployeeRowData,
-
   EmployeeSummaryStats,
-
   ScheduleCellData,
-
   ScheduleCellKind,
-
+  ScheduleDayColumn,
   ScheduleGridData,
-
   ScheduleGridGroup,
-
 } from '../models/schedule-grid.models';
 
 
@@ -77,6 +72,24 @@ export function mapShiftToCell(shiftCode: string): ScheduleCellData {
   return { display: code, kind: 'shift', title: `Turno ${code}` };
 }
 
+function normalizeCellForInstructionPeriod(
+  cell: ScheduleCellData,
+  employee: Employee,
+  isoDate: string,
+): ScheduleCellData {
+  const inInstruction = isEmployeeInInstructionOnDate(employee, isoDate);
+
+  if (cell.kind === 'instruction-shift' && !inInstruction) {
+    return mapShiftToCell(baseShiftCode(cell.display));
+  }
+
+  if (cell.kind === 'shift' && inInstruction && isStationShiftCode(cell.display)) {
+    return mapShiftToCell(toInstructionShiftCode(cell.display));
+  }
+
+  return cell;
+}
+
 
 
 export function mapLabelToCell(label: string, notes?: string | null): ScheduleCellData {
@@ -112,7 +125,17 @@ export function mapLabelToCell(label: string, notes?: string | null): ScheduleCe
     return { display: 'OTR', kind: 'outro', title: desc || 'Outro' };
   }
 
-  if (n === 'ND') return { display: 'ND', kind: 'nd', title: label };
+  if (n === 'TURNO') {
+    return { display: 'TRN', kind: 'shift', title: 'Turno' };
+  }
+
+  if (n === 'ND' || n.includes('ND CONTINUIDADE') || n.startsWith('ND ')) {
+    return { display: 'ND', kind: 'nd', title: label };
+  }
+
+  if (n === 'T6' || n === 'T7' || n === 'T8' || n === 'T9') {
+    return mapShiftToCell(n);
+  }
 
   if (n.includes('FOLGA')) return { display: 'F', kind: 'folga', title: label };
 
@@ -151,6 +174,7 @@ function isCanonicalOperationalLabel(label: string): boolean {
   if (n.includes('CURSO')) return true;
   if (n === 'CMA') return true;
   if (n === 'OUTRO') return true;
+  if (n === 'TURNO') return true;
   if (n.includes('FOLGA PEDIDA') || n === 'FP') return true;
   return false;
 }
@@ -168,6 +192,8 @@ export function sanitizeAssignmentForGrid(
 /** Labels gerados pelo motor em preAllocations que devem aparecer na grade visual. */
 const GENERATOR_PREALLOC_DISPLAY_LABELS = new Set([
   'ND',
+  'ND CONTINUIDADE',
+  'T8',
   'FOLGA',
   'FOLGA SOCIAL',
   'FOLGA AGRUPADA',
@@ -179,20 +205,46 @@ const GENERATOR_PREALLOC_DISPLAY_LABELS = new Set([
 function isGeneratorPreallocDisplayLabel(label: string): boolean {
   const n = normalizeLabelKey(label);
   if (GENERATOR_PREALLOC_DISPLAY_LABELS.has(n)) return true;
+  if (n.includes('ND CONTINUIDADE') || n === 'ND') return true;
   if (n.includes('FOLGA ANIVERS')) return true;
   if (n.includes('FOLGA') && !n.includes('PEDIDA')) return true;
   return false;
 }
 
-/** Cadastros operacionais e FP manual persistidos em preAllocations. */
+/** Cadastros operacionais persistidos em preAllocations (espelho da realizada e cadastros manuais). */
 function isCadastroPreallocDisplayLabel(label: string): boolean {
   const n = normalizeLabelKey(label);
+  if (n.includes('FERIAS')) return true;
+  if (n.includes('VOO')) return true;
+  if (n.includes('FOLGA PEDIDA') || n === 'FP') return true;
   if (n === 'SIMULADOR' || n.includes('SIMULADOR')) return true;
   if (n === 'CURSO' || n.includes('CURSO')) return true;
   if (n === 'CMA') return true;
   if (n === 'OUTRO') return true;
-  if (n === 'FP' || n.includes('FOLGA PEDIDA')) return true;
+  if (n === 'TURNO') return true;
   return false;
+}
+
+function buildPendingPortalPreallocSourceMap(
+  preAllocations: PreAllocationRow[],
+): Map<string, OperationalLabelSource[]> {
+  const map = new Map<string, OperationalLabelSource[]>();
+
+  for (const row of preAllocations) {
+    if (!(row.notes ?? '').startsWith('__PENDING__')) continue;
+    const key = `${row.employeeId}|${dateKey(row.date)}`;
+    const labels = map.get(key) ?? [];
+    labels.push({
+      label: row.label,
+      notes: row.notes ?? null,
+      startTime: row.startTime ?? null,
+      endTime: row.endTime ?? null,
+      requestStatus: 'PENDING',
+      requestId: row.id,
+    });
+    map.set(key, labels);
+  }
+  return map;
 }
 
 function buildCadastroPreallocSourceMap(
@@ -202,6 +254,7 @@ function buildCadastroPreallocSourceMap(
 
   for (const row of preAllocations) {
     if (!isCadastroPreallocDisplayLabel(row.label)) continue;
+    if ((row.notes ?? '').startsWith('__PENDING__')) continue;
     const key = `${row.employeeId}|${dateKey(row.date)}`;
     const labels = map.get(key) ?? [];
     labels.push({
@@ -218,7 +271,8 @@ function buildCadastroPreallocSourceMap(
 export function labelDisplayPriority(label: string): number {
   const n = normalizeText(label);
   if (n.includes('FERIAS')) return 100;
-  if (n === 'ND') return 95;
+  if (n === 'ND' || n.includes('ND CONTINUIDADE') || n.startsWith('ND ')) return 95;
+  if (n === 'T8' || n === 'T6' || n === 'T7' || n === 'T9') return 15;
   if (n === 'FP' || n.includes('FOLGA PEDIDA')) return 90;
   if (n === 'FANI' || n.includes('FOLGA ANIVERS')) return 80;
   if (n.includes('SIMULADOR')) return 70;
@@ -269,12 +323,15 @@ export interface OperationalLabelSource {
   notes?: string | null;
   startTime?: string | null;
   endTime?: string | null;
+  requestStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requestId?: string;
 }
 
 interface ResolvedCellCandidate {
   priority: number;
   cell: ScheduleCellData;
   hover: CellHoverContext;
+  requestId?: string;
 }
 
 function withHoverDetail(cell: ScheduleCellData, hover: CellHoverContext): ScheduleCellData {
@@ -296,6 +353,16 @@ function hoverForOperational(source: OperationalLabelSource): CellHoverContext {
   };
 }
 
+function applyPendingState(cell: ScheduleCellData, pending: boolean): ScheduleCellData {
+  if (!pending) return cell;
+  const suffix = ' (aguardando aprovação)';
+  return {
+    ...cell,
+    requestPending: true,
+    title: cell.title ? `${cell.title}${suffix}` : `Solicitação${suffix}`,
+  };
+}
+
 export function resolveScheduleCell(
   assignment: ScheduleAssignmentRow | undefined,
   operationalSources: OperationalLabelSource[],
@@ -304,10 +371,13 @@ export function resolveScheduleCell(
   const candidates: ResolvedCellCandidate[] = [];
 
   for (const source of operationalSources) {
+    const mapped = mapLabelToCell(source.label, source.notes);
+    const pending = source.requestStatus === 'PENDING';
     candidates.push({
-      priority: labelDisplayPriority(source.label),
-      cell: mapLabelToCell(source.label, source.notes),
+      priority: labelDisplayPriority(source.label) + (pending ? 10 : 0),
+      cell: applyPendingState(mapped, pending),
       hover: hoverForOperational(source),
+      requestId: pending ? source.requestId : undefined,
     });
   }
 
@@ -333,7 +403,11 @@ export function resolveScheduleCell(
   }
 
   const winner = candidates.sort((a, b) => b.priority - a.priority)[0];
-  return withHoverDetail(winner.cell, winner.hover);
+  const cell = withHoverDetail(winner.cell, winner.hover);
+  if (winner.requestId) {
+    return { ...cell, requestId: winner.requestId };
+  }
+  return cell;
 }
 
 
@@ -651,11 +725,16 @@ function buildEmployeeRow(
   const summary = emptySummary();
 
   for (let day = 1; day <= days; day++) {
-    const key = `${employee.id}|${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const cell = resolveScheduleCell(
-      sanitizeAssignmentForGrid(assignmentMap.get(key)),
-      operationalSourceMap.get(key) ?? [],
-      shiftTimes,
+    const isoDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const key = `${employee.id}|${isoDate}`;
+    const cell = normalizeCellForInstructionPeriod(
+      resolveScheduleCell(
+        sanitizeAssignmentForGrid(assignmentMap.get(key)),
+        operationalSourceMap.get(key) ?? [],
+        shiftTimes,
+      ),
+      employee,
+      isoDate,
     );
     cells.push(cell);
   }
@@ -677,7 +756,7 @@ function buildEmployeeRow(
 
     name: employee.name,
 
-    type: resolveEmployeeGridType(employee),
+    type: employee.type,
 
     cells,
 
@@ -687,16 +766,15 @@ function buildEmployeeRow(
 
 }
 
-/** Cargo efetivo na grade: prioriza Role (cargoCode) sobre enum legado `type`. */
-function resolveEmployeeGridType(employee: Employee): 'PAO' | 'APAO' {
-  const raw = String(employee.cargoCode ?? employee.type ?? '')
-    .trim()
-    .toUpperCase();
-  if (raw === 'APAO' || raw.startsWith('APAO')) return 'APAO';
-  return 'PAO';
+
+
+export interface BuildGridPreviousMonthInput {
+  year: number;
+  month: number;
+  assignments: ScheduleAssignmentRow[];
+  preAllocations: PreAllocationRow[];
+  operationalCadastros?: OperationalCadastroRow[];
 }
-
-
 
 export interface BuildGridInput {
   year: number;
@@ -706,6 +784,28 @@ export interface BuildGridInput {
   preAllocations: PreAllocationRow[];
   operationalCadastros?: OperationalCadastroRow[];
   shifts?: Shift[];
+  /**
+   * Quando > 0, antepõe os últimos N dias do mês anterior (somente visualização).
+   * Usado na escala não publicada.
+   */
+  leadDays?: number;
+  previousMonth?: BuildGridPreviousMonthInput | null;
+  shiftSwaps?: Array<{
+    id: string;
+    kind?: 'PEER' | 'SELF' | string;
+    date: string;
+    targetDate?: string | null;
+    pairLength?: number;
+    requesterDates?: string[];
+    targetDates?: string[];
+    requesterEmployeeId: string;
+    requesterName: string;
+    requesterShiftCode: string;
+    targetEmployeeId: string;
+    targetName: string;
+    targetShiftCode: string;
+    status: 'OFFERED' | 'AWAITING_ADMIN' | string;
+  }>;
 }
 
 
@@ -720,11 +820,15 @@ function buildOperationalSourceMap(
     const key = `${row.employeeId}|${dateKey(row.date)}`;
     const labels = map.get(key) ?? [];
     const pre = row.source === 'pre_allocation' ? preAllocById.get(row.id) : undefined;
+    const requestStatus = row.metadata?.['requestStatus'] as OperationalLabelSource['requestStatus'] | undefined;
+    const requestId = row.metadata?.['requestId'] as string | undefined;
     labels.push({
       label: row.label,
       notes: row.notes ?? pre?.notes ?? null,
       startTime: pre?.startTime ?? null,
       endTime: pre?.endTime ?? null,
+      requestStatus,
+      requestId,
     });
     map.set(key, labels);
   }
@@ -739,6 +843,7 @@ function buildGeneratorPreallocSourceMap(
 
   for (const row of preAllocations) {
     if (!isGeneratorPreallocDisplayLabel(row.label)) continue;
+    if ((row.notes ?? '').startsWith('__PENDING__')) continue;
     const key = `${row.employeeId}|${dateKey(row.date)}`;
     const labels = map.get(key) ?? [];
     labels.push({
@@ -764,30 +869,389 @@ function mergeSourceMaps(
   return merged;
 }
 
-export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
-  const { year, month, employees, assignments, preAllocations, operationalCadastros, shifts } = input;
+function applyShiftSwapsToRows(
+  rows: EmployeeRowData[],
+  year: number,
+  month: number,
+  shiftSwaps: BuildGridInput['shiftSwaps'],
+): void {
+  if (!shiftSwaps?.length) return;
+  const rowById = new Map(rows.map((r) => [r.employeeId, r]));
   const days = daysInMonth(year, month);
-  const shiftTimes = shiftTimesByCode(shifts);
-  const dayNumbers = Array.from({ length: days }, (_, i) => i + 1);
-  const weekdayLabels = dayNumbers.map((d) => {
-    const wd = new Date(year, month - 1, d).getDay();
-    return WEEKDAYS[wd];
-  });
 
+  const activeSwaps = shiftSwaps.filter(
+    (s) => s.status === 'OFFERED' || s.status === 'AWAITING_ADMIN',
+  );
+  // Cor estável por par: mesma cor nos dois lados; pares diferentes = cores diferentes.
+  const colorBySwapId = new Map(
+    [...activeSwaps]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((s, i) => [s.id, i % 8] as const),
+  );
+
+  const markCell = (
+    row: EmployeeRowData | undefined,
+    day: number,
+    meta: NonNullable<ScheduleCellData['shiftSwap']>,
+    title: string,
+    hoverDetail: string,
+  ) => {
+    if (!row || day < 1 || day > days || !row.cells[day - 1]) return;
+    const cell = row.cells[day - 1]!;
+    row.cells[day - 1] = {
+      ...cell,
+      shiftSwap: meta,
+      title,
+      hoverDetail,
+    };
+  };
+
+  const partAt = (joined: string | undefined, index: number): string => {
+    const parts = (joined ?? '')
+      .split('+')
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return '';
+    return parts[Math.min(index, parts.length - 1)] ?? '';
+  };
+
+  const preferCode = (cellDisplay: string | undefined, stored: string): string => {
+    const disp = (cellDisplay ?? '').trim();
+    if (disp && disp.toLowerCase() !== 'em branco') return disp;
+    const s = (stored ?? '').trim();
+    if (s && s.toLowerCase() !== 'em branco') return s;
+    return disp || s || '';
+  };
+
+  for (const swap of shiftSwaps) {
+    if (swap.status !== 'OFFERED' && swap.status !== 'AWAITING_ADMIN') continue;
+
+    const sourceDays = daysFromIsoList(
+      swap.requesterDates,
+      swap.date,
+      swap.pairLength ?? 1,
+    );
+    const targetDays = daysFromIsoList(
+      swap.targetDates,
+      swap.targetDate ?? swap.date,
+      swap.pairLength ?? 1,
+    );
+    if (sourceDays.length < 1 || targetDays.length < 1) continue;
+    const n = Math.min(sourceDays.length, targetDays.length);
+    const colorIndex = colorBySwapId.get(swap.id) ?? 0;
+
+    if (swap.kind === 'SELF') {
+      const row = rowById.get(swap.requesterEmployeeId);
+      const statusLabel = 'Realocação na própria escala';
+      for (let i = 0; i < n; i++) {
+        const sDay = sourceDays[i]!;
+        const tDay = targetDays[i]!;
+        const srcCode = preferCode(row?.cells[sDay - 1]?.display, partAt(swap.requesterShiftCode, i));
+        const dstCode = preferCode(row?.cells[tDay - 1]?.display, partAt(swap.targetShiftCode, i));
+        markCell(
+          row,
+          sDay,
+          {
+            id: swap.id,
+            status: swap.status,
+            role: 'requester',
+            counterpartName: 'sua escala',
+            counterpartShiftCode: dstCode,
+            ownShiftCode: srcCode,
+            requesterName: swap.requesterName,
+            targetName: swap.requesterName,
+            requesterShiftCode: srcCode,
+            targetShiftCode: dstCode,
+            sourceDate: swap.date,
+            targetDate: swap.targetDate,
+            colorIndex,
+          },
+          `${statusLabel}: ${srcCode} ↔ ${dstCode}`,
+          `${statusLabel}\n${srcCode} ↔ ${dstCode}`,
+        );
+        markCell(
+          row,
+          tDay,
+          {
+            id: swap.id,
+            status: swap.status,
+            role: 'requester',
+            counterpartName: 'sua escala',
+            counterpartShiftCode: srcCode,
+            ownShiftCode: dstCode,
+            requesterName: swap.requesterName,
+            targetName: swap.requesterName,
+            requesterShiftCode: srcCode,
+            targetShiftCode: dstCode,
+            sourceDate: swap.date,
+            targetDate: swap.targetDate,
+            colorIndex,
+          },
+          `${statusLabel}: destino ↔ origem`,
+          `${statusLabel}\n${dstCode} ↔ ${srcCode}`,
+        );
+      }
+      continue;
+    }
+
+    const requesterRow = rowById.get(swap.requesterEmployeeId);
+    const targetRow = rowById.get(swap.targetEmployeeId);
+    const statusLabel =
+      swap.status === 'OFFERED'
+        ? 'Troca ofertada (aguardando colaborador)'
+        : 'Troca aceita';
+    const destDateLabel = swap.targetDate ?? swap.date;
+
+    for (let i = 0; i < n; i++) {
+      const sDay = sourceDays[i]!;
+      const tDay = targetDays[i]!;
+      const reqCode = preferCode(
+        requesterRow?.cells[sDay - 1]?.display,
+        partAt(swap.requesterShiftCode, i),
+      );
+      const tgtCode = preferCode(
+        targetRow?.cells[tDay - 1]?.display,
+        partAt(swap.targetShiftCode, i),
+      );
+      markCell(
+        requesterRow,
+        sDay,
+        {
+          id: swap.id,
+          status: swap.status,
+          role: 'requester',
+          counterpartName: swap.targetName,
+          counterpartShiftCode: tgtCode,
+          ownShiftCode: reqCode,
+          requesterName: swap.requesterName,
+          targetName: swap.targetName,
+          requesterShiftCode: reqCode,
+          targetShiftCode: tgtCode,
+          sourceDate: swap.date,
+          targetDate: destDateLabel,
+          colorIndex,
+        },
+        `${statusLabel}: ${swap.requesterName} (solicitante) ${reqCode} com ${tgtCode} ${swap.targetName}`,
+        `${statusLabel}\n${swap.requesterName} (solicitante) ${reqCode} com ${tgtCode} ${swap.targetName}`,
+      );
+      markCell(
+        targetRow,
+        tDay,
+        {
+          id: swap.id,
+          status: swap.status,
+          role: 'target',
+          counterpartName: swap.requesterName,
+          counterpartShiftCode: reqCode,
+          ownShiftCode: tgtCode,
+          requesterName: swap.requesterName,
+          targetName: swap.targetName,
+          requesterShiftCode: reqCode,
+          targetShiftCode: tgtCode,
+          sourceDate: swap.date,
+          targetDate: destDateLabel,
+          colorIndex,
+        },
+        `${statusLabel}: ${swap.requesterName} (solicitante) ${reqCode} com ${tgtCode} ${swap.targetName}`,
+        `${statusLabel}\n${swap.requesterName} (solicitante) ${reqCode} com ${tgtCode} ${swap.targetName}`,
+      );
+    }
+  }
+}
+
+/** Marca células de trocas já aprovadas (canto vermelho discreto). */
+function applyApprovedSwapMarksToRows(
+  rows: EmployeeRowData[],
+  year: number,
+  month: number,
+  shiftSwaps: BuildGridInput['shiftSwaps'],
+): void {
+  if (!shiftSwaps?.length) return;
+  const rowById = new Map(rows.map((r) => [r.employeeId, r]));
+  const days = daysInMonth(year, month);
+
+  const markApplied = (row: EmployeeRowData | undefined, day: number) => {
+    if (!row || day < 1 || day > days || !row.cells[day - 1]) return;
+    const cell = row.cells[day - 1]!;
+    // Não sobrescreve destaque de troca ainda ativa.
+    if (cell.shiftSwap) return;
+    row.cells[day - 1] = {
+      ...cell,
+      swapApplied: true,
+      title: cell.title ?? 'Troca aceita',
+      hoverDetail: cell.hoverDetail ?? 'Turno trocado (troca aceita).',
+    };
+  };
+
+  for (const swap of shiftSwaps) {
+    if (swap.status !== 'APPROVED') continue;
+
+    const sourceDays = daysFromIsoList(
+      swap.requesterDates,
+      swap.date,
+      swap.pairLength ?? 1,
+    );
+    const targetDays = daysFromIsoList(
+      swap.targetDates,
+      swap.targetDate ?? swap.date,
+      swap.pairLength ?? 1,
+    );
+    if (sourceDays.length < 1 || targetDays.length < 1) continue;
+    const n = Math.min(sourceDays.length, targetDays.length);
+
+    if (swap.kind === 'SELF') {
+      const row = rowById.get(swap.requesterEmployeeId);
+      for (let i = 0; i < n; i++) {
+        markApplied(row, sourceDays[i]!);
+        markApplied(row, targetDays[i]!);
+      }
+      continue;
+    }
+
+    const requesterRow = rowById.get(swap.requesterEmployeeId);
+    const targetRow = rowById.get(swap.targetEmployeeId);
+    for (let i = 0; i < n; i++) {
+      markApplied(requesterRow, sourceDays[i]!);
+      markApplied(targetRow, targetDays[i]!);
+    }
+  }
+}
+
+function daysFromIsoList(
+  dates: string[] | undefined | null,
+  fallbackStart: string | null | undefined,
+  pairLength: number,
+): number[] {
+  if (dates && dates.length > 0) {
+    return dates
+      .map((d) => Number(String(d).slice(8, 10)))
+      .filter((d) => Number.isInteger(d) && d >= 1);
+  }
+  if (!fallbackStart) return [];
+  const start = Number(String(fallbackStart).slice(8, 10));
+  if (!Number.isInteger(start) || start < 1) return [];
+  const n = Math.max(1, pairLength || 1);
+  return Array.from({ length: n }, (_, i) => start + i);
+}
+
+function addDaysLabel(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return String(dt.getUTCDate()).padStart(2, '0');
+}
+
+function buildDayColumn(
+  year: number,
+  month: number,
+  day: number,
+  opts: { isLead: boolean; isMonthStart: boolean; leadIndex: number },
+): ScheduleDayColumn {
+  const wd = new Date(year, month - 1, day).getDay();
+  const weekdayLabel = WEEKDAYS[wd]!;
+  return {
+    isoDate: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+    day,
+    year,
+    month,
+    weekdayLabel,
+    isWeekend: weekdayLabel === 'Dom' || weekdayLabel === 'Sáb',
+    isLead: opts.isLead,
+    isMonthStart: opts.isMonthStart,
+    leadIndex: opts.leadIndex,
+  };
+}
+
+function buildOperationalMapsForMonth(
+  assignments: ScheduleAssignmentRow[],
+  preAllocations: PreAllocationRow[],
+  operationalCadastros: OperationalCadastroRow[] | undefined,
+): {
+  assignmentMap: Map<string, ScheduleAssignmentRow>;
+  operationalSourceMap: Map<string, OperationalLabelSource[]>;
+} {
   const assignmentMap = new Map<string, ScheduleAssignmentRow>();
   for (const a of assignments) {
     assignmentMap.set(`${a.employeeId}|${dateKey(a.date)}`, a);
   }
 
   const preAllocById = new Map(preAllocations.map((p) => [p.id, p]));
-
   const operationalSourceMap = mergeSourceMaps(
     buildOperationalSourceMap(operationalCadastros, preAllocById),
     mergeSourceMaps(
-      buildCadastroPreallocSourceMap(preAllocations),
-      buildGeneratorPreallocSourceMap(preAllocations),
+      buildPendingPortalPreallocSourceMap(preAllocations),
+      mergeSourceMaps(
+        buildCadastroPreallocSourceMap(preAllocations),
+        buildGeneratorPreallocSourceMap(preAllocations),
+      ),
     ),
   );
+
+  return { assignmentMap, operationalSourceMap };
+}
+
+export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
+  const {
+    year,
+    month,
+    employees,
+    assignments,
+    preAllocations,
+    operationalCadastros,
+    shifts,
+    shiftSwaps,
+    leadDays: leadDaysRaw = 0,
+    previousMonth,
+  } = input;
+  const days = daysInMonth(year, month);
+  const shiftTimes = shiftTimesByCode(shifts);
+  const dayNumbers = Array.from({ length: days }, (_, i) => i + 1);
+  const weekdayLabels = dayNumbers.map((d) => {
+    const wd = new Date(year, month - 1, d).getDay();
+    return WEEKDAYS[wd]!;
+  });
+
+  const leadDays = Math.max(0, Math.floor(leadDaysRaw));
+  const prevYear = previousMonth?.year ?? (month === 1 ? year - 1 : year);
+  const prevMonthNum = previousMonth?.month ?? (month === 1 ? 12 : month - 1);
+  const prevDaysTotal = daysInMonth(prevYear, prevMonthNum);
+  const effectiveLeadDays = leadDays > 0 ? Math.min(leadDays, prevDaysTotal) : 0;
+  const leadStartDay = prevDaysTotal - effectiveLeadDays + 1;
+
+  const leadColumns: ScheduleDayColumn[] =
+    effectiveLeadDays > 0
+      ? Array.from({ length: effectiveLeadDays }, (_, i) =>
+          buildDayColumn(prevYear, prevMonthNum, leadStartDay + i, {
+            isLead: true,
+            isMonthStart: false,
+            leadIndex: i,
+          }),
+        )
+      : [];
+
+  const currentColumns: ScheduleDayColumn[] = dayNumbers.map((d) =>
+    buildDayColumn(year, month, d, {
+      isLead: false,
+      isMonthStart: d === 1,
+      leadIndex: -1,
+    }),
+  );
+
+  const columns: ScheduleDayColumn[] = [...leadColumns, ...currentColumns];
+
+  const { assignmentMap, operationalSourceMap } = buildOperationalMapsForMonth(
+    assignments,
+    preAllocations,
+    operationalCadastros,
+  );
+
+  const prevMaps =
+    effectiveLeadDays > 0
+      ? buildOperationalMapsForMonth(
+          previousMonth?.assignments ?? [],
+          previousMonth?.preAllocations ?? [],
+          previousMonth?.operationalCadastros,
+        )
+      : null;
 
   const employeeById = new Map(employees.map((e) => [e.id, e]));
 
@@ -823,61 +1287,71 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
       operationalSourceMap,
       shiftTimes,
     );
-    if (resolveEmployeeGridType(emp) === 'PAO') {
+
+    if (prevMaps && effectiveLeadDays > 0) {
+      const prevRow = buildEmployeeRow(
+        emp,
+        prevYear,
+        prevMonthNum,
+        prevDaysTotal,
+        prevMaps.assignmentMap,
+        prevMaps.operationalSourceMap,
+        shiftTimes,
+      );
+      row.leadCells = prevRow.cells.slice(leadStartDay - 1);
+    }
+
+    if (emp.type === 'PAO') {
       paoRows.push(row);
     } else {
       apaoRows.push(row);
     }
   }
 
-
+  applyShiftSwapsToRows([...paoRows, ...apaoRows], year, month, shiftSwaps);
+  applyApprovedSwapMarksToRows([...paoRows, ...apaoRows], year, month, shiftSwaps);
 
   const groups: ScheduleGridGroup[] = [];
 
   if (paoRows.length) {
-
     groups.push({ type: 'PAO', label: 'PAO', rows: paoRows });
-
   }
 
   if (apaoRows.length) {
-
     groups.push({ type: 'APAO', label: 'APAO', rows: apaoRows });
-
   }
 
-
-
   return {
-
     year,
-
     month,
-
     daysInMonth: days,
-
     dayNumbers,
-
     weekdayLabels,
-
+    columns,
+    leadDayCount: effectiveLeadDays,
     groups,
-
   };
-
 }
 
 
 
-export function cellKindClass(kind: ScheduleCellKind, display?: string): string {
-  if (kind === 'empty') return 'cell-empty';
-  if (kind === 'instruction-shift') return 'cell-instruction';
-  if (kind === 'fp-weekend' || kind === 'folga-weekend') return 'cell-folga-weekend';
-  if (kind === 'shift' && display) {
-    const code = display.toUpperCase();
-    if (code === 'T6' || code === 'T7' || code === 'T8' || code === 'T9') {
-      return `cell-${code.toLowerCase()}`;
-    }
-  }
-  return `cell-${kind}`;
+export function cellKindClass(kind: ScheduleCellKind, display?: string, requestPending?: boolean): string {
+  const base =
+    kind === 'empty'
+      ? 'cell-empty'
+      : kind === 'instruction-shift'
+        ? 'cell-instruction'
+        : kind === 'fp-weekend' || kind === 'folga-weekend'
+          ? 'cell-folga-weekend'
+          : kind === 'shift' && display
+            ? (() => {
+                const code = display.toUpperCase();
+                if (code === 'T6' || code === 'T7' || code === 'T8' || code === 'T9') {
+                  return `cell-${code.toLowerCase()}`;
+                }
+                return `cell-${kind}`;
+              })()
+            : `cell-${kind}`;
+  return requestPending ? `${base} cell-pending` : base;
 }
 

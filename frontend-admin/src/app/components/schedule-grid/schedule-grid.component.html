@@ -1,19 +1,43 @@
-<div class="summary-toolbar">
-  <p-button
-    [label]="summaryToggleLabel()"
-    [icon]="summaryVisible() ? 'pi pi-eye-slash' : 'pi pi-eye'"
-    severity="secondary"
-    size="small"
-    [text]="true"
-    (onClick)="toggleSummary()"
-  />
-</div>
+@if (!hideSummaryToolbar()) {
+  <div class="summary-toolbar">
+    <p-button
+      [label]="summaryToggleLabel()"
+      [icon]="summaryVisible() ? 'pi pi-eye-slash' : 'pi pi-eye'"
+      severity="secondary"
+      size="small"
+      [text]="true"
+      (onClick)="toggleSummary()"
+    />
+  </div>
+}
+
+<div id="schedule-grid-export-area" class="schedule-grid-export-area">
+@if (showLegend()) {
+  <div class="grid-legend-row">
+    <app-schedule-legend class="grid-legend" />
+    @if (hideSummaryToolbar()) {
+      <p-button
+        [label]="summaryToggleLabel()"
+        [icon]="summaryVisible() ? 'pi pi-eye-slash' : 'pi pi-eye'"
+        severity="secondary"
+        size="small"
+        [text]="true"
+        styleClass="legend-summary-toggle"
+        (onClick)="toggleSummary()"
+      />
+    }
+  </div>
+}
 
 <div
   class="schedule-grid-wrap"
   [class.compact-layout]="!summaryVisible()"
   [class.editable-grid]="editable()"
+  [class.request-grid]="requestMode()"
   [class.has-summary]="summaryVisible()"
+  [class.preview-unpublished]="previewUnpublished()"
+  [class.fit-width]="true"
+  [style.--day-col-count]="displayColumns().length"
   (selectstart)="$event.preventDefault()"
   (mouseleave)="clearHoverCross()"
 >
@@ -22,19 +46,33 @@
       <thead>
         <tr>
           <th class="col-employee sticky-col">Funcionário</th>
-          @for (day of grid().dayNumbers; track day; let i = $index) {
-            <th class="col-day" [class.col-weekend]="isWeekend(i)" [class.col-crosshair]="isColumnHovered(i)">
+          @for (col of displayColumns(); track col.isoDate; let i = $index) {
+            <th
+              class="col-day"
+              [class.col-weekend]="col.isWeekend"
+              [class.col-lead]="col.isLead"
+              [class.col-month-start]="col.isMonthStart"
+              [class.col-crosshair]="isColumnHovered(i)"
+            >
               <div class="day-head-stack">
-                @if (hasCoverageGap(day)) {
+                @if (!col.isLead && showCoverageGaps() && hasCoverageGap(col.day)) {
                   <img
                     class="coverage-gap-icon"
                     src="assets/icons/coverage-attention.svg"
-                    [attr.alt]="'Falta cobertura PAO no dia ' + day"
-                    [title]="coverageGapTooltip(day)"
+                    [attr.alt]="'Falta cobertura PAO no dia ' + col.day"
+                    [title]="coverageGapTooltip(col.day)"
                   />
                 }
-                <span class="day-num">{{ day < 10 ? '0' + day : day }}</span>
-                <span class="day-wd">{{ grid().weekdayLabels[i] }}</span>
+                @if (!col.isLead && showCoverageGaps() && hasCoverageSurplus(col.day)) {
+                  <img
+                    class="coverage-gap-icon coverage-gap-icon--surplus"
+                    src="assets/icons/coverage-attention-warning.svg"
+                    [attr.alt]="'Sobrecobertura PAO no dia ' + col.day"
+                    [title]="coverageSurplusTooltip(col.day)"
+                  />
+                }
+                <span class="day-num">{{ col.day < 10 ? '0' + col.day : col.day }}</span>
+                <span class="day-wd">{{ col.weekdayLabel }}</span>
               </div>
             </th>
           }
@@ -65,41 +103,49 @@
           <tr class="group-row">
             <td
               class="group-label sticky-col"
-              [attr.colspan]="grid().dayNumbers.length + 1 + (summaryVisible() ? summaryColCount : 0)"
+              [attr.colspan]="displayColumns().length + 1 + (summaryVisible() ? summaryColCount : 0)"
             >
               {{ group.label }}
             </td>
           </tr>
           @for (row of group.rows; track row.employeeId) {
-            <tr class="data-row">
+            <tr class="data-row" [class.row-own]="isOwnRow(row.employeeId)">
               <td
                 class="col-employee sticky-col"
                 [class.col-crosshair]="isRowHovered(row.employeeId)"
                 (mouseenter)="onRowMouseEnter(row.employeeId)"
               >
                 <span class="emp-name">{{ row.name }}</span>
+                @if (row.preferredShiftCode) {
+                  <span class="emp-pref">({{ row.preferredShiftCode }})</span>
+                }
               </td>
-              @for (cell of row.cells; track $index; let i = $index) {
+              @for (col of displayColumns(); track col.isoDate; let i = $index) {
+                @let cell = cellForColumn(row, col);
                 <td
                   class="col-day"
-                  [class.col-weekend]="isWeekend(i)"
+                  [class.col-weekend]="col.isWeekend"
+                  [class.col-lead]="col.isLead"
+                  [class.col-month-start]="col.isMonthStart"
                   [class.col-crosshair]="isColumnHovered(i) || isRowHovered(row.employeeId)"
                   [class.col-crosshair-focus]="isCrosshairFocus(row.employeeId, i)"
-                  [class.cell-empty-select]="editable() && isSelectableCell(cell)"
-                  [class.cell-filled-drag]="editable() && isDraggableCell(cell, row.type)"
-                  [class.cell-filled-delete]="editable() && isDeletableCell(cell)"
-                  [class.cell-selected]="isCellHighlighted(row.employeeId, grid().dayNumbers[i])"
-                  [class.cell-delete-selected]="isCellDeleteHighlighted(row.employeeId, grid().dayNumbers[i])"
-                  [class.cell-drag-over]="isDragOver(row.employeeId, grid().dayNumbers[i])"
-                  [class.cell-dragging]="isDragging(row.employeeId, grid().dayNumbers[i])"
-                  [attr.draggable]="editable() && isDraggableCell(cell, row.type)"
-                  (mousedown)="onCellMouseDown($event, row.employeeId, grid().dayNumbers[i], cell)"
-                  (mouseenter)="onCellMouseEnter(row.employeeId, grid().dayNumbers[i], i)"
-                  (dragstart)="onDragStart($event, row.employeeId, grid().dayNumbers[i], cell)"
+                  [class.cell-empty-select]="!col.isLead && (editable() || isRequestableCell(row.employeeId)) && isSelectableCell(cell)"
+                  [class.cell-filled-drag]="!col.isLead && editable() && isDraggableCell(cell)"
+                  [class.cell-filled-delete]="!col.isLead && editable() && isDeletableCell(cell)"
+                  [class.cell-selected]="!col.isLead && isCellHighlighted(row.employeeId, col.day)"
+                  [class.cell-delete-selected]="!col.isLead && isCellDeleteHighlighted(row.employeeId, col.day)"
+                  [class.cell-drag-over]="!col.isLead && isDragOver(row.employeeId, col.day)"
+                  [class.cell-dragging]="!col.isLead && isDragging(row.employeeId, col.day)"
+                  [class.cell-requestable]="!col.isLead && (isRequestableCell(row.employeeId) || isApprovableCell(cell))"
+                  [attr.draggable]="!col.isLead && editable() && isDraggableCell(cell)"
+                  (click)="onCellClick(row.employeeId, col.day, cell, col.isLead)"
+                  (mousedown)="onCellMouseDown($event, row.employeeId, col.day, cell, col.isLead)"
+                  (mouseenter)="onCellMouseEnter(row.employeeId, col.day, i, col.isLead)"
+                  (dragstart)="onDragStart($event, row.employeeId, col.day, cell, col.isLead)"
                   (dragend)="onDragEnd()"
-                  (dragover)="onDragOver($event, row.employeeId, grid().dayNumbers[i])"
-                  (dragleave)="onDragLeave(row.employeeId, grid().dayNumbers[i])"
-                  (drop)="onDrop($event, row.employeeId, grid().dayNumbers[i])"
+                  (dragover)="onDragOver($event, row.employeeId, col.day, col.isLead)"
+                  (dragleave)="onDragLeave(row.employeeId, col.day)"
+                  (drop)="onDrop($event, row.employeeId, col.day, col.isLead)"
                 >
                   <app-schedule-cell [cell]="cell" />
                 </td>
@@ -127,4 +173,5 @@
       </tbody>
     </table>
   </div>
+</div>
 </div>

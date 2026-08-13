@@ -8,12 +8,19 @@ import {
 import { ButtonModule } from 'primeng/button';
 import { ScheduleCellComponent } from '../schedule-cell/schedule-cell.component';
 import { EmployeeSummaryComponent } from '../employee-summary/employee-summary.component';
+import { ScheduleLegendComponent } from '../schedule-legend/schedule-legend.component';
 import type { EmployeeType } from '../../models/api.models';
-import type { ScheduleCellData, ScheduleCellKind, ScheduleGridData } from '../../models/schedule-grid.models';
+import type {
+  EmployeeRowData,
+  ScheduleCellData,
+  ScheduleCellKind,
+  ScheduleDayColumn,
+  ScheduleGridData,
+} from '../../models/schedule-grid.models';
 import type { GridAuditTotals } from '../../utils/operational-audit.util';
 import {
-  isDeletableCell,
-  isDraggableCell,
+  isDeletableCell as cellIsDeletable,
+  isDraggableCell as cellIsDraggable,
   isSelectableCell,
 } from '../../utils/schedule-grid-cell.util';
 import {
@@ -37,6 +44,13 @@ export interface GridMoveRequest {
   target: { employeeId: string; day: number };
 }
 
+export interface GridCellClickEvent {
+  employeeId: string;
+  employeeName: string;
+  day: number;
+  cell: ScheduleCellData;
+}
+
 export interface GridDeletionCell {
   day: number;
   display: string;
@@ -58,6 +72,7 @@ export interface GridDeletionSelectionComplete {
   imports: [
     ScheduleCellComponent,
     EmployeeSummaryComponent,
+    ScheduleLegendComponent,
     ButtonModule,
   ],
   templateUrl: './schedule-grid.component.html',
@@ -67,12 +82,28 @@ export class ScheduleGridComponent {
   readonly grid = input.required<ScheduleGridData>();
   readonly auditTotals = input<GridAuditTotals | null>(null);
   readonly editable = input(false);
+  /** Escala realizada: qualquer célula preenchida pode mover/excluir. */
+  readonly fullyEditable = input(false);
+  readonly requestMode = input(false);
+  /** Habilita oferta/resposta de troca de turno (escala realizada). */
+  readonly swapMode = input(false);
+  /** APAO: permite clicar na própria linha para realocar dias. */
+  readonly allowSelfSwap = input(false);
+  readonly approvalMode = input(false);
+  readonly requestEmployeeId = input<string | null>(null);
+  readonly highlightEmployeeId = input<string | null>(null);
+  readonly previewUnpublished = input(false);
+  readonly showCoverageGaps = input(true);
+  readonly showLegend = input(false);
+  /** Oculta a barra interna “Mostrar resumo” (controle externo no painel admin). */
+  readonly hideSummaryToolbar = input(false);
+  readonly summaryVisible = input(false);
 
   readonly selectionCompleted = output<GridSelectionComplete>();
+  readonly summaryVisibleChange = output<boolean>();
   readonly deletionSelectionCompleted = output<GridDeletionSelectionComplete>();
   readonly moveRequested = output<GridMoveRequest>();
-
-  readonly summaryVisible = signal(false);
+  readonly cellClicked = output<GridCellClickEvent>();
 
   private dragAnchor: GridCellCoordinate | null = null;
   private isSelecting = false;
@@ -107,11 +138,121 @@ export class ScheduleGridComponent {
   readonly summaryColCount = this.summaryFields.length;
 
   readonly isSelectableCell = isSelectableCell;
-  readonly isDraggableCell = isDraggableCell;
-  readonly isDeletableCell = isDeletableCell;
+
+  private readonly emptyCell: ScheduleCellData = { display: '', kind: 'empty' };
+
+  /** Colunas exibidas (lead-in + mês); fallback para dayNumbers em grids antigos. */
+  displayColumns(): ScheduleDayColumn[] {
+    const grid = this.grid();
+    if (grid.columns?.length) return grid.columns;
+    return grid.dayNumbers.map((day, i) => {
+      const weekdayLabel = grid.weekdayLabels[i] ?? '';
+      return {
+        isoDate: `${grid.year}-${String(grid.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+        day,
+        year: grid.year,
+        month: grid.month,
+        weekdayLabel,
+        isWeekend: weekdayLabel === 'Dom' || weekdayLabel === 'Sáb',
+        isLead: false,
+        isMonthStart: day === 1,
+        leadIndex: -1,
+      };
+    });
+  }
+
+  cellForColumn(row: EmployeeRowData, col: ScheduleDayColumn): ScheduleCellData {
+    if (col.isLead) {
+      return row.leadCells?.[col.leadIndex] ?? this.emptyCell;
+    }
+    return row.cells[col.day - 1] ?? this.emptyCell;
+  }
+
+  isDraggableCell = (cell: ScheduleCellData): boolean =>
+    cellIsDraggable(cell, { fullyEditable: this.fullyEditable() });
+
+  isDeletableCell = (cell: ScheduleCellData): boolean =>
+    cellIsDeletable(cell, { fullyEditable: this.fullyEditable() });
+
+  onCellClick(employeeId: string, day: number, cell: ScheduleCellData, isLead = false): void {
+    if (isLead) return;
+    if (this.approvalMode() && cell.requestPending) {
+      this.cellClicked.emit({
+        employeeId,
+        employeeName: this.employeeName(employeeId),
+        day,
+        cell,
+      });
+      return;
+    }
+
+    // Troca de turno: escala realizada (swapMode) ou aprovação admin em célula com oferta.
+    if (this.swapMode() || (this.approvalMode() && cell.shiftSwap)) {
+      const ownId = this.requestEmployeeId();
+      if (cell.shiftSwap) {
+        this.cellClicked.emit({
+          employeeId,
+          employeeName: this.employeeName(employeeId),
+          day,
+          cell,
+        });
+        return;
+      }
+      if (this.swapMode() && ownId && this.isSwapOfferableCell(cell)) {
+        // Próprio dia (1º clique) ou dia do colega (2º clique) — fluxo em dois passos.
+        this.cellClicked.emit({
+          employeeId,
+          employeeName: this.employeeName(employeeId),
+          day,
+          cell,
+        });
+        return;
+      }
+    }
+
+    if (!this.requestMode()) return;
+    const ownId = this.requestEmployeeId();
+    if (!ownId || employeeId !== ownId) return;
+
+    if (cell.requestPending) {
+      this.cellClicked.emit({
+        employeeId,
+        employeeName: this.employeeName(employeeId),
+        day,
+        cell,
+      });
+      return;
+    }
+    if (isSelectableCell(cell)) return;
+  }
+
+  /** Qualquer célula de outro colaborador (sem troca/pedido pendente). */
+  isSwapOfferableCell(cell: ScheduleCellData): boolean {
+    return !cell.shiftSwap && !cell.requestPending;
+  }
+
+  private allowsEmptyCellSelection(employeeId: string): boolean {
+    if (this.editable()) return true;
+    return this.requestMode() && this.isOwnRow(employeeId);
+  }
+
+  isOwnRow(employeeId: string): boolean {
+    const ownId = this.highlightEmployeeId() ?? this.requestEmployeeId();
+    return !!ownId && ownId === employeeId;
+  }
+
+  isRequestableCell(employeeId: string): boolean {
+    return this.requestMode() && this.isOwnRow(employeeId);
+  }
+
+  isApprovableCell(cell: ScheduleCellData): boolean {
+    if (this.approvalMode() && cell.requestPending) return true;
+    if ((this.approvalMode() || this.swapMode()) && cell.shiftSwap) return true;
+    return false;
+  }
 
   toggleSummary(): void {
-    this.summaryVisible.update((v) => !v);
+    this.summaryVisibleChange.emit(!this.summaryVisible());
   }
 
   summaryToggleLabel(): string {
@@ -119,12 +260,18 @@ export class ScheduleGridComponent {
   }
 
   isWeekend(index: number): boolean {
+    const cols = this.displayColumns();
+    if (cols[index]) return cols[index]!.isWeekend;
     const label = this.grid().weekdayLabels[index];
     return label === 'Dom' || label === 'Sáb';
   }
 
   hasCoverageGap(day: number): boolean {
     return (this.auditTotals()?.coverageGapDays?.[day]?.length ?? 0) > 0;
+  }
+
+  hasCoverageSurplus(day: number): boolean {
+    return (this.auditTotals()?.coverageSurplusDays?.[day]?.length ?? 0) > 0;
   }
 
   hasAnyCoverageGap(): boolean {
@@ -137,6 +284,12 @@ export class ScheduleGridComponent {
     const missing = this.auditTotals()?.coverageGapDays?.[day] ?? [];
     if (missing.length === 0) return '';
     return `Falta cobertura PAO: ${missing.join(', ')}`;
+  }
+
+  coverageSurplusTooltip(day: number): string {
+    const surplus = this.auditTotals()?.coverageSurplusDays?.[day] ?? [];
+    if (surplus.length === 0) return '';
+    return `Sobrecobertura PAO (2+ no mesmo turno): ${surplus.join(', ')}`;
   }
 
   employeeName(employeeId: string): string {
@@ -171,10 +324,20 @@ export class ScheduleGridComponent {
     employeeId: string,
     day: number,
     cell: ScheduleCellData,
+    isLead = false,
   ): void {
-    if (!this.editable() || event.button !== 0 || this.dragActive) return;
+    if (isLead) {
+      event.preventDefault();
+      return;
+    }
+    if (this.isApprovableCell(cell)) {
+      event.preventDefault();
+      return;
+    }
 
-    if (event.shiftKey && isDeletableCell(cell)) {
+    if ((!this.editable() && !this.requestMode()) || event.button !== 0 || this.dragActive) return;
+
+    if (this.editable() && event.shiftKey && this.isDeletableCell(cell)) {
       event.preventDefault();
       this.isSelecting = false;
       this.dragAnchor = null;
@@ -200,7 +363,7 @@ export class ScheduleGridComponent {
       return;
     }
 
-    if (!isSelectableCell(cell)) return;
+    if (!isSelectableCell(cell) || !this.allowsEmptyCellSelection(employeeId)) return;
 
     event.preventDefault();
 
@@ -237,9 +400,10 @@ export class ScheduleGridComponent {
     this.previewSelection.set(new Set(cells.map(selectionKey)));
   }
 
-  onCellMouseEnter(employeeId: string, day: number, dayIndex: number): void {
+  onCellMouseEnter(employeeId: string, day: number, dayIndex: number, isLead = false): void {
     this.hoverCross.set({ employeeId, dayIndex });
-    if (!this.editable() || !this.isSelecting || !this.dragAnchor) return;
+    if (isLead) return;
+    if (!this.allowsEmptyCellSelection(employeeId) || !this.isSelecting || !this.dragAnchor) return;
     const cells = buildHorizontalSelection(this.dragAnchor, { employeeId, day });
     this.previewSelection.set(new Set(cells.map(selectionKey)));
   }
@@ -422,14 +586,14 @@ export class ScheduleGridComponent {
   }
 
   /** Modo 2 — drag/drop: células preenchidas. */
-  onDragStart(event: DragEvent, employeeId: string, day: number, cell: ScheduleCellData): void {
-    if (
-      !this.editable() ||
-      !isDraggableCell(cell, this.employeeType(employeeId)) ||
-      this.shiftDeleteMultiActive
-    ) {
-      return;
-    }
+  onDragStart(
+    event: DragEvent,
+    employeeId: string,
+    day: number,
+    cell: ScheduleCellData,
+    isLead = false,
+  ): void {
+    if (isLead || !this.editable() || !this.isDraggableCell(cell) || this.shiftDeleteMultiActive) return;
     event.stopPropagation();
     this.isSelecting = false;
     this.dragAnchor = null;
@@ -461,8 +625,8 @@ export class ScheduleGridComponent {
     this.dragActive = false;
   }
 
-  onDragOver(event: DragEvent, employeeId: string, day: number): void {
-    if (!this.editable() || !this.dragSource) return;
+  onDragOver(event: DragEvent, employeeId: string, day: number, isLead = false): void {
+    if (isLead || !this.editable() || !this.dragSource) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
     this.dragOverKey.set(selectionKey({ employeeId, day }));
@@ -473,8 +637,8 @@ export class ScheduleGridComponent {
     if (this.dragOverKey() === key) this.dragOverKey.set(null);
   }
 
-  onDrop(event: DragEvent, employeeId: string, day: number): void {
-    if (!this.editable() || !this.dragSource) return;
+  onDrop(event: DragEvent, employeeId: string, day: number, isLead = false): void {
+    if (isLead || !this.editable() || !this.dragSource) return;
     event.preventDefault();
     event.stopPropagation();
     const source = this.dragSource;

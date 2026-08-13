@@ -35,6 +35,34 @@ export interface ScheduleCellData {
   kind: ScheduleCellKind;
   /** Tipo original quando kind é folga-weekend (cor de folga social no sáb+dom). */
   folgaBaseKind?: ScheduleCellKind;
+  /** Solicitação aguardando aprovação do admin. */
+  requestPending?: boolean;
+  /** ID da solicitação pendente (RequestedDayOff, PreAllocation ou Flight). */
+  requestId?: string;
+  /** Troca de turno ativa (oferta ou aguardando admin). */
+  shiftSwap?: {
+    id: string;
+    status: 'OFFERED' | 'AWAITING_ADMIN';
+    role: 'requester' | 'target';
+    counterpartName: string;
+    counterpartShiftCode: string;
+    /** Código do turno nesta célula (lado do colaborador da linha). */
+    ownShiftCode?: string;
+    requesterName?: string;
+    targetName?: string;
+    requesterShiftCode?: string;
+    targetShiftCode?: string;
+    /** Dia do solicitante (ISO). */
+    sourceDate?: string;
+    /** Dia do colega / destino (ISO). */
+    targetDate?: string | null;
+    /** Índice de cor do par (0 = vermelho, 1 = azul, …). */
+    colorIndex?: number;
+  };
+  /** Destaque local: dia selecionado como origem da troca (ainda sem oferta). */
+  swapSelected?: boolean;
+  /** Turno já trocado e aprovado (canto vermelho discreto). */
+  swapApplied?: boolean;
   /** @deprecated use hoverDetail */
   title?: string;
   /** Texto do popup após ~1s com mouse sobre a célula (somente hover, não clique). */
@@ -76,8 +104,16 @@ export interface EmployeeRowData {
   employeeId: string;
   name: string;
   type: EmployeeType;
+  /** Células do mês corrente (índice = dia - 1). */
   cells: ScheduleCellData[];
+  /**
+   * Últimos dias do mês anterior (contexto visual em escala não publicada).
+   * Índice alinhado a `ScheduleDayColumn.leadIndex` das colunas com `isLead`.
+   */
+  leadCells?: ScheduleCellData[];
   summary: EmployeeSummaryStats;
+  /** Preferência de turno do portal no mês (ex.: T6). Só preenchido para admin na Escala. */
+  preferredShiftCode?: string;
 }
 
 export interface ScheduleGridGroup {
@@ -86,12 +122,34 @@ export interface ScheduleGridGroup {
   rows: EmployeeRowData[];
 }
 
+/** Coluna de dia na grade (mês atual e, opcionalmente, lead-in do mês anterior). */
+export interface ScheduleDayColumn {
+  /** Chave estável YYYY-MM-DD. */
+  isoDate: string;
+  day: number;
+  year: number;
+  month: number;
+  weekdayLabel: string;
+  isWeekend: boolean;
+  /** Dia do mês anterior (somente leitura / contexto). */
+  isLead: boolean;
+  /** Primeiro dia do mês corrente — usado para a linha divisória. */
+  isMonthStart: boolean;
+  /** Índice em `EmployeeRowData.leadCells` quando `isLead`. */
+  leadIndex: number;
+}
+
 export interface ScheduleGridData {
   year: number;
   month: number;
   daysInMonth: number;
+  /** Dias do mês corrente (1..N) — seleção, cobertura e export. */
   dayNumbers: number[];
   weekdayLabels: string[];
+  /** Colunas exibidas (lead-in + mês corrente). */
+  columns: ScheduleDayColumn[];
+  /** Quantidade de colunas lead-in (0 quando publicada / sem contexto). */
+  leadDayCount: number;
   groups: ScheduleGridGroup[];
 }
 
