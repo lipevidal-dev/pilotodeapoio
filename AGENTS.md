@@ -18,6 +18,17 @@
 - Colunas em `Vacation`: `thirteenth_advance_*`, `sell_ten_days_*` (+ enum `VacationExtraStatus`).
 - UI admin: diálogo na escala e cartão “Solicitações pendentes” em Cadastros → Férias.
 
+### Dashboard (produção)
+
+Métricas em `frontend-admin/.../dashboard-analytics.util.ts` (client-side a partir de `GET /schedules/:y/:m` + prefs mensais):
+
+- KPI **Alocações do mês** = quantidade de voo + simulador + demais pré-alocações
+- KPI **Prefs. portal atendidas** = percentual único (`matched/total`)
+- Doughnut **Composição** = Turnos × Folgas × Pré-alocações
+- Barra **Média de turnos por colaborador** (Geral/PAO/APAO)
+- Linha **Equilíbrio diário** = turnos + folgas/férias + pré-alocações por dia
+- Barra **Colaboradores e turnos realizados**
+
 ### Serviços úteis
 
 - Compose: `docker compose --env-file .env.prod -f docker-compose.prod.yml`
