@@ -31,7 +31,7 @@ Métricas em `frontend-admin/.../dashboard-analytics.util.ts` (client-side a par
 
 ### Escala — preferência ao lado do nome
 
-Na página **Escala** (admin), o nome do colaborador mostra o turno preferido do mês do portal, ex.: `Luccas Flávio (T6)`. Fonte: `GET /employees/monthly-shift-preferences/:year/:month`.
+Na página **Escala** (somente **ADMIN**), o turno preferido do mês aparece em **vermelho** ao lado do nome, ex.: `Luccas Flávio` + vermelho `(T6)`. Colaboradores no portal não veem. Fonte: `GET /employees/monthly-shift-preferences/:year/:month`.
 
 ### Serviços úteis (produção VPS)
 
