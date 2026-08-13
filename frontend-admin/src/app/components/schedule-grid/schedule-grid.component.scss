@@ -403,15 +403,13 @@ $crosshair-focus-bg: #fce1d7;
     }
   }
 
-  // Linha divisória entre mês anterior e mês corrente.
-  // Cabeçalho: destaque mais visível; corpo: traço suave entre colaboradores.
-  thead .col-month-start {
-    border-left: 2px solid #dc2626 !important;
+  // Linha divisória contínua (cabeçalho → última linha) entre mês anterior e corrente.
+  .col-month-start {
+    border-left: 1.5px solid #f0a090 !important;
   }
 
-  tbody .col-month-start {
-    border-left: 1px solid #e5e7eb !important;
-    box-shadow: none;
+  thead .col-month-start {
+    border-left-color: #e85d4c !important;
   }
 
   thead .col-lead .day-num,
