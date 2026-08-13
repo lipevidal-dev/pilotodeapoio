@@ -404,9 +404,14 @@ $crosshair-focus-bg: #fce1d7;
   }
 
   // Linha divisória entre mês anterior e mês corrente.
-  .col-month-start {
-    border-left: 3px solid #dc2626 !important;
-    box-shadow: inset 3px 0 0 rgba(220, 38, 38, 0.15);
+  // Cabeçalho: destaque mais visível; corpo: traço suave entre colaboradores.
+  thead .col-month-start {
+    border-left: 2px solid #dc2626 !important;
+  }
+
+  tbody .col-month-start {
+    border-left: 1px solid #e5e7eb !important;
+    box-shadow: none;
   }
 
   thead .col-lead .day-num,
