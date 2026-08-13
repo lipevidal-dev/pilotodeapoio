@@ -29,6 +29,10 @@ Métricas em `frontend-admin/.../dashboard-analytics.util.ts` (client-side a par
 - Linha **Equilíbrio diário** = turnos + folgas/férias + pré-alocações por dia
 - Barra **Colaboradores e turnos realizados**
 
+### Escala — preferência ao lado do nome
+
+Na página **Escala** (admin), o nome do colaborador mostra o turno preferido do mês do portal, ex.: `Luccas Flávio (T6)`. Fonte: `GET /employees/monthly-shift-preferences/:year/:month`.
+
 ### Serviços úteis (produção VPS)
 
 - Compose: `docker compose --env-file .env.prod -f docker-compose.prod.yml`
