@@ -103,57 +103,115 @@ $crosshair-focus-bg: #fce1d7;
     box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.15);
   }
 
-  // Encaixa a grade na largura disponível (sem scroll horizontal).
+  // Desktop/tablet largo: encaixa a grade na largura disponível (sem scroll).
+  // Mobile: scroll horizontal com largura mínima por dia (legível).
   &.fit-width {
-    overflow-x: hidden;
+    @media (min-width: 960px) {
+      overflow-x: hidden;
 
-    .schedule-grid-scroller {
-      width: 100%;
-      min-width: 0;
-      max-width: 100%;
-    }
+      .schedule-grid-scroller {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+      }
 
-    .schedule-grid {
-      width: 100%;
-      min-width: 0;
-      max-width: 100%;
-      table-layout: fixed;
-    }
+      .schedule-grid {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        table-layout: fixed;
+      }
 
-    .col-day {
-      // Largura fluida: o que sobra depois do nome (+ resumo sticky se houver).
-      width: auto;
-      min-width: 0;
-      max-width: none;
-      padding: 0.1rem 0 !important;
-    }
-
-    &.has-summary {
       .col-day {
-        // Mantém o bloco de resumo; dias dividem o restante.
-        width: calc(
-          (100% - var(--col-employee-w) - var(--col-summary-w)) / max(var(--day-col-count), 1)
-        );
+        width: auto;
+        min-width: 0;
+        max-width: none;
+        padding: 0.1rem 0 !important;
+      }
+
+      &.has-summary {
+        .col-day {
+          width: calc(
+            (100% - var(--col-employee-w) - var(--col-summary-w)) / max(var(--day-col-count), 1)
+          );
+        }
+      }
+
+      &:not(.has-summary) {
+        .col-day {
+          width: calc((100% - var(--col-employee-w)) / max(var(--day-col-count), 1));
+        }
+      }
+
+      thead .col-day .day-num {
+        font-size: clamp(0.5rem, 1.1vw, 0.72rem);
+      }
+
+      thead .col-day .day-wd {
+        font-size: clamp(0.42rem, 0.9vw, 0.58rem);
+      }
+
+      .coverage-gap-icon {
+        width: 0.7rem;
+        height: 0.7rem;
       }
     }
 
-    &:not(.has-summary) {
-      .col-day {
-        width: calc((100% - var(--col-employee-w)) / max(var(--day-col-count), 1));
+    @media (max-width: 959px) {
+      --col-employee-w: 5.75rem;
+      --col-day-w: 2.15rem;
+
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-x: contain;
+
+      .schedule-grid-scroller {
+        width: max-content;
+        min-width: 100%;
+        max-width: none;
       }
-    }
 
-    thead .col-day .day-num {
-      font-size: clamp(0.5rem, 1.1vw, 0.72rem);
-    }
+      .schedule-grid {
+        width: max-content;
+        min-width: 100%;
+        table-layout: fixed;
+      }
 
-    thead .col-day .day-wd {
-      font-size: clamp(0.42rem, 0.9vw, 0.58rem);
-    }
+      .col-day {
+        width: var(--col-day-w);
+        min-width: var(--col-day-w);
+        max-width: var(--col-day-w);
+        padding: 0.12rem 0.05rem !important;
+      }
 
-    .coverage-gap-icon {
-      width: 0.7rem;
-      height: 0.7rem;
+      .sticky-col {
+        width: var(--col-employee-w);
+        min-width: var(--col-employee-w);
+        max-width: var(--col-employee-w);
+      }
+
+      thead .col-day .day-num {
+        font-size: 0.68rem;
+        line-height: 1.15;
+      }
+
+      thead .col-day .day-wd {
+        font-size: 0.52rem;
+        line-height: 1.1;
+      }
+
+      .emp-name {
+        font-size: 0.7rem;
+      }
+
+      .emp-pref {
+        font-size: 0.62rem;
+      }
+
+      .coverage-gap-icon {
+        width: 0.7rem;
+        height: 0.7rem;
+      }
     }
   }
 }

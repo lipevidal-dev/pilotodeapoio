@@ -1,125 +1,677 @@
-.grid-card-header {
+.unpublished-banner {
+
+  display: block;
+
+  margin-bottom: 0.85rem;
+
+}
+
+
+
+.portal-page--mobile {
+
+  .portal-schedule-head {
+
+    display: none;
+
+  }
+
+  .escala-page-head--portal {
+    align-items: flex-start;
+    margin-bottom: 0.65rem;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+}
+
+
+
+.portal-schedule-head {
+
+  margin-bottom: 0.85rem;
+
+  padding-bottom: 0.75rem;
+
+  border-bottom: 1px solid rgba(45, 45, 45, 0.08);
+
+}
+
+
+
+.portal-schedule-head__title-block {
+
   display: flex;
+
+  flex-direction: column;
+
+  gap: 0.2rem;
+
+}
+
+
+
+.portal-schedule-head__eyebrow {
+
+  font-size: 0.68rem;
+
+  font-weight: 700;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.06em;
+
+  color: var(--gol-orange-dark);
+
+}
+
+
+
+.portal-schedule-head__row {
+
+  display: flex;
+
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.85rem 1.25rem 0;
-  font-weight: 600;
+
+  flex-wrap: wrap;
+
+  gap: 0.55rem 0.75rem;
+
+}
+
+
+
+.portal-schedule-head__title {
+
+  margin: 0;
+
+  font-size: 1.35rem;
+
+  font-weight: 800;
+
+  letter-spacing: -0.02em;
+
   color: var(--gol-gray-dark);
 
-  i {
-    color: var(--gol-orange);
-    margin-right: 0.4rem;
+  line-height: 1.2;
+
+}
+
+
+
+.status-chip {
+
+  font-size: 0.72rem;
+
+  font-weight: 700;
+
+  padding: 0.22rem 0.6rem;
+
+  border-radius: 999px;
+
+  background: #e0f2fe;
+
+  color: #0369a1;
+
+  border: 1px solid #7dd3fc;
+
+  white-space: nowrap;
+
+}
+
+
+
+.status-chip--published {
+
+  background: #dcfce7;
+
+  color: #166534;
+
+  border-color: #86efac;
+
+}
+
+
+
+.portal-schedule-bar {
+
+  display: flex;
+
+  flex-wrap: wrap;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 0.75rem;
+
+  margin-bottom: 0.75rem;
+
+  padding-bottom: 0.75rem;
+
+  border-bottom: 1px solid rgba(45, 45, 45, 0.08);
+
+}
+
+
+
+.portal-schedule-bar__nav,
+
+.portal-schedule-bar__actions {
+
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 0.35rem;
+
+  align-items: center;
+
+}
+
+
+
+:host ::ng-deep .portal-mobile-scope-toggle.p-button {
+  font-weight: 700;
+
+  &.p-button-secondary {
+    color: var(--gol-orange-dark);
+    border-color: rgba(241, 90, 34, 0.28);
+    background: rgba(255, 244, 237, 0.85);
+  }
+
+  &.p-button-warn {
+    color: #fff;
+    border-color: var(--gol-orange);
+    background: linear-gradient(180deg, #f97316 0%, #f15a22 52%, #d94e1a 100%);
   }
 }
 
-.grid-toolbar {
-  display: flex;
+
+
+.mobile-team-grid {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  margin: 0 -0.35rem;
+  padding: 0 0.15rem 0.35rem;
+  max-width: 100%;
+}
+
+// Garante scroll legível no mobile mesmo com fit-width no componente da grade.
+:host ::ng-deep .mobile-team-grid .schedule-grid-wrap.fit-width {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+
+  .schedule-grid-scroller {
+    width: max-content !important;
+    min-width: 100% !important;
+    max-width: none !important;
+  }
+
+  .schedule-grid {
+    width: max-content !important;
+    min-width: 100% !important;
+    max-width: none !important;
+    table-layout: fixed;
+  }
+
+  .col-day {
+    width: 2.15rem !important;
+    min-width: 2.15rem !important;
+    max-width: 2.15rem !important;
+    padding: 0.12rem 0.05rem !important;
+  }
+
+  .sticky-col.col-employee,
+  .col-employee.sticky-col {
+    width: 5.75rem !important;
+    min-width: 5.75rem !important;
+    max-width: 5.75rem !important;
+  }
+}
+
+
+
+.portal-schedule-bar__save {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+
+
+.portal-schedule-bar--mobile .portal-schedule-bar__save--mobile {
+  margin-left: 0;
+}
+
+
+
+:host ::ng-deep .portal-pdf-save.p-button {
+  color: var(--gol-orange);
+  border: none;
+  background: transparent;
+  padding: 0.35rem 0.5rem;
+
+  .p-button-icon {
+    font-size: 1.1rem;
+    color: var(--gol-orange);
+  }
+
+  &:hover {
+    background: rgba(241, 90, 34, 0.08);
+    color: var(--gol-orange-dark);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+  }
+}
+
+
+
+.portal-schedule-bar--mobile {
+
   flex-direction: column;
-  gap: 1rem;
-  margin-bottom: 0.5rem;
+
+  align-items: stretch;
+
+  gap: 0.65rem;
+
+  padding-bottom: 0.65rem;
+
+  margin-bottom: 0.55rem;
+
 }
 
-.nav-group {
+
+
+.portal-schedule-bar__period {
+
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+
   align-items: center;
+
+  justify-content: space-between;
+
+  gap: 0.5rem;
+
+  width: 100%;
+
 }
 
-.filter-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.85rem;
-  align-items: flex-end;
-  padding: 0.85rem;
-  background: #f9fafb;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
+
+
+.portal-schedule-bar__period .portal-schedule-bar__save--mobile {
+  margin-left: auto;
 }
+
+
+
+.portal-schedule-bar__period-text {
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+
+  gap: 0.25rem;
+
+  min-width: 0;
+
+  flex: 1;
+
+}
+
+
+
+.portal-schedule-bar__month {
+
+  font-size: 0.95rem;
+
+  font-weight: 800;
+
+  letter-spacing: -0.01em;
+
+  color: var(--gol-gray-dark);
+
+  text-align: center;
+
+}
+
+
 
 .field-group {
+
   display: flex;
+
   flex-direction: column;
-  gap: 0.35rem;
+
+  gap: 0.25rem;
+
 }
 
-.field-group--wide {
-  min-width: 180px;
-  flex: 1;
-}
 
-.field-group--check {
-  flex-direction: row;
-  align-items: center;
-  gap: 0.5rem;
-  padding-bottom: 0.35rem;
-}
 
 .field-label {
-  font-size: 0.75rem;
-  font-weight: 600;
+
+  font-size: 0.68rem;
+
+  font-weight: 700;
+
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+
+  letter-spacing: 0.05em;
+
   color: var(--gol-gray-medium);
+
 }
+
+
 
 .loading-text {
+
   display: block;
+
   padding: 1rem 0;
-  color: var(--gol-gray-medium);
-  font-size: 0.9rem;
-}
 
-.check-label {
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.export-dialog-hint {
-  margin: 0 0 0.85rem;
   color: #6b7280;
-  font-size: 0.9rem;
+
+  font-size: 0.85rem;
+
 }
 
-.export-scope-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+
+
+.legend--mobile {
+
+  display: block;
+
+  overflow-x: auto;
+
+  margin-bottom: 0.65rem;
+
+  -webkit-overflow-scrolling: touch;
+
 }
 
-.export-scope-option {
-  display: flex;
-  gap: 0.65rem;
-  align-items: flex-start;
-  padding: 0.7rem 0.8rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+
+
+.mobile-calendar {
+
+  border: 1px solid rgba(45, 45, 45, 0.08);
+
+  border-radius: 12px;
+
+  overflow: hidden;
+
   background: #fff;
-  cursor: pointer;
 
-  input {
-    margin-top: 0.2rem;
-  }
-
-  &--active {
-    border-color: #ff6900;
-    background: #fff7f2;
-  }
 }
 
-.export-scope-option__text {
+
+
+.mobile-calendar__weekdays {
+
+  display: grid;
+
+  grid-template-columns: repeat(7, 1fr);
+
+  background: #f9fafb;
+
+  border-bottom: 1px solid rgba(45, 45, 45, 0.08);
+
+}
+
+
+
+.mobile-calendar__weekday {
+
+  padding: 0.4rem 0;
+
+  text-align: center;
+
+  font-size: 0.62rem;
+
+  font-weight: 700;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.04em;
+
+  color: #9ca3af;
+
+}
+
+
+
+.mobile-calendar__week {
+
+  display: grid;
+
+  grid-template-columns: repeat(7, 1fr);
+
+}
+
+
+
+.mobile-day {
+
   display: flex;
+
   flex-direction: column;
-  gap: 0.15rem;
 
-  strong {
-    color: #111827;
-    font-size: 0.95rem;
+  align-items: stretch;
+
+  position: relative;
+
+  min-height: 4.1rem;
+
+  padding: 0.25rem 0.15rem 0.35rem;
+
+  border: none;
+
+  border-right: 1px solid rgba(45, 45, 45, 0.05);
+
+  border-bottom: 1px solid rgba(45, 45, 45, 0.05);
+
+  background: #fff;
+
+  cursor: default;
+
+  text-align: center;
+
+
+
+  &:nth-child(7n) {
+
+    border-right: none;
+
   }
 
-  small {
-    color: #6b7280;
-    font-size: 0.8rem;
+
+
+  &--pad {
+
+    background: #fafafa;
+
   }
+
+
+
+  &--selectable {
+
+    cursor: pointer;
+
+  }
+
+
+
+  &--today .mobile-day__num {
+
+    color: var(--gol-orange);
+
+    font-weight: 800;
+
+  }
+
+
+
+  &--pending {
+
+    background: #fffbeb;
+
+    cursor: pointer;
+
+  }
+
+
+
+  &--filled {
+
+    background: #fafafa;
+
+  }
+
+
+
+  &:disabled {
+
+    opacity: 1;
+
+  }
+
 }
+
+
+
+.mobile-day__num {
+
+  font-size: 0.72rem;
+
+  font-weight: 600;
+
+  color: #374151;
+
+  line-height: 1.2;
+
+}
+
+
+
+.mobile-day__cell {
+
+  flex: 1;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  min-height: 0;
+
+  padding-top: 0.15rem;
+
+  border-radius: 4px;
+
+  transition: box-shadow 0.12s ease;
+
+
+
+  &--selected {
+
+    box-shadow: inset 0 0 0 2px var(--gol-orange);
+
+  }
+
+
+
+  app-schedule-cell {
+
+    width: 100%;
+
+    display: flex;
+
+    justify-content: center;
+
+  }
+
+
+
+  :host ::ng-deep .schedule-cell {
+
+    min-width: 0;
+
+    width: calc(100% - 0.15rem);
+
+    max-width: 2.4rem;
+
+    height: 1.45rem;
+
+    font-size: 0.58rem;
+
+    border-radius: 4px;
+
+  }
+
+}
+
+
+
+.mobile-selection-bar {
+
+  position: fixed;
+
+  left: 0.75rem;
+
+  right: 0.75rem;
+
+  bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+
+  z-index: 25;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 0.65rem;
+
+  padding: 0.65rem 0.85rem;
+
+  border-radius: 12px;
+
+  background: var(--gol-gray-dark);
+
+  color: #f9fafb;
+
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+
+
+
+  span {
+
+    font-size: 0.82rem;
+
+    font-weight: 600;
+
+    white-space: nowrap;
+
+  }
+
+}
+
+
+
+@media (max-width: 767px) {
+
+  :host ::ng-deep .grid-card .p-card-body {
+
+    padding: 0.85rem !important;
+
+  }
+
+}
+
