@@ -29,6 +29,10 @@ Métricas em `frontend-admin/.../dashboard-analytics.util.ts` (client-side a par
 - Linha **Equilíbrio diário** = turnos + folgas/férias + pré-alocações por dia
 - Barra **Colaboradores e turnos realizados**
 
+### Motor — turnos manuais
+
+Ao **Gerar** / **Limpar**, assignments com `source=MANUAL` (ex.: T9 colocado na grade) **não são apagados**. O motor preenche só os demais dias. Se um T9 já foi regenerado como `GENERATOR` antes deste fix, realoque manualmente uma vez.
+
 ### Escala — preferência ao lado do nome
 
 Na página **Escala** (somente **ADMIN**), o turno preferido do mês aparece em **vermelho** ao lado do nome, ex.: `Luccas Flávio` + vermelho `(T6)`. Colaboradores no portal não veem. Fonte: `GET /employees/monthly-shift-preferences/:year/:month`.
