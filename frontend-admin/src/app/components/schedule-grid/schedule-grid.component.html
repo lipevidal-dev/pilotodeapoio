@@ -101,12 +101,18 @@
       <tbody>
         @for (group of grid().groups; track group.type) {
           <tr class="group-row">
-            <td
-              class="group-label sticky-col"
-              [attr.colspan]="displayColumns().length + 1 + (summaryVisible() ? summaryColCount : 0)"
-            >
-              {{ group.label }}
-            </td>
+            <td class="group-label sticky-col">{{ group.label }}</td>
+            @for (col of displayColumns(); track col.isoDate) {
+              <td
+                class="group-filler col-day"
+                [class.col-lead]="col.isLead"
+                [class.col-month-start]="col.isMonthStart"
+                [class.col-weekend]="col.isWeekend"
+              ></td>
+            }
+            @if (summaryVisible()) {
+              <td class="group-filler sticky-summary-block" [attr.colspan]="summaryColCount"></td>
+            }
           </tr>
           @for (row of group.rows; track row.employeeId) {
             <tr class="data-row" [class.row-own]="isOwnRow(row.employeeId)">

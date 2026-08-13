@@ -403,13 +403,9 @@ $crosshair-focus-bg: #fce1d7;
     }
   }
 
-  // Linha divisória contínua (cabeçalho → última linha) entre mês anterior e corrente.
+  // Linha divisória vermelha contínua (cabeçalho → faixas PAO/APAO → colaboradores).
   .col-month-start {
-    border-left: 1.5px solid #f0a090 !important;
-  }
-
-  thead .col-month-start {
-    border-left-color: #e85d4c !important;
+    border-left: 1px solid #dc2626 !important;
   }
 
   thead .col-lead .day-num,
@@ -465,16 +461,36 @@ $crosshair-focus-bg: #fce1d7;
     opacity: 0.85;
   }
 
-  .group-row .group-label {
-    background: linear-gradient(90deg, #fff4ed 0%, #fff 100%);
-    color: var(--gol-orange-dark);
-    font-weight: 700;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    padding: 0.45rem 0.75rem !important;
-    border-top: 2px solid var(--gol-orange);
-    z-index: 1;
+  .group-row {
+    .group-label,
+    .group-filler {
+      background: #fff4ed !important;
+      opacity: 1;
+      border-top: 2px solid var(--gol-orange);
+      padding-top: 0.45rem !important;
+      padding-bottom: 0.45rem !important;
+    }
+
+    .group-label {
+      color: var(--gol-orange-dark);
+      font-weight: 700;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding-left: 0.75rem !important;
+      padding-right: 0.75rem !important;
+      z-index: 1;
+    }
+
+    .group-filler {
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
+
+    // Mantém a divisória do mês atravessando a faixa do grupo.
+    .col-month-start {
+      border-left: 1px solid #dc2626 !important;
+    }
   }
 
   .data-row .col-crosshair {
