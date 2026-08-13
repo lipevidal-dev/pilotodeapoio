@@ -1231,7 +1231,7 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
   const currentColumns: ScheduleDayColumn[] = dayNumbers.map((d) =>
     buildDayColumn(year, month, d, {
       isLead: false,
-      isMonthStart: d === 1,
+      isMonthStart: d === 1 && effectiveLeadDays > 0,
       leadIndex: -1,
     }),
   );
