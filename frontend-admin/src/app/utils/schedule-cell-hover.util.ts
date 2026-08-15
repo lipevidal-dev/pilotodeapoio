@@ -66,6 +66,10 @@ export function buildCellHoverDetail(
     case 't6':
     case 't7':
     case 't8': {
+      // Pré-alocação / solicitação genérica "TURNO" aparece como TRN na grade.
+      if (display.toUpperCase() === 'TRN') {
+        return withNotes('Solicitação de Turno', notes);
+      }
       const base = timeRange ? `Turno ${display}\n${timeRange}` : `Turno ${display}`;
       return withNotes(base, notes);
     }

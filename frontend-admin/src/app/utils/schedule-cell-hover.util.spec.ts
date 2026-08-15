@@ -32,6 +32,13 @@ describe('schedule-cell-hover.util', () => {
     expect(buildCellHoverDetail('outro', 'OTR', { notes: 'Visita médica' })).toBe('Visita médica');
   });
 
+  it('monta solicitação de turno (TRN) com texto amigável', () => {
+    expect(buildCellHoverDetail('shift', 'TRN')).toBe('Solicitação de Turno');
+    expect(buildCellHoverDetail('shift', 'TRN', { notes: 'Preferência T6' })).toBe(
+      'Solicitação de Turno\nPreferência T6',
+    );
+  });
+
   it('mostra observação em FP, férias, ND e turno', () => {
     expect(buildCellHoverDetail('fp', 'FP', { notes: 'Consulta' })).toBe('Folga pedida\nConsulta');
     expect(buildCellHoverDetail('ferias', 'FER', { notes: 'Adiantamento 13º' })).toBe(

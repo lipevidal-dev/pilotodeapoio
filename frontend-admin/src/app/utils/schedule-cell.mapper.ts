@@ -126,7 +126,7 @@ export function mapLabelToCell(label: string, notes?: string | null): ScheduleCe
   }
 
   if (n === 'TURNO') {
-    return { display: 'TRN', kind: 'shift', title: 'Turno' };
+    return { display: 'TRN', kind: 'shift', title: 'Solicitação de Turno' };
   }
 
   if (n === 'ND' || n.includes('ND CONTINUIDADE') || n.startsWith('ND ')) {
