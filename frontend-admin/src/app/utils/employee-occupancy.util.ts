@@ -140,6 +140,7 @@ export function buildEmployeeOccupancyMap(input: BuildEmployeeOccupancyInput): D
     const bucket = operationalByDate.get(key) ?? { labels: [] };
     bucket.labels.push(row.label);
     bucket.source = bucket.source ?? 'pre_allocation';
+    if (row.notes && !bucket.notes) bucket.notes = row.notes;
     operationalByDate.set(key, bucket);
   }
 

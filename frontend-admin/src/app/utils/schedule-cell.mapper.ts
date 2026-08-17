@@ -179,6 +179,14 @@ function isCadastroPreallocDisplayLabel(label: string): boolean {
   return false;
 }
 
+function cellWithNotes(cell: ScheduleCellData, notes?: string | null): ScheduleCellData {
+  const trimmed = notes?.trim();
+  if (!trimmed) return cell;
+  const base = cell.title ?? cell.display;
+  if (base.includes(trimmed)) return cell;
+  return { ...cell, title: `${base} — ${trimmed}` };
+}
+
 function buildCadastroPreallocLabelMap(
   preAllocations: PreAllocationRow[],
 ): Map<string, string[]> {
@@ -190,6 +198,36 @@ function buildCadastroPreallocLabelMap(
     const labels = map.get(key) ?? [];
     labels.push(row.label);
     map.set(key, labels);
+  }
+  return map;
+}
+
+function buildNotesMap(
+  operationalCadastros: OperationalCadastroRow[] | undefined,
+  preAllocations: PreAllocationRow[],
+): Map<string, Map<string, string>> {
+  const map = new Map<string, Map<string, string>>();
+
+  const addNote = (employeeId: string, date: string, label: string, notes?: string | null) => {
+    const trimmed = notes?.trim();
+    if (!trimmed) return;
+    const key = `${employeeId}|${dateKey(date)}`;
+    const byLabel = map.get(key) ?? new Map<string, string>();
+    const labelKey = normalizeLabelKey(label);
+    if (!byLabel.has(labelKey)) {
+      byLabel.set(labelKey, trimmed);
+      map.set(key, byLabel);
+    }
+  };
+
+  for (const row of operationalCadastros ?? []) {
+    addNote(row.employeeId, row.date, row.label, row.notes);
+  }
+  for (const row of preAllocations) {
+    if (!isCadastroPreallocDisplayLabel(row.label) && !isGeneratorPreallocDisplayLabel(row.label)) {
+      continue;
+    }
+    addNote(row.employeeId, row.date, row.label, row.notes);
   }
   return map;
 }
@@ -244,11 +282,15 @@ export function mapCellToCalendarDisplay(cell: ScheduleCellData): { display: str
 export function resolveScheduleCell(
   assignment: ScheduleAssignmentRow | undefined,
   operationalLabels: string[],
+  notesByLabel?: Map<string, string>,
 ): ScheduleCellData {
   const candidates: Array<{ priority: number; cell: ScheduleCellData }> = [];
 
   for (const label of operationalLabels) {
-    candidates.push({ priority: labelDisplayPriority(label), cell: mapLabelToCell(label) });
+    candidates.push({
+      priority: labelDisplayPriority(label),
+      cell: cellWithNotes(mapLabelToCell(label), notesByLabel?.get(normalizeLabelKey(label))),
+    });
   }
 
   if (assignment?.label) {
@@ -545,6 +587,7 @@ function buildEmployeeRow(
   days: number,
   assignmentMap: Map<string, ScheduleAssignmentRow>,
   operationalLabelMap: Map<string, string[]>,
+  notesMap: Map<string, Map<string, string>>,
 ): EmployeeRowData {
   const cells: ScheduleCellData[] = [];
   const summary = emptySummary();
@@ -554,6 +597,7 @@ function buildEmployeeRow(
     const cell = resolveScheduleCell(
       sanitizeAssignmentForGrid(assignmentMap.get(key)),
       operationalLabelMap.get(key) ?? [],
+      notesMap.get(key),
     );
     cells.push(cell);
   }
@@ -662,6 +706,7 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
       buildGeneratorPreallocLabelMap(preAllocations),
     ),
   );
+  const notesMap = buildNotesMap(operationalCadastros, preAllocations);
 
   const employeeById = new Map(employees.map((e) => [e.id, e]));
 
@@ -695,6 +740,7 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
       days,
       assignmentMap,
       operationalLabelMap,
+      notesMap,
     );
     if (emp.type === 'PAO') {
       paoRows.push(row);

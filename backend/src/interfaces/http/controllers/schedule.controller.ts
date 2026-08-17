@@ -207,6 +207,7 @@ export async function getPublishedScheduleController(
       shifts: mapScheduleShifts(data.shifts),
       assignments: data.assignments,
       preAllocations: data.preAllocations,
+      operationalCadastros: data.operationalCadastros,
     });
   } catch (err) {
     if (err instanceof ScheduleNotPublishedError) {

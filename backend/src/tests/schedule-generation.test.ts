@@ -129,4 +129,59 @@ describe("ScheduleUseCase — cliente", () => {
     const uc = new ScheduleUseCase(undefined as never, mockSchedule as never);
     await expect(uc.getPublishedMonth(2026, 6)).rejects.toBeInstanceOf(ScheduleNotPublishedError);
   });
+
+  it("escala publicada inclui cadastros operacionais (voo, simulador, curso)", async () => {
+    const mockSchedule = {
+      findPublishedMonth: async () => ({
+        id: "m1",
+        year: 2026,
+        month: 6,
+        status: "PUBLISHED",
+        assignments: [],
+        preAllocations: [],
+      }),
+      listShifts: async () => [],
+      listActiveEmployees: async () => [],
+    };
+    const mockCadastro = {
+      getOperationalCadastrosForMonth: async () => [
+        {
+          id: "f1",
+          employeeId: "e1",
+          date: "2026-06-05T12:00:00.000Z",
+          label: "VOO",
+          source: "flight",
+          notes: "GRU-SDU",
+        },
+        {
+          id: "s1",
+          employeeId: "e1",
+          date: "2026-06-06T12:00:00.000Z",
+          label: "SIMULADOR",
+          source: "pre_allocation",
+          notes: "SIM A320",
+        },
+        {
+          id: "c1",
+          employeeId: "e1",
+          date: "2026-06-07T12:00:00.000Z",
+          label: "CURSO",
+          source: "pre_allocation",
+          notes: "CRM",
+        },
+      ],
+    };
+    const uc = new ScheduleUseCase(
+      undefined as never,
+      mockSchedule as never,
+      mockCadastro as never,
+    );
+    const result = await uc.getPublishedMonth(2026, 6);
+    expect(result.operationalCadastros.map((r) => r.label)).toEqual([
+      "VOO",
+      "SIMULADOR",
+      "CURSO",
+    ]);
+    expect(result.operationalCadastros[0]?.notes).toBe("GRU-SDU");
+  });
 });

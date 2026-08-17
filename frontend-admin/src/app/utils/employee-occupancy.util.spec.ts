@@ -68,6 +68,7 @@ describe('buildEmployeeOccupancyMap — fonte operationalCadastros', () => {
     expect(map['2026-06-05']?.display).toBe('VOO');
     expect(map['2026-06-05']?.kind).toBe('voo');
     expect(map['2026-06-05']?.title).toContain('Voo manual');
+    expect(map['2026-06-05']?.title).toContain('GRU-SDU');
   });
 
   it('VOO tem prioridade sobre turno gerado (igual à escala)', () => {
@@ -147,5 +148,29 @@ describe('buildEmployeeOccupancyMap — fonte operationalCadastros', () => {
 
     expect(map['2026-06-09']?.display).toBe('SIM');
     expect(map['2026-06-09']?.kind).toBe('simulador');
+  });
+
+  it('observação de simulador em preAllocation aparece no tooltip', () => {
+    const map = buildEmployeeOccupancyMap({
+      employeeId,
+      year: 2026,
+      month: 6,
+      schedule: {
+        ...baseSchedule,
+        preAllocations: [
+          {
+            id: 's1',
+            employeeId,
+            date: '2026-06-09T12:00:00.000Z',
+            label: 'SIMULADOR',
+            notes: 'SIM A320',
+          },
+        ],
+        operationalCadastros: [],
+      },
+    });
+
+    expect(map['2026-06-09']?.display).toBe('SIM');
+    expect(map['2026-06-09']?.title).toContain('SIM A320');
   });
 });

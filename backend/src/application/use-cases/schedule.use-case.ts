@@ -10,6 +10,7 @@ export class ScheduleUseCase {
   constructor(
     private readonly validator: ValidateScheduleService = validateScheduleService,
     private readonly scheduleRepo: ScheduleRepository = new ScheduleRepository(),
+    private readonly cadastroService = operationalCadastroService,
   ) {}
 
   async getPublishedMonth(year: number, month: number) {
@@ -20,6 +21,7 @@ export class ScheduleUseCase {
 
     const shifts = await this.scheduleRepo.listShifts();
     const employees = await this.scheduleRepo.listActiveEmployees();
+    const operationalCadastros = await this.loadOperationalCadastros(year, month);
 
     return {
       scheduleMonth: record,
@@ -27,22 +29,23 @@ export class ScheduleUseCase {
       shifts,
       assignments: record.assignments,
       preAllocations: record.preAllocations,
+      operationalCadastros,
     };
   }
 
   private async loadOperationalCadastros(year: number, month: number) {
     const operationalCadastros =
-      await operationalCadastroService.getOperationalCadastrosForMonth(year, month);
+      await this.cadastroService.getOperationalCadastrosForMonth(year, month);
     logOperationalCadastroDebug(year, month, operationalCadastros);
     return operationalCadastros;
   }
 
   async getOperationalCadastros(year: number, month: number, employeeId?: string) {
-    return operationalCadastroService.getOperationalCadastrosForMonth(year, month, employeeId);
+    return this.cadastroService.getOperationalCadastrosForMonth(year, month, employeeId);
   }
 
   async getOperationalCadastrosDebug(year: number, month: number) {
-    return operationalCadastroService.buildDebugReport(year, month);
+    return this.cadastroService.buildDebugReport(year, month);
   }
 
   async getMonth(year: number, month: number) {

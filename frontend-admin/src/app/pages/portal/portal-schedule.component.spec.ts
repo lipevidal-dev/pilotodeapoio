@@ -35,6 +35,7 @@ describe('PortalScheduleComponent', () => {
       shifts: [],
       assignments: [],
       preAllocations: [],
+      operationalCadastros: [],
     });
     fixture.detectChanges();
     expect(fixture.componentInstance.scheduleData()?.scheduleMonth.status).toBe('PUBLISHED');

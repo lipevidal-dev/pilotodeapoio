@@ -304,6 +304,79 @@ describe('schedule-cell.mapper — cor única dos turnos', () => {
     expect(grid.groups[0].rows[0].cells[4].display).toBe('VOO');
   });
 
+  it('VOO com observação do cadastro aparece na escala com o texto no tooltip', () => {
+    const emp: Employee = {
+      id: 'pao-1',
+      name: 'PAO Test',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 6,
+      employees: [emp],
+      assignments: [],
+      preAllocations: [],
+      operationalCadastros: [
+        {
+          id: 'f1',
+          employeeId: 'pao-1',
+          date: '2026-06-05T12:00:00.000Z',
+          label: 'VOO',
+          source: 'flight',
+          notes: 'GRU-SDU',
+        },
+      ],
+    });
+    const cell = grid.groups[0].rows[0].cells[4];
+    expect(cell.display).toBe('VOO');
+    expect(cell.kind).toBe('voo');
+    expect(cell.title).toContain('GRU-SDU');
+  });
+
+  it('SIMULADOR e CURSO com observação do cadastro aparecem na escala com o texto no tooltip', () => {
+    const emp: Employee = {
+      id: 'pao-1',
+      name: 'PAO Test',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 6,
+      employees: [emp],
+      assignments: [],
+      preAllocations: [
+        {
+          id: 'sim-1',
+          employeeId: 'pao-1',
+          date: '2026-06-03T12:00:00.000Z',
+          label: 'SIMULADOR',
+          notes: 'SIM A320',
+        },
+        {
+          id: 'crs-1',
+          employeeId: 'pao-1',
+          date: '2026-06-04T12:00:00.000Z',
+          label: 'CURSO',
+          notes: 'CRM',
+        },
+      ],
+      operationalCadastros: [],
+    });
+    const cells = grid.groups[0].rows[0].cells;
+    expect(cells[2].display).toBe('SIM');
+    expect(cells[2].title).toContain('SIM A320');
+    expect(cells[3].display).toBe('CRS');
+    expect(cells[3].title).toContain('CRM');
+  });
+
   it('assignment T9 aparece na grade como turno', () => {
     const emp: Employee = {
       id: 'pao-1',
