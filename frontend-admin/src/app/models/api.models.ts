@@ -61,8 +61,23 @@ export interface Employee {
   isFcf?: boolean;
   fcfSchedule?: FcfScheduleEntry[];
   inInstruction?: boolean;
+  instructionStartDate?: string | null;
+  instructionEndDate?: string | null;
+  portalLogin?: string | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface EmployeeMonthlyShiftPreferenceRow {
+  employeeId: string;
+  shiftId: string;
+  shiftCode: string;
+}
+
+export interface EmployeeMonthlyShiftPreferencesResponse {
+  year: number;
+  month: number;
+  preferences: EmployeeMonthlyShiftPreferenceRow[];
 }
 
 export interface CreateEmployeePayload {
@@ -77,6 +92,10 @@ export interface CreateEmployeePayload {
   isFcf?: boolean;
   fcfSchedule?: FcfScheduleEntry[];
   inInstruction?: boolean;
+  instructionStartDate?: string | null;
+  instructionEndDate?: string | null;
+  portalLogin?: string | null;
+  portalPassword?: string | null;
 }
 
 export interface UpdateEmployeePayload {
@@ -91,6 +110,10 @@ export interface UpdateEmployeePayload {
   isFcf?: boolean;
   fcfSchedule?: FcfScheduleEntry[];
   inInstruction?: boolean;
+  instructionStartDate?: string | null;
+  instructionEndDate?: string | null;
+  portalLogin?: string | null;
+  portalPassword?: string | null;
 }
 
 export interface JobRole {
@@ -353,7 +376,9 @@ export type ManualAllocationType =
   | 'ND'
   | 'FOLGA'
   | 'FS'
+  | 'FA'
   | 'FP'
+  | 'FANI'
   | 'VOO'
   | 'CURSO'
   | 'SIMULADOR'
@@ -480,6 +505,7 @@ export interface Vacation {
   employeeId: string;
   startDate: string;
   endDate: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
   notes: string | null;
   employee?: Employee;
 }
@@ -619,53 +645,139 @@ export interface ScheduleMonthResponse {
   assignments: ScheduleAssignmentRow[];
   preAllocations: PreAllocationRow[];
   operationalCadastros?: OperationalCadastroRow[];
+  shiftSwaps?: ShiftSwapRequest[];
   ruleViolations?: RuleViolationRow[];
   validation?: unknown;
 }
 
-export interface DemandPlanningReport {
-  demand: {
-    daysInMonth: number;
-    shiftsPerDay: number;
-    totalDemand: number;
-    perShift: { T6: number; T7: number; T8: number };
-  };
-  capacity: {
-    byEmployee: Array<{
-      employeeUuid: string;
-      name: string;
-      group: string;
-      capacity: number;
-      adjusted: boolean;
-      detail: string;
-    }>;
-    totalCapacity: number;
-  };
-  operationalBalance: number;
-  targets: Array<{
-    employeeUuid: string;
-    name: string;
-    group: string;
-    seniority: number;
-    target: number;
-    capacity: number;
-  }>;
-  blockPlans: Array<{
-    employeeUuid: string;
-    name: string;
-    group: string;
-    seniority: number;
-    target: number;
-    plannedBlocks: Array<{ size: number; shiftCode?: string }>;
-    executedBlocks: Array<{ startDate: string; size: number; shiftCode: string; endDate: string }>;
-  }>;
-  averageBlockSize: number;
-  unitCoverageBefore: number;
-  unitCoverageApplied: number;
-  unitCoverageAfter: number;
-  stepNotes: string[];
-  warnings?: Array<{ type: string; detail: string; employee?: string }>;
+export type ShiftSwapStatus =
+  | 'OFFERED'
+  | 'AWAITING_ADMIN'
+  | 'APPROVED'
+  | 'REJECTED_BY_TARGET'
+  | 'REJECTED_BY_ADMIN'
+  | 'CANCELLED';
+
+export type ShiftSwapKind = 'PEER' | 'SELF';
+
+export interface ShiftSwapRequest {
+  id: string;
+  scheduleMonthId: string;
+  kind: ShiftSwapKind;
+  year: number;
+  month: number;
+  date: string;
+  targetDate: string | null;
+  pairLength: number;
+  requesterDates?: string[];
+  targetDates?: string[];
+  requesterEmployeeId: string;
+  requesterName: string;
+  requesterShiftCode: string;
+  targetEmployeeId: string;
+  targetName: string;
+  targetShiftCode: string;
+  status: ShiftSwapStatus;
+  notes: string | null;
+  createdAt: string;
+  respondedAt: string | null;
+  resolvedAt: string | null;
 }
+
+export interface PortalScheduleResponse extends ScheduleMonthResponse {
+  isPublished: boolean;
+  portalFpRequestedCount?: number;
+  portalFpRequestedLimit?: number;
+}
+
+export interface PortalShiftOption {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface PortalMonthShiftPreference {
+  month: number;
+  shiftId: string | null;
+  shiftCode: string | null;
+  shiftName: string | null;
+}
+
+export interface PortalShiftPreferencesResponse {
+  year: number;
+  employeeType: string;
+  availableShifts: PortalShiftOption[];
+  months: PortalMonthShiftPreference[];
+}
+
+export interface SetPortalShiftPreferencePayload {
+  year: number;
+  month: number;
+  shiftId: string | null;
+}
+
+export type PortalRequestType =
+  | 'FP'
+  | 'VOO'
+  | 'SIMULADOR'
+  | 'CURSO'
+  | 'CMA'
+  | 'OUTRO'
+  | 'FOLGA'
+  | 'FS'
+  | 'FA'
+  | 'FANI'
+  | 'ND'
+  | 'FERIAS'
+  | 'TURNO';
+
+export interface CreatePortalRequestPayload {
+  year: number;
+  month: number;
+  date: string;
+  endDate?: string;
+  type: PortalRequestType;
+  notes?: string;
+  thirteenthAdvanceRequested?: boolean;
+  sellTenDaysRequested?: boolean;
+}
+
+export interface PendingPortalRequest {
+  id: string;
+  employeeId: string;
+  employee?: Pick<Employee, 'id' | 'name'>;
+  year: number;
+  month: number;
+  date: string;
+  endDate?: string;
+  type: PortalRequestType;
+  notes?: string | null;
+  thirteenthAdvanceRequested?: boolean;
+  thirteenthAdvanceStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | null;
+  sellTenDaysRequested?: boolean;
+  sellTenDaysStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | null;
+  source: 'pre_allocation' | 'flight' | 'requested_day_off' | 'vacation';
+}
+
+export interface RegisteredApaoPortalFolga {
+  id: string;
+  employeeId: string;
+  employee?: Pick<Employee, 'id' | 'name'>;
+  year: number;
+  month: number;
+  date: string;
+  type: Exclude<PortalRequestType, 'FP' | 'VOO' | 'SIMULADOR' | 'CURSO' | 'CMA' | 'OUTRO' | 'FERIAS' | 'TURNO'>;
+  notes?: string | null;
+  source: 'pre_allocation';
+}
+
+export type FolgasPedidasCadastroRow =
+  | (RequestedDayOff & { cadastroKind: 'FP'; cadastroType: 'FP' })
+  | (RegisteredApaoPortalFolga & {
+      cadastroKind: 'APAO_PORTAL';
+      cadastroType: RegisteredApaoPortalFolga['type'];
+      status: 'APPROVED';
+    });
 
 export type NextMotorRuleCategory =
   | 'bloqueios'
@@ -761,94 +873,3 @@ export interface UpdateNextMotorRulesPayload {
   allowedShiftCodes?: string[] | null;
 }
 
-export interface StepGenerationOptions {
-  paoCheckPreAllocations: boolean;
-  paoCheckRestrictions: boolean;
-  paoDemandPlanning: boolean;
-  paoCoverageT6: boolean;
-  paoCoverageT7: boolean;
-  paoCoverageT8: boolean;
-  paoAllocateFolgas: boolean;
-  paoAllocateFlights: boolean;
-  apaoCheckPreAllocations: boolean;
-  apaoCheckShiftPreference: boolean;
-  apaoCheckShiftRestrictions: boolean;
-  apaoAllocate: boolean;
-}
-
-export interface StepGenerationAuditAssignment {
-  employeeUuid: string;
-  date: string;
-  shiftCode: string;
-}
-
-export interface StepGenerationAuditAllocation {
-  employeeUuid: string;
-  date: string;
-  label: string;
-}
-
-export interface StepGenerationReport {
-  mode: 'AUDIT_PARTIAL';
-  persisted: false;
-  executedSteps: string[];
-  skippedSteps: string[];
-  allocationsByStep: Record<string, { assignments: number; allocations: number }>;
-  blockedEmployees: Array<{
-    employee: string;
-    employeeUuid: string;
-    date: string;
-    reason: string;
-  }>;
-  coverageGaps: Array<{ date: string; shiftCode: string }>;
-  coverageDecisions: Array<{
-    date: string;
-    shiftCode: string;
-    selectedEmployee: string | null;
-    selectedEmployeeUuid: string | null;
-    selectionReasons: string[];
-    blockedEmployees: Array<{ employee: string; reason: string }>;
-  }>;
-  violations: ScheduleViolation[];
-  criticalCount: number;
-  warningCount: number;
-  infoCount: number;
-  selectionWarnings: string[];
-  stepNotes: string[];
-  demandPlanningReport?: DemandPlanningReport;
-  paoCoverageAudit?: {
-    fullMonthNoFlight: Array<{
-      employeeUuid: string;
-      employeeName: string;
-      shiftCount: number;
-      reached20: boolean;
-      breakdown: Record<string, number>;
-    }>;
-    vacationPao: Array<{
-      employeeUuid: string;
-      employeeName: string;
-      vacationDays: number;
-      shiftsBeforeVacation: number;
-      shiftsAfterVacation: number;
-      totalOperationalShifts: number;
-    }>;
-    t6Blocks: { blockCount: number; averageBlockSize: number; unitCoverageCount: number };
-    t7Blocks: { blockCount: number; averageBlockSize: number; unitCoverageCount: number };
-    unitCoverageTotal: number;
-    monoFolgas: {
-      detected: number;
-      corrected: number;
-      kept: Array<{ employee: string; date: string; reason: string }>;
-    };
-  };
-}
-
-export interface GenerateByStepsResponse {
-  year: number;
-  month: number;
-  mode: 'AUDIT_PARTIAL';
-  persisted: false;
-  assignments: StepGenerationAuditAssignment[];
-  allocations: StepGenerationAuditAllocation[];
-  report: StepGenerationReport;
-}

@@ -20,6 +20,8 @@ export class PortalVacationRequestComponent {
   startDate = '';
   endDate = '';
   notes = '';
+  sellTenDays: boolean | null = null;
+  thirteenthAdvance: boolean | null = null;
   readonly minDate = new Date().toISOString().slice(0, 10);
   readonly submitting = signal(false);
   readonly successMessage = signal<string | null>(null);
@@ -36,6 +38,10 @@ export class PortalVacationRequestComponent {
       this.errorMessage.set('A data final não pode ser anterior à data inicial.');
       return;
     }
+    if (this.sellTenDays === null || this.thirteenthAdvance === null) {
+      this.errorMessage.set('Responda às duas opções adicionais antes de enviar.');
+      return;
+    }
 
     const [year, month] = this.startDate.split('-').map(Number);
     this.submitting.set(true);
@@ -46,6 +52,8 @@ export class PortalVacationRequestComponent {
       endDate: this.endDate,
       type: 'FERIAS',
       notes: this.notes.trim() || undefined,
+      sellTenDaysRequested: this.sellTenDays,
+      thirteenthAdvanceRequested: this.thirteenthAdvance,
     }).subscribe({
       next: () => {
         this.submitting.set(false);
@@ -53,6 +61,8 @@ export class PortalVacationRequestComponent {
         this.startDate = '';
         this.endDate = '';
         this.notes = '';
+        this.sellTenDays = null;
+        this.thirteenthAdvance = null;
       },
       error: (err: { error?: { error?: string } }) => {
         this.submitting.set(false);

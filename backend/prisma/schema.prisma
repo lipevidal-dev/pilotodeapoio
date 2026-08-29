@@ -38,11 +38,39 @@ enum RequestedDayOffStatus {
   REJECTED
 }
 
+enum VacationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum VacationExtraStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum AssignmentSource {
   MANUAL
   GENERATOR
   IMPORT
   REPAIR
+  REQUEST
+}
+
+enum ShiftSwapStatus {
+  OFFERED
+  AWAITING_ADMIN
+  APPROVED
+  REJECTED_BY_TARGET
+  REJECTED_BY_ADMIN
+  CANCELLED
+}
+
+/** PEER = troca entre dois colaboradores no mesmo dia; SELF = realocação na própria escala (APAO). */
+enum ShiftSwapKind {
+  PEER
+  SELF
 }
 
 enum EmployeeTypeAllowed {
@@ -62,8 +90,13 @@ model User {
   email        String   @unique
   passwordHash String   @map("password_hash")
   role         UserRole @default(OPERATOR)
+  employeeId   String?  @map("employee_id")
+  mfaEnabled   Boolean  @default(false) @map("mfa_enabled")
+  mfaSecret    String?  @map("mfa_secret")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
+
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
 }
 
 model Role {
@@ -96,14 +129,22 @@ model Employee {
   vacations           Vacation[]
   requestedDaysOff    RequestedDayOff[]
   flightAssignments   FlightAssignment[]
+  executedScheduleAssignments ExecutedScheduleAssignment[]
+  executedPreAllocations      ExecutedPreAllocation[]
   ruleViolations      RuleViolation[]
   flightRestrictions  EmployeeFlightRestriction[]
   shiftRestrictions   EmployeeShiftRestriction[]
   preferredShifts     EmployeePreferredShift[]
+  monthlyShiftPreferences EmployeeMonthlyShiftPreference[]
   specificShiftRequests EmployeeSpecificShiftRequest[]
+  shiftSwapsRequested ShiftSwapRequest[] @relation("ShiftSwapRequester")
+  shiftSwapsTargeted  ShiftSwapRequest[] @relation("ShiftSwapTarget")
   isFcf               Boolean              @default(false) @map("is_fcf")
   fcfSchedule         Json                 @default("[]") @map("fcf_schedule")
   inInstruction       Boolean              @default(false) @map("in_instruction")
+  instructionStartDate DateTime?           @map("instruction_start_date") @db.Date
+  instructionEndDate   DateTime?           @map("instruction_end_date") @db.Date
+  users               User[]
 
   @@unique([type, seniorityNumber])
 }
@@ -154,6 +195,25 @@ model EmployeePreferredShift {
   @@map("employee_preferred_shifts")
 }
 
+model EmployeeMonthlyShiftPreference {
+  id         String   @id @default(uuid())
+  employeeId String   @map("employee_id")
+  year       Int
+  month      Int
+  shiftId    String   @map("shift_id")
+  priority   Int      @default(1)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shift    Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, year, month, priority])
+  @@unique([employeeId, year, month, shiftId])
+  @@index([employeeId, year, month])
+  @@map("employee_monthly_shift_preferences")
+}
+
 model EmployeeSpecificShiftRequest {
   id         String   @id @default(uuid())
   employeeId String   @map("employee_id")
@@ -190,6 +250,7 @@ model Shift {
 
   employeeShiftRestrictions EmployeeShiftRestriction[]
   employeePreferredShifts EmployeePreferredShift[]
+  employeeMonthlyShiftPreferences EmployeeMonthlyShiftPreference[]
   employeeSpecificShiftRequests EmployeeSpecificShiftRequest[]
 }
 
@@ -203,7 +264,10 @@ model ScheduleMonth {
 
   assignments    ScheduleAssignment[]
   preAllocations PreAllocation[]
+  executedAssignments ExecutedScheduleAssignment[]
+  executedPreAllocations ExecutedPreAllocation[]
   ruleViolations RuleViolation[]
+  shiftSwapRequests ShiftSwapRequest[]
 
   @@unique([year, month])
 }
@@ -262,18 +326,64 @@ model PreAllocation {
   @@index([scheduleMonthId])
 }
 
+model ExecutedScheduleAssignment {
+  id              String           @id @default(uuid())
+  scheduleMonthId String           @map("schedule_month_id")
+  employeeId      String           @map("employee_id")
+  date            DateTime         @db.Date
+  shiftCode       String           @map("shift_code")
+  label           String?
+  source          AssignmentSource @default(MANUAL)
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  scheduleMonth ScheduleMonth @relation(fields: [scheduleMonthId], references: [id], onDelete: Cascade)
+  employee      Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([scheduleMonthId, employeeId, date])
+  @@index([scheduleMonthId, date])
+  @@index([employeeId])
+  @@map("executed_schedule_assignment")
+}
+
+model ExecutedPreAllocation {
+  id              String   @id @default(uuid())
+  scheduleMonthId String   @map("schedule_month_id")
+  employeeId      String   @map("employee_id")
+  date            DateTime @db.Date
+  label           String
+  notes           String?
+  startTime       String?  @map("start_time")
+  endTime         String?  @map("end_time")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  scheduleMonth ScheduleMonth @relation(fields: [scheduleMonthId], references: [id], onDelete: Cascade)
+  employee      Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([scheduleMonthId, employeeId, date])
+  @@index([scheduleMonthId])
+  @@map("executed_pre_allocation")
+}
+
 model Vacation {
-  id         String   @id @default(uuid())
-  employeeId String   @map("employee_id")
-  startDate  DateTime @map("start_date") @db.Date
-  endDate    DateTime @map("end_date") @db.Date
+  id         String         @id @default(uuid())
+  employeeId String         @map("employee_id")
+  startDate  DateTime       @map("start_date") @db.Date
+  endDate    DateTime       @map("end_date") @db.Date
+  status     VacationStatus @default(APPROVED)
   notes      String?
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  thirteenthAdvanceRequested Boolean              @default(false) @map("thirteenth_advance_requested")
+  thirteenthAdvanceStatus    VacationExtraStatus? @map("thirteenth_advance_status")
+  sellTenDaysRequested       Boolean              @default(false) @map("sell_ten_days_requested")
+  sellTenDaysStatus          VacationExtraStatus? @map("sell_ten_days_status")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId])
+  @@index([status, startDate, endDate])
 }
 
 model RequestedDayOff {
@@ -310,4 +420,41 @@ model SystemConfig {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("system_config")
+}
+
+/** Oferta de troca: entre colaboradores (PEER) ou realocação na própria escala APAO (SELF). */
+model ShiftSwapRequest {
+  id                  String          @id @default(uuid())
+  scheduleMonthId     String          @map("schedule_month_id")
+  kind                ShiftSwapKind   @default(PEER)
+  /// Dia de origem (PEER: dia da troca; SELF: primeiro dia de origem).
+  date                DateTime        @db.Date
+  /// SELF/PEER: primeiro dia no lado do destino (PEER = dia do colega; null = legado mesmo dia).
+  targetDate          DateTime?       @map("target_date") @db.Date
+  /// 1..N dias envolvidos (tamanho das listas ou bloco consecutivo legado).
+  pairLength          Int             @default(1) @map("pair_length")
+  /// Datas ISO do solicitante (vazio = legado: date + pairLength consecutivo).
+  requesterDates      String[]        @default([]) @map("requester_dates")
+  /// Datas ISO do destino/colega (vazio = legado: targetDate + pairLength).
+  targetDates         String[]        @default([]) @map("target_dates")
+  requesterEmployeeId String          @map("requester_employee_id")
+  targetEmployeeId    String          @map("target_employee_id")
+  requesterShiftCode  String          @map("requester_shift_code")
+  targetShiftCode     String          @map("target_shift_code")
+  status              ShiftSwapStatus @default(OFFERED)
+  notes               String?
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+  respondedAt         DateTime?       @map("responded_at")
+  resolvedAt          DateTime?       @map("resolved_at")
+
+  scheduleMonth ScheduleMonth @relation(fields: [scheduleMonthId], references: [id], onDelete: Cascade)
+  requester     Employee      @relation("ShiftSwapRequester", fields: [requesterEmployeeId], references: [id], onDelete: Cascade)
+  target        Employee      @relation("ShiftSwapTarget", fields: [targetEmployeeId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleMonthId, status])
+  @@index([targetEmployeeId, status])
+  @@index([requesterEmployeeId, status])
+  @@index([date, status])
+  @@map("shift_swap_requests")
 }

@@ -27,6 +27,24 @@
         </label>
       </div>
 
+      <div class="extra-options">
+        <fieldset class="extra-option">
+          <legend>Gostaria de vender 10 dias de férias?</legend>
+          <div class="choice-buttons">
+            <button type="button" [class.selected]="sellTenDays === true" (click)="sellTenDays = true">Sim</button>
+            <button type="button" [class.selected]="sellTenDays === false" (click)="sellTenDays = false">Não</button>
+          </div>
+        </fieldset>
+
+        <fieldset class="extra-option">
+          <legend>Gostaria do adiantamento do 13º salário?</legend>
+          <div class="choice-buttons">
+            <button type="button" [class.selected]="thirteenthAdvance === true" (click)="thirteenthAdvance = true">Sim</button>
+            <button type="button" [class.selected]="thirteenthAdvance === false" (click)="thirteenthAdvance = false">Não</button>
+          </div>
+        </fieldset>
+      </div>
+
       <label class="notes-field">
         <span>Observações <small>(opcional)</small></span>
         <textarea pTextarea name="notes" [(ngModel)]="notes" rows="4"
