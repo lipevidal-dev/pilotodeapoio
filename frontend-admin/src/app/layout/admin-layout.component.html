@@ -1,11 +1,7 @@
-<div class="admin-shell">
-  <aside class="sidebar">
+<div class="admin-shell" [class.admin-shell--mobile]="isMobile()">
+  <aside class="sidebar sidebar--desktop">
     <div class="brand">
-      <img
-        class="brand-logo"
-        src="assets/brand/logo-gol-placeholder.svg"
-        alt="Piloto de Apoio"
-      />
+      <img class="brand-logo" [src]="brandLogoSrc" [alt]="brandLogoAlt" />
       <div class="brand-text">
         <div class="brand-title">{{ systemName }}</div>
         <div class="brand-sub">Painel operacional · v{{ appVersion }}</div>
@@ -25,6 +21,9 @@
           >
             <i [class]="item.icon"></i>
             <span>{{ item.label }}</span>
+            @if (pendingCount(item.route); as count) {
+              <span class="nav-badge" [attr.aria-label]="count + ' solicitação(ões) pendente(s)'">{{ count }}</span>
+            }
           </a>
         }
       </nav>
@@ -39,7 +38,15 @@
   </aside>
 
   <div class="main-column">
-    <header class="topbar">
+    <header class="mobile-header">
+      <img class="mobile-header__logo" [src]="brandLogoSrc" [alt]="brandLogoAlt" />
+      <div class="mobile-header__text">
+        <span class="mobile-header__title">Administração</span>
+        <span class="mobile-header__user">{{ userName() }}</span>
+      </div>
+    </header>
+
+    <header class="topbar topbar--desktop">
       <div class="topbar-inner">
         <div class="topbar-start">
           <span class="topbar-title">Administração</span>
@@ -52,15 +59,84 @@
           </span>
           <span class="api-hint">
             <i class="pi pi-server"></i>
-            API localhost:3334
+            API {{ apiLabel }}
           </span>
         </div>
       </div>
     </header>
+
     <main class="content">
       <div class="content-inner">
         <router-outlet />
       </div>
     </main>
   </div>
+
+  @if (mobileNavOpen()) {
+    <aside class="mobile-drawer" aria-label="Menu de navegação">
+      <div class="mobile-drawer__head">
+        <span>Menu</span>
+        <button type="button" class="mobile-drawer__close" aria-label="Fechar" (click)="closeMobileNav()">
+          <i class="pi pi-times"></i>
+        </button>
+      </div>
+
+      @for (section of navSections; track section.title ?? 'main') {
+        <div class="mobile-drawer__section">
+          @if (section.title) {
+            <div class="mobile-drawer__title">{{ section.title }}</div>
+          }
+          @for (item of section.items; track item.route) {
+            <button
+              type="button"
+              class="mobile-drawer__link"
+              [class.mobile-drawer__link--active]="isRouteActive(item.route)"
+              (click)="navigateFromDrawer(item.route)"
+            >
+              <i [class]="item.icon"></i>
+              <span>{{ item.label }}</span>
+              @if (pendingCount(item.route); as count) {
+                <span class="nav-badge">{{ count }}</span>
+              }
+            </button>
+          }
+        </div>
+      }
+
+      <button type="button" class="mobile-drawer__logout" (click)="logout(); closeMobileNav()">
+        <i class="pi pi-sign-out"></i>
+        Sair
+      </button>
+    </aside>
+    <button type="button" class="mobile-nav-backdrop" aria-label="Fechar menu" (click)="closeMobileNav()"></button>
+  }
+
+  <nav class="mobile-tabbar" aria-label="Navegação principal">
+    <a
+      class="mobile-tab"
+      routerLink="/dashboard"
+      routerLinkActive="mobile-tab--active"
+      [routerLinkActiveOptions]="{ exact: true }"
+    >
+      <i class="pi pi-home"></i>
+      <span>Início</span>
+    </a>
+    <a class="mobile-tab" routerLink="/escala" routerLinkActive="mobile-tab--active">
+      <i class="pi pi-calendar"></i>
+      <span>Escala</span>
+    </a>
+    <a class="mobile-tab" routerLink="/cadastros/ferias" routerLinkActive="mobile-tab--active">
+      <i class="pi pi-sun"></i>
+      <span>Férias</span>
+    </a>
+    <button
+      type="button"
+      class="mobile-tab"
+      [class.mobile-tab--active]="mobileNavOpen()"
+      (click)="toggleMobileNav()"
+    >
+      <i class="pi pi-bars"></i>
+      <span>Menu</span>
+    </button>
+  </nav>
 </div>
