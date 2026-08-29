@@ -21,35 +21,29 @@ export const routes: Routes = [
           import('./pages/portal/portal-schedule.component').then((m) => m.PortalScheduleComponent),
       },
       {
-        path: 'folga',
+        path: 'preferencias-turno',
         loadComponent: () =>
-          import('./pages/portal/portal-placeholder.component').then((m) => m.PortalPlaceholderComponent),
-        data: {
-          title: 'Solicitar Folga',
-          subtitle: 'Solicitação de folga pelo portal do colaborador',
-          message: 'Em breve você poderá solicitar folgas por aqui.',
-        },
+          import('./pages/portal/portal-shift-preferences.component').then(
+            (m) => m.PortalShiftPreferencesComponent,
+          ),
       },
       {
-        path: 'perfil',
+        path: 'troca-turno',
         loadComponent: () =>
-          import('./pages/portal/portal-placeholder.component').then((m) => m.PortalPlaceholderComponent),
-        data: {
-          title: 'Meu Perfil',
-          subtitle: 'Dados pessoais e preferências',
-          message: 'Em breve você poderá consultar e atualizar seu perfil.',
-        },
+          import('./pages/portal/portal-shift-swaps.component').then(
+            (m) => m.PortalShiftSwapsComponent,
+          ),
       },
       {
-        path: 'notificacoes',
+        path: 'ferias',
         loadComponent: () =>
-          import('./pages/portal/portal-placeholder.component').then((m) => m.PortalPlaceholderComponent),
-        data: {
-          title: 'Notificações',
-          subtitle: 'Avisos e comunicados da operação',
-          message: 'Em breve você receberá notificações nesta área.',
-        },
+          import('./pages/portal/portal-vacation-request.component').then(
+            (m) => m.PortalVacationRequestComponent,
+          ),
       },
+      { path: 'folga', pathMatch: 'full', redirectTo: 'escala' },
+      { path: 'perfil', pathMatch: 'full', redirectTo: 'escala' },
+      { path: 'notificacoes', pathMatch: 'full', redirectTo: 'escala' },
     ],
   },
   {
@@ -155,6 +149,13 @@ export const routes: Routes = [
         },
       },
       {
+        path: 'cadastros/troca-turno',
+        loadComponent: () =>
+          import('./pages/cadastros/shift-swaps/shift-swaps-admin.component').then(
+            (m) => m.ShiftSwapsAdminComponent,
+          ),
+      },
+      {
         path: 'configuracoes/cargos',
         loadComponent: () =>
           import('./pages/configuracoes/roles/roles.component').then((m) => m.RolesComponent),
@@ -169,6 +170,13 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/configuracoes/motor-escala/motor-escala-config.component').then(
             (m) => m.MotorEscalaConfigComponent,
+          ),
+      },
+      {
+        path: 'configuracoes/perfil',
+        loadComponent: () =>
+          import('./pages/configuracoes/admin-profile/admin-profile.component').then(
+            (m) => m.AdminProfileComponent,
           ),
       },
     ],

@@ -1,0 +1,40 @@
+<section class="vacation-page">
+  <header class="vacation-header">
+    <span class="vacation-icon"><i class="pi pi-sun"></i></span>
+    <div>
+      <h1>Solicitar férias</h1>
+      <p>Informe o período desejado para análise da coordenação.</p>
+    </div>
+  </header>
+
+  <p-card styleClass="vacation-card gol-card-accent">
+    @if (successMessage(); as message) {
+      <p-message severity="success" [text]="message" />
+    }
+    @if (errorMessage(); as message) {
+      <p-message severity="error" [text]="message" />
+    }
+
+    <form class="vacation-form" (ngSubmit)="submit()">
+      <div class="date-grid">
+        <label>
+          <span>Início das férias</span>
+          <input type="date" name="startDate" [(ngModel)]="startDate" [min]="minDate" required />
+        </label>
+        <label>
+          <span>Término das férias</span>
+          <input type="date" name="endDate" [(ngModel)]="endDate" [min]="startDate || minDate" required />
+        </label>
+      </div>
+
+      <label class="notes-field">
+        <span>Observações <small>(opcional)</small></span>
+        <textarea pTextarea name="notes" [(ngModel)]="notes" rows="4"
+          placeholder="Inclua alguma informação importante para a coordenação"></textarea>
+      </label>
+
+      <p-button type="submit" label="Enviar solicitação" icon="pi pi-send"
+        styleClass="btn-gol-primary vacation-submit" [loading]="submitting()" />
+    </form>
+  </p-card>
+</section>

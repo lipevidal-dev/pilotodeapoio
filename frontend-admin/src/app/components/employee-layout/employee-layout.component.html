@@ -1,29 +1,31 @@
-<div class="employee-shell">
-  <aside class="sidebar">
+<div class="employee-shell" [class.employee-shell--mobile]="isMobile()">
+  <aside class="sidebar sidebar--desktop">
     <div class="brand">
-      <img
-        class="brand-logo"
-        src="assets/brand/logo-gol-placeholder.svg"
-        alt="Piloto de Apoio"
-      />
+      <img class="brand-logo" [src]="brandLogoSrc" [alt]="brandLogoAlt" />
       <div class="brand-text">
         <div class="brand-title">Portal do Colaborador</div>
-        <div class="brand-sub">Escala PAO — consulta</div>
+        <div class="brand-sub">Escala PAO / APAO</div>
       </div>
     </div>
 
     <nav class="nav">
-      @for (item of navItems; track item.route) {
-        <a
-          class="nav-link"
-          [routerLink]="item.route"
-          routerLinkActive="active"
-          [routerLinkActiveOptions]="{ exact: item.route === '/portal/escala' }"
-        >
-          <i [class]="item.icon"></i>
-          <span>{{ item.label }}</span>
-        </a>
-      }
+      <a
+        class="nav-link"
+        routerLink="/portal/escala"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <i class="pi pi-calendar"></i>
+        <span>Minha Escala</span>
+      </a>
+      <a class="nav-link" routerLink="/portal/preferencias-turno" routerLinkActive="active">
+        <i class="pi pi-sliders-h"></i>
+        <span>Preferências de Turno</span>
+      </a>
+      <a class="nav-link" routerLink="/portal/troca-turno" routerLinkActive="active">
+        <i class="pi pi-sync"></i>
+        <span>Troca de Turno</span>
+      </a>
     </nav>
 
     <div class="sidebar-footer">
@@ -35,24 +37,64 @@
   </aside>
 
   <div class="main-column">
-    <header class="topbar">
+    <header class="mobile-header">
+      <img class="mobile-header__logo" [src]="brandLogoSrc" [alt]="brandLogoAlt" />
+      <div class="mobile-header__text">
+        <span class="mobile-header__title">Portal do Colaborador</span>
+        <span class="mobile-header__user">{{ userName() }}</span>
+      </div>
+    </header>
+
+    <header class="topbar topbar--desktop">
       <div class="topbar-inner">
-        <div class="topbar-start">
-          <span class="topbar-title">Área do Colaborador</span>
-          <span class="topbar-badge">Somente leitura</span>
+        <div class="topbar-brand">
+          <span class="topbar-brand__icon"><i class="pi pi-id-card"></i></span>
+          <div class="topbar-brand__text">
+            <span class="topbar-brand__title">Portal do Colaborador</span>
+            <span class="topbar-brand__sub">Escala PAO / APAO</span>
+          </div>
         </div>
         <div class="topbar-end">
           <span class="user-chip">
-            <i class="pi pi-user"></i>
-            {{ userName() }}
+            <span class="user-chip__avatar"><i class="pi pi-user"></i></span>
+            <span class="user-chip__name">{{ userName() }}</span>
           </span>
         </div>
       </div>
     </header>
+
     <main class="content">
       <div class="content-inner">
         <router-outlet />
       </div>
     </main>
   </div>
+
+  <nav class="mobile-tabbar" aria-label="Navegação principal">
+    <a
+      class="mobile-tab"
+      routerLink="/portal/escala"
+      routerLinkActive="mobile-tab--active"
+      [routerLinkActiveOptions]="{ exact: true }"
+    >
+      <i class="pi pi-calendar"></i>
+      <span>Escala</span>
+    </a>
+    <a class="mobile-tab" routerLink="/portal/preferencias-turno" routerLinkActive="mobile-tab--active">
+      <i class="pi pi-sliders-h"></i>
+      <span>Turnos</span>
+    </a>
+    <a class="mobile-tab" routerLink="/portal/troca-turno" routerLinkActive="mobile-tab--active">
+      <i class="pi pi-sync"></i>
+      <span>Troca</span>
+    </a>
+    <a class="mobile-tab" routerLink="/portal/ferias" routerLinkActive="mobile-tab--active">
+      <i class="pi pi-sun"></i>
+      <span>Férias</span>
+    </a>
+    <button type="button" class="mobile-tab mobile-tab--logout" (click)="logout()">
+      <i class="pi pi-sign-out"></i>
+      <span>Sair</span>
+    </button>
+  </nav>
 </div>
