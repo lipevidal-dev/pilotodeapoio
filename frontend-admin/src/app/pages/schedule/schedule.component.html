@@ -1,374 +1,545 @@
-<h1 class="page-title">Geração de Escala</h1>
-<p class="page-subtitle">Tela operacional principal — gerar, validar e publicar a escala mensal</p>
-
-<!-- Geração -->
-<p-card styleClass="gol-card-accent schedule-ops-card mb-3">
-  <ng-template pTemplate="header">
-    <div class="ops-header">
-      <div class="ops-header__main">
-        <span class="ops-header__title"><i class="pi pi-cog"></i> Geração — {{ periodLabel() }}</span>
-        @if (gridAuditTotals(); as totals) {
-          <span class="ops-header__coverage" aria-label="Cobertura PAO">
-            <span class="ops-coverage__label">Cobertura</span>
-            <span
-              class="ops-coverage__chip"
-              [class.ops-coverage__chip--ok]="totals.coverageT6 >= 100"
-            >T6 {{ totals.coverageT6 }}%</span>
-            <span
-              class="ops-coverage__chip"
-              [class.ops-coverage__chip--ok]="totals.coverageT7 >= 100"
-            >T7 {{ totals.coverageT7 }}%</span>
-            <span
-              class="ops-coverage__chip"
-              [class.ops-coverage__chip--ok]="totals.coverageT8 >= 100"
-            >T8 {{ totals.coverageT8 }}%</span>
-          </span>
-        }
-      </div>
-      <a routerLink="/configuracoes/motor-escala" class="ops-config-link">
-        <i class="pi pi-sliders-h"></i> Regras do motor
-      </a>
+<div class="escala-page">
+  <div class="escala-page-head">
+    <div class="escala-page-head__text">
+      <h1 class="page-title">{{ pageTitle() }}</h1>
+      <p class="page-subtitle">{{ pageSubtitle() }}</p>
     </div>
-  </ng-template>
-  <div class="ops-actions">
-    <p-button
-      styleClass="btn-gol-primary ops-btn-motor"
-      [loading]="generatingNextMotor()"
-      (onClick)="generateWithNextMotor()"
-      [title]="'Gerar escala automática para ' + periodLabel()"
-    >
-      <span class="ops-btn-motor__inner">
-        <app-cfm56-turbine-icon />
-        <span>Gerar Escala Automática</span>
-      </span>
-    </p-button>
-  </div>
 
-  <div class="ops-secondary-actions">
-    @if (scheduleData()?.scheduleMonth?.status === 'GENERATED') {
-      <p-button
-        label="Gerar Voos"
-        icon="pi pi-send"
-        severity="secondary"
-        [loading]="generatingFlights()"
-        (onClick)="generateFlights()"
-      />
-    }
-    @if (scheduleData()?.scheduleMonth?.status === 'GENERATED') {
-      <p-button
-        label="Publicar Escala"
-        icon="pi pi-check-circle"
-        styleClass="btn-gol-publish"
-        [disabled]="!activeScheduleMonthId()"
-        [loading]="publishing()"
-        (onClick)="publish()"
-      />
-    }
-    @if (scheduleData()?.scheduleMonth?.status === 'PUBLISHED') {
-      <p-button
-        label="Despublicar"
-        icon="pi pi-eye-slash"
-        severity="warn"
-        [outlined]="true"
-        [disabled]="!activeScheduleMonthId()"
-        [loading]="unpublishing()"
-        (onClick)="openUnpublishConfirm()"
-      />
-    }
-    @if (
-      scheduleData()?.scheduleMonth?.status === 'GENERATED' ||
-      scheduleData()?.scheduleMonth?.status === 'DRAFT'
-    ) {
-      <p-button
-        label="Limpar geração"
-        icon="pi pi-trash"
-        severity="danger"
-        [outlined]="true"
-        [loading]="clearing()"
-        (onClick)="clearGeneration()"
-      />
-    }
-  </div>
-  @if (publishResult(); as pub) {
-    <p-message class="mt-3" severity="success" [text]="'Escala publicada — status: ' + pub.status" />
-  }
-  @if (publishBlocked(); as blocked) {
-    <p-message class="mt-3" severity="error" [text]="blocked.message" />
-  }
-  @if (generationBlocked(); as blocked) {
-    <div class="generation-blocked-panel mt-3">
-      <div class="generation-blocked-panel__header">
-        <span>
-          <i class="pi pi-exclamation-triangle"></i>
-          Geração não foi salva — {{ blocked.criticalCount }} inconsistência(s) crítica(s)
-        </span>
-        <p-button
-          icon="pi pi-times"
-          severity="secondary"
-          [text]="true"
-          size="small"
-          (onClick)="clearGenerationBlocked()"
-          title="Fechar"
-        />
-      </div>
-      <p class="generation-blocked-panel__hint">
-        Corrija os itens abaixo (ou ajuste regras / pré-alocações / motor) e gere novamente.
-      </p>
-      <p-table
-        [value]="blocked.issues"
-        styleClass="generation-blocked-table"
-        [tableStyle]="{ 'min-width': '100%' }"
+    <nav class="escala-view-tabs" aria-label="Tipo de escala">
+      <button
+        type="button"
+        class="escala-view-tab"
+        [class.escala-view-tab--active]="scheduleView() === 'planned'"
+        (click)="setScheduleView('planned')"
       >
-        <ng-template pTemplate="header">
-          <tr>
-            <th>Regra</th>
-            <th>Data</th>
-            <th>Funcionário</th>
-            <th>Detalhe</th>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="body" let-issue>
-          <tr>
-            <td>
-              <p-tag severity="danger" [value]="generationRuleLabel(issue.ruleCode)" />
-            </td>
-            <td>{{ issue.date || '—' }}</td>
-            <td>{{ issue.employee || '—' }}</td>
-            <td>{{ issue.detail || issue.message }}</td>
-          </tr>
-        </ng-template>
-      </p-table>
-    </div>
-  }
-</p-card>
-
-<!-- Grade operacional -->
-<p-card styleClass="grid-card gol-card-accent">
-  <ng-template pTemplate="header">
-    <div class="grid-card-header">
-      <span><i class="pi pi-table"></i> Escala operacional — {{ periodLabel() }}</span>
-      @if (scheduleData(); as sd) {
-        <p-tag [value]="sd.scheduleMonth.status" [severity]="statusTagSeverity(sd.scheduleMonth.status)" />
+        <i class="pi pi-calendar" aria-hidden="true"></i>
+        <span>Planejada</span>
+      </button>
+      @if (canViewExecutedSchedule()) {
+        <button
+          type="button"
+          class="escala-view-tab"
+          [class.escala-view-tab--active]="scheduleView() === 'executed'"
+          (click)="setScheduleView('executed')"
+        >
+          <i class="pi pi-check-circle" aria-hidden="true"></i>
+          <span>Realizada</span>
+        </button>
       }
-    </div>
-  </ng-template>
-
-  <div class="grid-toolbar">
-    <div class="nav-group">
-      <p-button icon="pi pi-chevron-left" severity="secondary" (onClick)="prevMonth()" title="Mês anterior" />
-      <p-button label="Hoje" icon="pi pi-calendar" severity="secondary" (onClick)="goToday()" />
-      <p-button icon="pi pi-chevron-right" severity="secondary" (onClick)="nextMonth()" title="Próximo mês" />
-      <p-button
-        icon="pi pi-refresh"
-        severity="secondary"
-        [loading]="loadingView()"
-        (onClick)="loadScheduleView()"
-        title="Recarregar"
-      />
-    </div>
-
-    <div class="filter-group">
-      <div class="field-group">
-        <label class="field-label">Ano</label>
-        <p-inputNumber
-          [ngModel]="yearSig()"
-          (ngModelChange)="yearSig.set($event); loadScheduleView()"
-          [useGrouping]="false"
-          [min]="2020"
-          [max]="2100"
-        />
-      </div>
-      <div class="field-group">
-        <label class="field-label">Mês</label>
-        <p-inputNumber
-          [ngModel]="monthSig()"
-          (ngModelChange)="monthSig.set($event); loadScheduleView()"
-          [useGrouping]="false"
-          [min]="1"
-          [max]="12"
-        />
-      </div>
-      <div class="field-group field-group--wide">
-        <label class="field-label">Funcionário</label>
-        <p-select
-          [options]="employeeOptions()"
-          [ngModel]="filterEmployeeId()"
-          (ngModelChange)="filterEmployeeId.set($event); onFiltersChange()"
-          optionLabel="label"
-          optionValue="value"
-          placeholder="Todos"
-          class="w-full"
-        />
-      </div>
-      <div class="field-group">
-        <label class="field-label">Cargo</label>
-        <p-select
-          [options]="typeOptions"
-          [ngModel]="filterType()"
-          (ngModelChange)="filterType.set($event)"
-          optionLabel="label"
-          optionValue="value"
-          class="w-full"
-        />
-      </div>
-      <div class="field-group field-group--check">
-        <p-checkbox
-          [ngModel]="singleEmployeeOnly()"
-          (ngModelChange)="singleEmployeeOnly.set($event); onFiltersChange()"
-          [binary]="true"
-          inputId="singleEmp"
-        />
-        <label for="singleEmp" class="check-label">Somente selecionado</label>
-      </div>
-      <div class="field-group">
-        <p-button
-          label="Exportar"
-          icon="pi pi-download"
-          severity="secondary"
-          [outlined]="true"
-          [disabled]="!rawGrid()"
-          (onClick)="openExportDialog()"
-          title="Exportar escala em PDF ou Excel"
-        />
-      </div>
-    </div>
+    </nav>
   </div>
 
-  <p-dialog
-    header="Despublicar escala"
-    [modal]="true"
-    [draggable]="false"
-    [resizable]="false"
-    [closable]="!unpublishing()"
-    [closeOnEscape]="!unpublishing()"
-    [dismissableMask]="!unpublishing()"
-    [style]="{ width: 'min(420px, 94vw)' }"
-    styleClass="unpublish-confirm-dialog"
-    [visible]="unpublishConfirmVisible()"
-    (visibleChange)="unpublishConfirmVisible.set($event)"
-  >
-    <div class="unpublish-confirm-body">
-      <div class="unpublish-confirm-icon" aria-hidden="true">
-        <i class="pi pi-exclamation-triangle"></i>
+<p-card id="escala-print-root" styleClass="grid-card gol-card-accent escala-operacional-card">
+
+  <ng-template pTemplate="header">
+
+    <div class="escala-toolbar">
+
+      <div class="escala-toolbar__row">
+
+        <div class="escala-toolbar__brand">
+
+          <i class="pi pi-table" aria-hidden="true"></i>
+
+          <span class="escala-toolbar__label">{{ isExecutedView() ? 'Realizada' : 'Planejada' }}</span>
+
+          <span class="escala-toolbar__period">{{ periodLabel() }}</span>
+
+        </div>
+
+
+
+        <div class="escala-toolbar__bar">
+
+          <div class="escala-toolbar__nav" aria-label="Navegação do mês">
+
+            <p-button icon="pi pi-chevron-left" severity="secondary" (onClick)="prevMonth()" title="Mês anterior" />
+
+            <p-button label="Hoje" icon="pi pi-calendar" severity="secondary" (onClick)="goToday()" />
+
+            <p-button icon="pi pi-chevron-right" severity="secondary" (onClick)="nextMonth()" title="Próximo mês" />
+
+            <p-button
+
+              icon="pi pi-refresh"
+
+              severity="secondary"
+
+              [loading]="loadingView()"
+
+              (onClick)="loadScheduleView()"
+
+              title="Recarregar"
+
+            />
+
+            @if (gridAuditTotals(); as totals) {
+              @if (!isExecutedView()) {
+
+              <div class="escala-coverage escala-coverage--inline" aria-label="Cobertura PAO">
+
+                <span class="escala-coverage__heading">Cobertura PAO</span>
+
+                <div class="escala-coverage__stats">
+
+                  <div
+
+                    class="escala-coverage__stat"
+
+                    [class.escala-coverage__stat--ok]="totals.coverageT6 >= 100"
+
+                  >
+
+                    <span class="escala-coverage__shift">T6</span>
+
+                    <span class="escala-coverage__pct">{{ totals.coverageT6 }}%</span>
+
+                  </div>
+
+                  <div
+
+                    class="escala-coverage__stat"
+
+                    [class.escala-coverage__stat--ok]="totals.coverageT7 >= 100"
+
+                  >
+
+                    <span class="escala-coverage__shift">T7</span>
+
+                    <span class="escala-coverage__pct">{{ totals.coverageT7 }}%</span>
+
+                  </div>
+
+                  <div
+
+                    class="escala-coverage__stat"
+
+                    [class.escala-coverage__stat--ok]="totals.coverageT8 >= 100"
+
+                  >
+
+                    <span class="escala-coverage__shift">T8</span>
+
+                    <span class="escala-coverage__pct">{{ totals.coverageT8 }}%</span>
+
+                  </div>
+
+                </div>
+
+              </div>
+              }
+            }
+
+          </div>
+
+
+
+          <div class="escala-toolbar__actions" aria-label="Ações da escala">
+
+            @if (!isExecutedView()) {
+            @if (canGenerateSchedule()) {
+
+              <!-- Geração completa (com cobertura): oculto por enquanto — reative com showFullGenerateButton. -->
+              @if (showFullGenerateButton()) {
+              <p-button
+
+                styleClass="btn-gol-primary ops-btn-motor"
+
+                [loading]="generatingNextMotor()"
+
+                (onClick)="generateWithNextMotor()"
+
+                [title]="'Gerar escala completa (com cobertura) para ' + periodLabel()"
+
+              >
+
+                <span class="ops-btn-motor__inner">
+
+                  <app-airplane-icon />
+
+                  <span>Gerar</span>
+
+                </span>
+
+              </p-button>
+              }
+
+              <p-button
+
+                styleClass="btn-gol-primary ops-btn-motor"
+
+                [loading]="generatingPreferencesOnly()"
+
+                (onClick)="generateWithNextMotor(true)"
+
+                [title]="'Gerar escala para ' + periodLabel()"
+
+              >
+
+                <span class="ops-btn-motor__inner">
+
+                  <app-airplane-icon />
+
+                  <span>Gerar</span>
+
+                </span>
+
+              </p-button>
+
+            }
+
+            @if (canClearGeneration()) {
+
+              <p-button
+
+                label="Limpar"
+
+                icon="pi pi-trash"
+
+                severity="danger"
+
+                [outlined]="true"
+
+                [loading]="clearing()"
+
+                (onClick)="clearGeneration()"
+
+              />
+
+            }
+
+            @if (canPublishSchedule()) {
+
+              <p-button
+
+                label="Publicar"
+
+                icon="pi pi-check-circle"
+
+                styleClass="btn-gol-publish"
+
+                [disabled]="!activeScheduleMonthId()"
+
+                [loading]="publishing()"
+
+                (onClick)="publish()"
+
+              />
+
+            }
+
+            @if (canUnpublishSchedule()) {
+
+              <p-button
+
+                label="Despublicar"
+
+                icon="pi pi-lock-open"
+
+                severity="warn"
+
+                [outlined]="true"
+
+                [disabled]="!activeScheduleMonthId()"
+
+                [loading]="unpublishing()"
+
+                (onClick)="unpublish()"
+
+                title="Volta a escala para edição"
+
+              />
+
+            }
+
+            @if (scheduleData()?.scheduleMonth?.status === 'GENERATED') {
+
+              <p-button
+
+                label="Voos"
+
+                icon="pi pi-send"
+
+                severity="secondary"
+
+                [outlined]="true"
+
+                [loading]="generatingFlights()"
+
+                (onClick)="generateFlights()"
+
+              />
+
+            }
+
+            }
+
+            <p-button
+
+              icon="pi pi-save"
+
+              severity="secondary"
+
+              [outlined]="true"
+
+              [loading]="exportingPdf()"
+
+              (onClick)="savePdf()"
+
+              title="Salvar escala em PDF"
+
+              aria-label="Salvar escala em PDF"
+
+            />
+
+
+
+            @if (!isExecutedView()) {
+            <a routerLink="/configuracoes/motor-escala" class="escala-toolbar__config">
+
+              <i class="pi pi-sliders-h" aria-hidden="true"></i>
+
+              <span>Regras do motor</span>
+
+            </a>
+            }
+
+          </div>
+
+        </div>
+
       </div>
-      <p class="unpublish-confirm-message">Tem certeza que deseja despublicar a escala?</p>
-      <p class="unpublish-confirm-hint">
-        A escala deixa de ficar visível no portal do cliente e volta a poder ser editada.
-      </p>
+
     </div>
 
-    <ng-template pTemplate="footer">
-      <div class="unpublish-confirm-footer">
+  </ng-template>
+
+
+
+  @if (publishResult(); as pub) {
+
+    <p-message class="escala-alert" severity="success" [text]="'Escala publicada — status: ' + pub.status" />
+
+  }
+
+  @if (publishBlocked(); as blocked) {
+
+    <p-message class="escala-alert" severity="error" [text]="blocked.message" />
+
+  }
+
+  @if (generationBlocked(); as blocked) {
+    @if (!isExecutedView()) {
+    <div class="generation-blocked-panel escala-alert">
+
+      <div class="generation-blocked-panel__header">
+
+        <span>
+
+          <i class="pi pi-exclamation-triangle"></i>
+
+          Geração não foi salva — {{ blocked.criticalCount }} inconsistência(s) crítica(s)
+
+        </span>
+
         <p-button
-          label="Cancelar"
+
+          icon="pi pi-times"
+
           severity="secondary"
-          [outlined]="true"
-          [disabled]="unpublishing()"
-          (onClick)="cancelUnpublish()"
+
+          [text]="true"
+
+          size="small"
+
+          (onClick)="clearGenerationBlocked()"
+
+          title="Fechar"
+
         />
-        <p-button
-          label="Despublicar"
-          icon="pi pi-eye-slash"
-          severity="warn"
-          [loading]="unpublishing()"
-          (onClick)="confirmUnpublish()"
-        />
+
       </div>
-    </ng-template>
-  </p-dialog>
 
-  <p-dialog
-    header="Exportar escala"
-    [modal]="true"
-    [draggable]="false"
-    [resizable]="false"
-    [style]="{ width: 'min(420px, 94vw)' }"
-    [visible]="exportDialogVisible()"
-    (visibleChange)="exportDialogVisible.set($event)"
-  >
-    <p class="export-dialog-hint">Escolha o escopo e o formato do arquivo.</p>
+      <p class="generation-blocked-panel__hint">
 
-    <div class="export-scope-list" role="radiogroup" aria-label="Escopo da exportação">
-      @for (opt of exportScopeOptions; track opt.value) {
-        <label class="export-scope-option" [class.export-scope-option--active]="exportScope() === opt.value">
-          <input
-            type="radio"
-            name="exportScope"
-            [value]="opt.value"
-            [checked]="exportScope() === opt.value"
-            (change)="exportScope.set(opt.value)"
-          />
-          <span class="export-scope-option__text">
-            <strong>{{ opt.label }}</strong>
-            <small>{{ opt.description }}</small>
-          </span>
-        </label>
-      }
+        Corrija os itens abaixo (ou ajuste regras / pré-alocações / motor) e gere novamente.
+
+      </p>
+
+      <p-table
+
+        [value]="blocked.issues"
+
+        styleClass="generation-blocked-table"
+
+        [tableStyle]="{ 'min-width': '100%' }"
+
+      >
+
+        <ng-template pTemplate="header">
+
+          <tr>
+
+            <th>Regra</th>
+
+            <th>Data</th>
+
+            <th>Funcionário</th>
+
+            <th>Detalhe</th>
+
+          </tr>
+
+        </ng-template>
+
+        <ng-template pTemplate="body" let-issue>
+
+          <tr>
+
+            <td>
+
+              <p-tag severity="danger" [value]="generationRuleLabel(issue.ruleCode)" />
+
+            </td>
+
+            <td>{{ issue.date || '—' }}</td>
+
+            <td>{{ issue.employee || '—' }}</td>
+
+            <td>{{ issue.detail || issue.message }}</td>
+
+          </tr>
+
+        </ng-template>
+
+      </p-table>
+
     </div>
+    }
+  }
 
-    <ng-template pTemplate="footer">
-      <p-button
-        label="Cancelar"
-        severity="secondary"
-        [text]="true"
-        (onClick)="exportDialogVisible.set(false)"
-      />
-      <p-button
-        label="Gerar Excel"
-        icon="pi pi-file-excel"
-        severity="success"
-        [outlined]="true"
-        [loading]="exportingExcel()"
-        (onClick)="exportSchedule('xlsx')"
-      />
-      <p-button
-        label="Gerar PDF"
-        icon="pi pi-file-pdf"
-        severity="danger"
-        [loading]="exportingPdf()"
-        (onClick)="exportSchedule('pdf')"
-      />
-    </ng-template>
-  </p-dialog>
 
-  <app-schedule-legend />
 
   @if (loadingView()) {
+
     <span class="loading-text">Carregando grade operacional...</span>
+
   } @else {
+
     @if (displayGrid(); as grid) {
+
       @if (!hasVisibleRows(grid)) {
-        <p-message severity="info" text="Nenhum dado para os filtros selecionados. Gere a escala ou ajuste os filtros." />
+
+        <p-message severity="info" text="Nenhum funcionário neste mês. Cadastre colaboradores ou gere a escala." />
+
       } @else {
+
         <app-schedule-grid
+
           #scheduleGrid
+
           [grid]="grid"
+
           [auditTotals]="gridAuditTotals()"
+
           [editable]="gridEditable()"
+
+          [fullyEditable]="isExecutedView()"
+
+          [showLegend]="true"
+
+          [approvalMode]="!isExecutedView()"
+
+          [swapMode]="isExecutedView()"
+
+          [showCoverageGaps]="!isExecutedView()"
+
+          [hideSummaryToolbar]="true"
+
+          [summaryVisible]="summaryVisible()"
+
+          (summaryVisibleChange)="summaryVisible.set($event)"
+
           (selectionCompleted)="onSelectionCompleted($event)"
+
           (deletionSelectionCompleted)="onDeletionSelectionCompleted($event)"
+
           (moveRequested)="onMoveRequested($event)"
+
+          (cellClicked)="onPendingCellClicked($event)"
+
         />
+
         <app-schedule-allocation-popup
+
           [visible]="allocationPopupVisible()"
+
           [context]="allocationContext()"
+
           [year]="yearSig()"
+
           [month]="monthSig()"
-          [shifts]="scheduleData()?.shifts ?? []"
+
+          [shifts]="activeScheduleData()?.shifts ?? []"
+
           (optionSelected)="onAllocationOption($event)"
+
           (closed)="closeAllocationPopup()"
+
         />
+
         <app-schedule-delete-confirm-popup
+
           [visible]="deletePopupVisible()"
+
           [context]="deleteContext()"
+
           [year]="yearSig()"
+
           [month]="monthSig()"
+
           (confirmed)="onDeleteConfirmed($event)"
+
           (closed)="closeDeletePopup()"
+
         />
+
+        @if (!isExecutedView()) {
+        <app-portal-request-approval-dialog
+          [visible]="approvalDialogVisible()"
+          [context]="approvalDialogContext()"
+          [submitting]="processingApproval()"
+          (visibleChange)="onApprovalDialogVisibleChange($event)"
+          (approved)="approvePendingRequest()"
+          (rejected)="rejectPendingRequest()"
+        />
+        }
+        <app-shift-swap-dialog
+          [visible]="swapDialogVisible()"
+          [context]="swapDialogContext()"
+          [submitting]="processingSwap()"
+          (visibleChange)="onSwapDialogVisibleChange($event)"
+          (adminApprove)="approveShiftSwap()"
+          (adminReject)="rejectShiftSwap()"
+        />
+        <app-schedule-pdf-dialog
+          [visible]="pdfDialogVisible()"
+          [submitting]="exportingPdf()"
+          [showMineOption]="!!linkedEmployeeId()"
+          (visibleChange)="onPdfDialogVisibleChange($event)"
+          (confirm)="confirmPdfExport($event)"
+          (excelConfirm)="confirmExcelExport($event)"
+        />
+
       }
+
     } @else {
+
       <p-message severity="info" text="Nenhuma escala carregada. Gere a escala ou selecione outro período." />
+
     }
+
   }
+
 </p-card>
+</div>

@@ -1,0 +1,50 @@
+<p-dialog
+  header="Exportar escala"
+  [visible]="visible()"
+  (visibleChange)="visibleChange.emit($event)"
+  [modal]="true"
+  [style]="mobile() ? { width: 'min(100vw - 1.5rem, 26rem)' } : { width: '26rem' }"
+  [position]="mobile() ? 'bottom' : 'center'"
+  [draggable]="false"
+  styleClass="schedule-pdf-dialog"
+  (onHide)="onHide()"
+>
+  <p class="dialog-hint">Escolha o que deseja incluir no arquivo:</p>
+
+  <div class="scope-list" role="radiogroup" aria-label="Escopo do PDF">
+    @for (opt of options(); track opt.value) {
+      <button
+        type="button"
+        class="scope-option"
+        [class.scope-option--selected]="selected() === opt.value"
+        role="radio"
+        [attr.aria-checked]="selected() === opt.value"
+        (click)="select(opt.value)"
+      >
+        <span class="scope-option__radio" aria-hidden="true"></span>
+        <span class="scope-option__text">
+          <span class="scope-option__label">{{ opt.label }}</span>
+          <span class="scope-option__desc">{{ opt.description }}</span>
+        </span>
+      </button>
+    }
+  </div>
+
+  <ng-template pTemplate="footer">
+    <p-button label="Cancelar" severity="secondary" [text]="true" (onClick)="onHide()" />
+    <p-button
+      label="Gerar Excel"
+      icon="pi pi-file-excel"
+      severity="success"
+      [outlined]="true"
+      [loading]="submitting()"
+      (onClick)="onExcelConfirm()"
+    />
+    <p-button
+      label="Gerar PDF"
+      icon="pi pi-file-pdf"
+      [loading]="submitting()"
+      (onClick)="onConfirm()"
+    />
+  </ng-template>
+</p-dialog>

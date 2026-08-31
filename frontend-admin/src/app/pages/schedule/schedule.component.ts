@@ -1,6 +1,5 @@
 import { Component, OnDestroy, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
-import { Subscription, concatMap, forkJoin, from, last, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { Subscription, concatMap, from, last } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -11,14 +10,12 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { MessageModule } from 'primeng/message';
 import { DividerModule } from 'primeng/divider';
-import { DialogModule } from 'primeng/dialog';
 import { MessageService } from 'primeng/api';
 import { ScheduleService } from '../../services/schedule.service';
 import { ScheduleRefreshService } from '../../services/schedule-refresh.service';
 import { ScheduleWorkspaceService } from '../../services/schedule-workspace.service';
 import { ScheduleExportService } from '../../services/schedule-export.service';
 import { NextMotorConfigService } from '../../services/next-motor-config.service';
-import { EmployeeService } from '../../services/employee.service';
 import {
   ScheduleGridComponent,
   type GridCellClickEvent,
@@ -65,9 +62,7 @@ import {
   type AuditViolation,
   type GridAuditTotals,
 } from '../../utils/operational-audit.util';
-import { isAdminRole } from '../../models/auth.models';
 import type {
-  Employee,
   ManualEditResponse,
   ScheduleMonthResponse,
   ScheduleViolation,
@@ -96,7 +91,6 @@ export type ScheduleViewMode = 'planned' | 'executed';
     TagModule,
     MessageModule,
     DividerModule,
-    DialogModule,
     ScheduleGridComponent,
     ScheduleAllocationPopupComponent,
     ScheduleDeleteConfirmPopupComponent,
@@ -120,11 +114,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   private readonly portalService = inject(PortalService);
   private readonly shiftSwapService = inject(ShiftSwapService);
   private readonly auth = inject(AuthService);
-  private readonly employeeService = inject(EmployeeService);
   private refreshSub?: Subscription;
-
-  /** Preferência de turno do portal no mês corrente: employeeId → T6/T7/... */
-  private readonly monthlyPrefByEmployee = signal<ReadonlyMap<string, string>>(new Map());
 
   readonly yearSig = signal(this.workspace.year());
   readonly monthSig = signal(this.workspace.month());
@@ -145,18 +135,12 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   readonly generatingFlights = signal(false);
   readonly publishing = signal(false);
   readonly unpublishing = signal(false);
-  readonly unpublishConfirmVisible = signal(false);
   readonly clearing = signal(false);
   readonly loadingView = signal(false);
   readonly publishBlocked = signal<{ message: string } | null>(null);
   readonly generationBlocked = signal<GenerationPersistenceValidation | null>(null);
   readonly publishResult = signal<{ status: string } | null>(null);
   readonly scheduleData = signal<ScheduleMonthResponse | null>(null);
-  /**
-   * Escala **realizada** do mês anterior (contexto visual dos últimos 6 dias
-   * na escala planejada não publicada).
-   */
-  readonly previousScheduleData = signal<ScheduleMonthResponse | null>(null);
   readonly executedScheduleData = signal<ScheduleMonthResponse | null>(null);
   readonly scheduleView = signal<ScheduleViewMode>('planned');
   readonly manualEditing = signal(false);
@@ -283,7 +267,15 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   readonly rawGrid = computed(() => {
     const data = this.activeScheduleData();
     if (!data) return null;
-    return this.composeGridFromData(data, {
+    return buildScheduleGrid({
+      year: this.yearSig(),
+      month: this.monthSig(),
+      employees: data.employees,
+      assignments: data.assignments,
+      preAllocations: data.preAllocations,
+      operationalCadastros: data.operationalCadastros,
+      shifts: data.shifts,
+      // Troca de turno só aparece/age na escala realizada.
       shiftSwaps: this.isExecutedView() ? data.shiftSwaps : undefined,
     });
   });
@@ -350,13 +342,12 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     this.pdfDialogVisible.set(visible);
   }
 
-  async confirmPdfExport(event: { scope: SchedulePdfScope; format: 'pdf' | 'xlsx' }): Promise<void> {
-    const { scope, format } = event;
+  async confirmPdfExport(scope: SchedulePdfScope): Promise<void> {
     if (this.exportingPdf()) return;
     if (scope === 'mine' && !this.linkedEmployeeId()) {
       this.messages.add({
         severity: 'warn',
-        summary: 'Exportar',
+        summary: 'Exportar PDF',
         detail: 'Usuário sem colaborador vinculado.',
       });
       return;
@@ -373,17 +364,14 @@ export class ScheduleComponent implements OnInit, OnDestroy {
       this.pdfDialogVisible.set(false);
       this.messages.add({
         severity: 'warn',
-        summary: 'Exportar',
+        summary: 'Exportar PDF',
         detail: 'Nenhum colaborador encontrado para o filtro selecionado.',
       });
       return;
     }
 
-    const payload = this.exportService.prepareExportPayload(this.withPortalPreferenceOnGrid(grid));
-    const ok =
-      format === 'xlsx'
-        ? await this.exportService.exportExcel(payload, { scope })
-        : await this.exportService.exportPdf(payload, { scope });
+    const payload = this.exportService.prepareExportPayload(grid);
+    const ok = await this.exportService.exportPdf(payload, { scope });
     this.pdfExportScope.set(null);
     this.exportingPdf.set(false);
     this.pdfDialogVisible.set(false);
@@ -391,10 +379,29 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     if (!ok) {
       this.messages.add({
         severity: 'error',
-        summary: format === 'xlsx' ? 'Exportar Excel' : 'Exportar PDF',
-        detail: format === 'xlsx' ? 'Não foi possível gerar o Excel.' : 'Não foi possível gerar o PDF.',
+        summary: 'Exportar PDF',
+        detail: 'Não foi possível gerar o PDF.',
       });
     }
+  }
+
+  async confirmExcelExport(scope: SchedulePdfScope): Promise<void> {
+    if (this.exportingPdf()) return;
+    if (scope === 'mine' && !this.linkedEmployeeId()) {
+      this.messages.add({ severity: 'warn', summary: 'Exportar Excel', detail: 'Usuário sem colaborador vinculado.' });
+      return;
+    }
+    this.exportingPdf.set(true);
+    this.pdfExportScope.set(scope);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const grid = this.displayGrid();
+    const ok = grid && grid.groups.some((group) => group.rows.length > 0)
+      ? await this.exportService.exportExcel(this.exportService.prepareExportPayload(grid), scope)
+      : false;
+    this.pdfExportScope.set(null);
+    this.exportingPdf.set(false);
+    this.pdfDialogVisible.set(false);
+    if (!ok) this.messages.add({ severity: 'error', summary: 'Exportar Excel', detail: 'Não foi possível gerar o Excel.' });
   }
 
   ngOnInit(): void {
@@ -595,16 +602,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     });
   }
 
-  openUnpublishConfirm(): void {
-    if (!this.activeScheduleMonthId()) return;
-    this.unpublishConfirmVisible.set(true);
-  }
-
-  cancelUnpublish(): void {
-    this.unpublishConfirmVisible.set(false);
-  }
-
-  confirmUnpublish(): void {
+  unpublish(): void {
     const id = this.activeScheduleMonthId();
     if (!id) return;
     this.unpublishing.set(true);
@@ -613,7 +611,6 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     this.scheduleService.unpublishSchedule(id).subscribe({
       next: (res) => {
         this.unpublishing.set(false);
-        this.unpublishConfirmVisible.set(false);
         this.messages.add({
           severity: 'success',
           summary: 'Despublicado',
@@ -632,11 +629,6 @@ export class ScheduleComponent implements OnInit, OnDestroy {
         this.messages.add({ severity: 'error', summary: 'Despublicar', detail: msg });
       },
     });
-  }
-
-  /** @deprecated use openUnpublishConfirm — mantido por compatibilidade interna */
-  unpublish(): void {
-    this.openUnpublishConfirm();
   }
 
   onSelectionCompleted(selection: GridSelectionComplete): void {
@@ -788,8 +780,9 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     this.deleteContext.set(null);
 
     const applyGrid = () => {
-      const grid = this.composeGridFromData({
-        scheduleMonth: res.scheduleMonth,
+      const grid = buildScheduleGrid({
+        year: this.yearSig(),
+        month: this.monthSig(),
         employees: res.employees,
         assignments: res.assignments,
         preAllocations: res.preAllocations,
@@ -856,44 +849,13 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   loadScheduleView(): void {
     this.syncWorkspacePeriod();
     this.loadingView.set(true);
-    const year = this.yearSig();
-    const month = this.monthSig();
-    const prevYear = month === 1 ? year - 1 : year;
-    const prevMonth = month === 1 ? 12 : month - 1;
-
-    const prefs$ = this.canShowPortalPreferences()
-      ? this.employeeService.listMonthlyShiftPreferences(year, month).pipe(
-          catchError(() => of({ year, month, preferences: [] as Array<{ employeeId: string; shiftCode: string }> })),
-        )
-      : of({ year, month, preferences: [] as Array<{ employeeId: string; shiftCode: string }> });
-
-    forkJoin({
-      schedule: this.scheduleService.getSchedule(year, month),
-      prefs: prefs$,
-      // Lead-in espelha a escala REALIZADA do mês anterior (não a planejada).
-      previous: this.scheduleService
-        .getExecutedSchedule(prevYear, prevMonth)
-        .pipe(catchError(() => of(null))),
-    }).subscribe({
-      next: ({ schedule: data, prefs, previous }) => {
+    this.scheduleService.getSchedule(this.yearSig(), this.monthSig()).subscribe({
+      next: (data) => {
         this.loadingView.set(false);
         this.scheduleData.set(data);
         this.workspace.scheduleMonthId.set(data.scheduleMonth.id);
-        if (this.canShowPortalPreferences()) {
-          this.monthlyPrefByEmployee.set(
-            new Map(
-              (prefs.preferences ?? [])
-                .filter((p) => !!p.employeeId && !!p.shiftCode)
-                .map((p) => [p.employeeId, p.shiftCode.toUpperCase()] as const),
-            ),
-          );
-        } else {
-          this.monthlyPrefByEmployee.set(new Map());
-        }
-        const periodKey = `${year}-${month}`;
+        const periodKey = `${this.yearSig()}-${this.monthSig()}`;
         const published = data.scheduleMonth.status === 'PUBLISHED';
-        const archived = data.scheduleMonth.status === 'ARCHIVED';
-        this.previousScheduleData.set(!published && !archived ? previous : null);
 
         if (!published) {
           this.executedDefaultPeriodKey = null;
@@ -912,13 +874,20 @@ export class ScheduleComponent implements OnInit, OnDestroy {
           return;
         }
 
-        const grid = this.composeGridFromData(data);
+        const grid = buildScheduleGrid({
+          year: this.yearSig(),
+          month: this.monthSig(),
+          employees: data.employees,
+          assignments: data.assignments,
+          preAllocations: data.preAllocations,
+          operationalCadastros: data.operationalCadastros,
+          shifts: data.shifts,
+        });
         this.exportService.prepareExportPayload(grid);
       },
       error: () => {
         this.loadingView.set(false);
         this.scheduleData.set(null);
-        this.previousScheduleData.set(null);
         this.messages.add({
           severity: 'error',
           summary: 'Escala',
@@ -934,7 +903,16 @@ export class ScheduleComponent implements OnInit, OnDestroy {
       next: (data) => {
         this.loadingView.set(false);
         this.executedScheduleData.set(data);
-        const grid = this.composeGridFromData(data, { shiftSwaps: data.shiftSwaps });
+        const grid = buildScheduleGrid({
+          year: this.yearSig(),
+          month: this.monthSig(),
+          employees: data.employees,
+          assignments: data.assignments,
+          preAllocations: data.preAllocations,
+          operationalCadastros: data.operationalCadastros,
+          shifts: data.shifts,
+          shiftSwaps: data.shiftSwaps,
+        });
         this.exportService.prepareExportPayload(grid);
       },
       error: () => {
@@ -946,76 +924,6 @@ export class ScheduleComponent implements OnInit, OnDestroy {
         });
       },
     });
-  }
-
-  private canShowPortalPreferences(): boolean {
-    const role = this.auth.user()?.role;
-    return !!role && isAdminRole(role);
-  }
-
-  /**
-   * Preferência do portal só para admin montar a escala.
-   * Não altera o nome; preenche preferredShiftCode na linha da grade.
-   */
-  private withPortalPreferenceOnGrid(grid: ScheduleGridData): ScheduleGridData {
-    if (!this.canShowPortalPreferences()) return grid;
-    const prefs = this.monthlyPrefByEmployee();
-    if (prefs.size === 0) return grid;
-    return {
-      ...grid,
-      groups: grid.groups.map((group) => ({
-        ...group,
-        rows: group.rows.map((row) => {
-          const code = prefs.get(row.employeeId);
-          return code ? { ...row, preferredShiftCode: code } : row;
-        }),
-      })),
-    };
-  }
-
-  /** Lead-in dos últimos 6 dias do mês anterior — só em planejada não publicada. */
-  private shouldShowPreviousMonthLead(status?: string | null): boolean {
-    if (this.isExecutedView()) return false;
-    const st = status ?? this.scheduleData()?.scheduleMonth.status;
-    return !!st && st !== 'PUBLISHED' && st !== 'ARCHIVED';
-  }
-
-  private composeGridFromData(
-    data: Pick<
-      ScheduleMonthResponse,
-      'employees' | 'assignments' | 'preAllocations' | 'operationalCadastros' | 'shifts' | 'scheduleMonth'
-    > & { shiftSwaps?: ScheduleMonthResponse['shiftSwaps'] },
-    opts?: { shiftSwaps?: ScheduleMonthResponse['shiftSwaps'] },
-  ): ScheduleGridData {
-    const year = this.yearSig();
-    const month = this.monthSig();
-    const showLead = this.shouldShowPreviousMonthLead(data.scheduleMonth?.status);
-    const prevYear = month === 1 ? year - 1 : year;
-    const prevMonth = month === 1 ? 12 : month - 1;
-    const prev = showLead ? this.previousScheduleData() : null;
-
-    return this.withPortalPreferenceOnGrid(
-      buildScheduleGrid({
-        year,
-        month,
-        employees: data.employees,
-        assignments: data.assignments,
-        preAllocations: data.preAllocations,
-        operationalCadastros: data.operationalCadastros,
-        shifts: data.shifts,
-        shiftSwaps: opts?.shiftSwaps,
-        leadDays: showLead ? 6 : 0,
-        previousMonth: showLead
-          ? {
-              year: prevYear,
-              month: prevMonth,
-              assignments: prev?.assignments ?? [],
-              preAllocations: prev?.preAllocations ?? [],
-              operationalCadastros: prev?.operationalCadastros,
-            }
-          : null,
-      }),
-    );
   }
 
   setScheduleView(mode: ScheduleViewMode): void {
@@ -1037,7 +945,15 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     }
     const data = this.scheduleData();
     if (data) {
-      const grid = this.composeGridFromData(data);
+      const grid = buildScheduleGrid({
+        year: this.yearSig(),
+        month: this.monthSig(),
+        employees: data.employees,
+        assignments: data.assignments,
+        preAllocations: data.preAllocations,
+        operationalCadastros: data.operationalCadastros,
+        shifts: data.shifts,
+      });
       this.exportService.prepareExportPayload(grid);
     }
   }
@@ -1210,52 +1126,15 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     const m = this.monthSig();
     const dateIso = `${y}-${String(m).padStart(2, '0')}-${String(event.day).padStart(2, '0')}`;
 
-    const openDialog = (extras?: Partial<PortalRequestApprovalContext>) => {
-      this.approvalDialogContext.set({
-        day: event.day,
-        dateIso,
-        employeeId: event.employeeId,
-        employeeName: event.employeeName,
-        type: pendingType,
-        typeLabel: portalPendingRequestLabel(pendingType),
-        vacationId: event.cell.requestId,
-        ...extras,
-      });
-      this.approvalDialogVisible.set(true);
-    };
-
-    if (pendingType === 'FERIAS') {
-      this.portalService.listPendingRequests().subscribe({
-        next: (rows) => {
-          const match =
-            rows.find((r) => r.type === 'FERIAS' && r.id === event.cell.requestId) ??
-            rows.find(
-              (r) =>
-                r.type === 'FERIAS' &&
-                r.employeeId === event.employeeId &&
-                dateIso >= r.date &&
-                dateIso <= (r.endDate ?? r.date),
-            );
-          openDialog(
-            match
-              ? {
-                  vacationId: match.id,
-                  endDate: match.endDate,
-                  vacationStatus: match.vacationStatus,
-                  thirteenthAdvanceRequested: match.thirteenthAdvanceRequested,
-                  thirteenthAdvanceStatus: match.thirteenthAdvanceStatus,
-                  sellTenDaysRequested: match.sellTenDaysRequested,
-                  sellTenDaysStatus: match.sellTenDaysStatus,
-                }
-              : { vacationStatus: 'PENDING' },
-          );
-        },
-        error: () => openDialog({ vacationStatus: 'PENDING' }),
-      });
-      return;
-    }
-
-    openDialog();
+    this.approvalDialogContext.set({
+      day: event.day,
+      dateIso,
+      employeeId: event.employeeId,
+      employeeName: event.employeeName,
+      type: pendingType,
+      typeLabel: portalPendingRequestLabel(pendingType),
+    });
+    this.approvalDialogVisible.set(true);
   }
 
   onSwapDialogVisibleChange(visible: boolean): void {
@@ -1334,42 +1213,13 @@ export class ScheduleComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.processingApproval.set(false);
+          this.approvalDialogVisible.set(false);
+          this.approvalDialogContext.set(null);
           this.messages.add({
             severity: 'success',
             summary: 'Solicitação aprovada',
             detail: `${ctx.typeLabel} registrada para ${ctx.employeeName}.`,
           });
-          if (ctx.type === 'FERIAS' && ctx.vacationId) {
-            this.portalService.listPendingRequests().subscribe({
-              next: (rows) => {
-                const match = rows.find((r) => r.id === ctx.vacationId);
-                if (!match) {
-                  this.approvalDialogVisible.set(false);
-                  this.approvalDialogContext.set(null);
-                } else {
-                  this.approvalDialogContext.set({
-                    ...ctx,
-                    vacationStatus: match.vacationStatus,
-                    thirteenthAdvanceRequested: match.thirteenthAdvanceRequested,
-                    thirteenthAdvanceStatus: match.thirteenthAdvanceStatus,
-                    sellTenDaysRequested: match.sellTenDaysRequested,
-                    sellTenDaysStatus: match.sellTenDaysStatus,
-                  });
-                }
-                this.loadScheduleView();
-                this.scheduleRefresh.notify();
-              },
-              error: () => {
-                this.approvalDialogVisible.set(false);
-                this.approvalDialogContext.set(null);
-                this.loadScheduleView();
-                this.scheduleRefresh.notify();
-              },
-            });
-            return;
-          }
-          this.approvalDialogVisible.set(false);
-          this.approvalDialogContext.set(null);
           this.loadScheduleView();
           this.scheduleRefresh.notify();
         },
@@ -1419,67 +1269,5 @@ export class ScheduleComponent implements OnInit, OnDestroy {
           });
         },
       });
-  }
-
-  decideVacationExtra(payload: {
-    vacationId: string;
-    extra: 'THIRTEENTH_ADVANCE' | 'SELL_TEN_DAYS';
-    decision: 'APPROVE' | 'REJECT';
-  }): void {
-    this.processingApproval.set(true);
-    this.portalService.decideVacationExtra(payload).subscribe({
-      next: () => {
-        this.processingApproval.set(false);
-        const label =
-          payload.extra === 'THIRTEENTH_ADVANCE' ? 'Adiantamento do 13º' : 'Venda de 10 dias';
-        this.messages.add({
-          severity: payload.decision === 'APPROVE' ? 'success' : 'info',
-          summary: payload.decision === 'APPROVE' ? 'Aprovado' : 'Rejeitado',
-          detail: `${label} ${payload.decision === 'APPROVE' ? 'aprovado' : 'rejeitado'}.`,
-        });
-        const ctx = this.approvalDialogContext();
-        if (!ctx) {
-          this.loadScheduleView();
-          this.scheduleRefresh.notify();
-          return;
-        }
-        this.portalService.listPendingRequests().subscribe({
-          next: (rows) => {
-            const match = rows.find((r) => r.id === payload.vacationId);
-            if (!match) {
-              this.approvalDialogVisible.set(false);
-              this.approvalDialogContext.set(null);
-            } else {
-              this.approvalDialogContext.set({
-                ...ctx,
-                vacationId: match.id,
-                endDate: match.endDate,
-                vacationStatus: match.vacationStatus,
-                thirteenthAdvanceRequested: match.thirteenthAdvanceRequested,
-                thirteenthAdvanceStatus: match.thirteenthAdvanceStatus,
-                sellTenDaysRequested: match.sellTenDaysRequested,
-                sellTenDaysStatus: match.sellTenDaysStatus,
-              });
-            }
-            this.loadScheduleView();
-            this.scheduleRefresh.notify();
-          },
-          error: () => {
-            this.approvalDialogVisible.set(false);
-            this.approvalDialogContext.set(null);
-            this.loadScheduleView();
-            this.scheduleRefresh.notify();
-          },
-        });
-      },
-      error: (err: { error?: { error?: string } }) => {
-        this.processingApproval.set(false);
-        this.messages.add({
-          severity: 'error',
-          summary: 'Erro',
-          detail: err.error?.error ?? 'Não foi possível decidir o item de férias.',
-        });
-      },
-    });
   }
 }
