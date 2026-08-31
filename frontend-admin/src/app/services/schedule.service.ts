@@ -3,16 +3,14 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import type {
-  GenerateByStepsResponse,
   GenerateApaoScheduleResponse,
   GenerateFlightsResponse,
   GenerateScheduleResponse,
   ManualAllocationType,
   ManualEditResponse,
   PublishScheduleResponse,
-  ScheduleMonthResponse,
-  StepGenerationOptions,
   UnpublishScheduleResponse,
+  ScheduleMonthResponse,
 } from '../models/api.models';
 
 @Injectable({ providedIn: 'root' })
@@ -20,22 +18,15 @@ export class ScheduleService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiBaseUrl;
 
-  generateSchedule(year: number, month: number): Observable<GenerateScheduleResponse> {
+  generateSchedule(
+    year: number,
+    month: number,
+    preferencesOnly = false,
+  ): Observable<GenerateScheduleResponse> {
     return this.http.post<GenerateScheduleResponse>(`${this.base}/schedules/generate`, {
       year,
       month,
-    });
-  }
-
-  generateBySteps(
-    year: number,
-    month: number,
-    steps: StepGenerationOptions,
-  ): Observable<GenerateByStepsResponse> {
-    return this.http.post<GenerateByStepsResponse>(`${this.base}/schedules/generate-by-steps`, {
-      year,
-      month,
-      steps,
+      preferencesOnly,
     });
   }
 
@@ -68,7 +59,15 @@ export class ScheduleService {
   }
 
   getSchedule(year: number, month: number): Observable<ScheduleMonthResponse> {
-    return this.http.get<ScheduleMonthResponse>(`${this.base}/schedules/${year}/${month}`);
+    return this.http.get<ScheduleMonthResponse>(`${this.base}/schedules/${year}/${month}`, {
+      params: { _ts: Date.now() },
+    });
+  }
+
+  getExecutedSchedule(year: number, month: number): Observable<ScheduleMonthResponse> {
+    return this.http.get<ScheduleMonthResponse>(`${this.base}/schedules/${year}/${month}/executed`, {
+      params: { _ts: Date.now() },
+    });
   }
 
   getPublishedSchedule(year: number, month: number): Observable<ScheduleMonthResponse> {
@@ -105,6 +104,38 @@ export class ScheduleService {
   ): Observable<ManualEditResponse> {
     return this.http.patch<ManualEditResponse>(
       `${this.base}/schedules/${scheduleMonthId}/manual-move`,
+      payload,
+    );
+  }
+
+  executedManualEditRange(
+    scheduleMonthId: string,
+    payload: {
+      employeeId: string;
+      startDate: string;
+      endDate: string;
+      type: ManualAllocationType;
+      mode: 'set' | 'clear';
+      force?: boolean;
+    },
+  ): Observable<ManualEditResponse> {
+    return this.http.patch<ManualEditResponse>(
+      `${this.base}/schedules/${scheduleMonthId}/executed/manual-range`,
+      payload,
+    );
+  }
+
+  executedManualMove(
+    scheduleMonthId: string,
+    payload: {
+      source: { employeeId: string; date: string };
+      target: { employeeId: string; date: string };
+      mode: 'move';
+      force?: boolean;
+    },
+  ): Observable<ManualEditResponse> {
+    return this.http.patch<ManualEditResponse>(
+      `${this.base}/schedules/${scheduleMonthId}/executed/manual-move`,
       payload,
     );
   }

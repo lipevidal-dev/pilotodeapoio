@@ -849,9 +849,9 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   loadScheduleView(): void {
     this.syncWorkspacePeriod();
     this.loadingView.set(true);
+    if (this.isExecutedView()) this.executedScheduleData.set(null);
     this.scheduleService.getSchedule(this.yearSig(), this.monthSig()).subscribe({
       next: (data) => {
-        this.loadingView.set(false);
         this.scheduleData.set(data);
         this.workspace.scheduleMonthId.set(data.scheduleMonth.id);
         const periodKey = `${this.yearSig()}-${this.monthSig()}`;
@@ -873,6 +873,8 @@ export class ScheduleComponent implements OnInit, OnDestroy {
           this.loadExecutedScheduleView(false);
           return;
         }
+
+        this.loadingView.set(false);
 
         const grid = buildScheduleGrid({
           year: this.yearSig(),
@@ -899,6 +901,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
 
   loadExecutedScheduleView(showLoading = true): void {
     if (showLoading) this.loadingView.set(true);
+    this.executedScheduleData.set(null);
     this.scheduleService.getExecutedSchedule(this.yearSig(), this.monthSig()).subscribe({
       next: (data) => {
         this.loadingView.set(false);

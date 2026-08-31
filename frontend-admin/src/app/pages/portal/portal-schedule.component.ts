@@ -255,6 +255,7 @@ export class PortalScheduleComponent implements OnInit {
   loadSchedule(): void {
     this.loadingView.set(true);
     this.loadError.set(null);
+    if (this.isExecutedView()) this.executedScheduleData.set(null);
     this.portalService.getSchedule(this.yearSig(), this.monthSig()).subscribe({
       next: (data) => {
         this.scheduleData.set(data);
@@ -289,6 +290,7 @@ export class PortalScheduleComponent implements OnInit {
   loadExecutedSchedule(showLoading = true): void {
     if (showLoading) this.loadingView.set(true);
     this.loadError.set(null);
+    this.executedScheduleData.set(null);
     this.portalService.getExecutedSchedule(this.yearSig(), this.monthSig()).subscribe({
       next: (data) => {
         this.loadingView.set(false);
