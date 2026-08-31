@@ -192,43 +192,9 @@
 .mobile-team-grid {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
   margin: 0 -0.35rem;
   padding: 0 0.15rem 0.35rem;
   max-width: 100%;
-}
-
-// Garante scroll legível no mobile mesmo com fit-width no componente da grade.
-:host ::ng-deep .mobile-team-grid .schedule-grid-wrap.fit-width {
-  overflow-x: auto !important;
-  -webkit-overflow-scrolling: touch;
-
-  .schedule-grid-scroller {
-    width: max-content !important;
-    min-width: 100% !important;
-    max-width: none !important;
-  }
-
-  .schedule-grid {
-    width: max-content !important;
-    min-width: 100% !important;
-    max-width: none !important;
-    table-layout: fixed;
-  }
-
-  .col-day {
-    width: 2.15rem !important;
-    min-width: 2.15rem !important;
-    max-width: 2.15rem !important;
-    padding: 0.12rem 0.05rem !important;
-  }
-
-  .sticky-col.col-employee,
-  .col-employee.sticky-col {
-    width: 5.75rem !important;
-    min-width: 5.75rem !important;
-    max-width: 5.75rem !important;
-  }
 }
 
 
@@ -675,3 +641,13 @@
 
 }
 
+.mobile-swap-hint {
+  margin: 0 0 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border-left: 3px solid var(--gol-orange);
+  border-radius: 0 8px 8px 0;
+  color: var(--gol-gray-dark);
+  background: rgba(241, 90, 34, 0.08);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}

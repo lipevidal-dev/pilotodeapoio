@@ -1,170 +1,419 @@
-<h1 class="page-title">Minha Escala</h1>
-<p class="page-subtitle">Visualização da escala publicada — somente consulta</p>
+<p-toast [position]="isMobile() ? 'top-center' : 'top-right'" />
 
-<p-card styleClass="grid-card gol-card-accent">
-  <ng-template pTemplate="header">
-    <div class="grid-card-header">
-      <span><i class="pi pi-table"></i> Escala operacional — {{ periodLabel() }}</span>
-      @if (scheduleData(); as sd) {
-        <p-tag [value]="sd.scheduleMonth.status" [severity]="statusTagSeverity(sd.scheduleMonth.status)" />
+
+
+<div class="portal-page" [class.portal-page--mobile]="isMobile()">
+
+  <div class="escala-page-head escala-page-head--portal">
+    @if (!isMobile()) {
+      <div class="escala-page-head__text">
+        <span class="portal-schedule-head__eyebrow">{{ pageEyebrow() }}</span>
+        <div class="portal-schedule-head__row">
+          <h1 class="portal-schedule-head__title">{{ periodLabel() }}</h1>
+          @if (scheduleData(); as sd) {
+            <span class="status-chip" [class.status-chip--published]="isPublished()">
+              {{ isPublished() ? 'Publicada' : 'Aguardando publicação' }}
+            </span>
+          }
+        </div>
+      </div>
+    }
+
+    <nav class="escala-view-tabs" aria-label="Tipo de escala">
+      <button
+        type="button"
+        class="escala-view-tab"
+        [class.escala-view-tab--active]="scheduleView() === 'planned'"
+        (click)="setScheduleView('planned')"
+      >
+        <i class="pi pi-calendar" aria-hidden="true"></i>
+        <span>Planejada</span>
+      </button>
+      @if (isPublished()) {
+        <button
+          type="button"
+          class="escala-view-tab"
+          [class.escala-view-tab--active]="scheduleView() === 'executed'"
+          (click)="setScheduleView('executed')"
+        >
+          <i class="pi pi-check-circle" aria-hidden="true"></i>
+          <span>Realizada</span>
+        </button>
       }
-    </div>
-  </ng-template>
-
-  <div class="grid-toolbar">
-    <div class="nav-group">
-      <p-button icon="pi pi-chevron-left" severity="secondary" (onClick)="prevMonth()" title="Mês anterior" />
-      <p-button label="Hoje" icon="pi pi-calendar" severity="secondary" (onClick)="goToday()" />
-      <p-button icon="pi pi-chevron-right" severity="secondary" (onClick)="nextMonth()" title="Próximo mês" />
-      <p-button
-        icon="pi pi-refresh"
-        severity="secondary"
-        [loading]="loadingView()"
-        (onClick)="loadPublishedSchedule()"
-        title="Recarregar"
-      />
-    </div>
-
-    <div class="filter-group">
-      <div class="field-group">
-        <label class="field-label">Ano</label>
-        <p-inputNumber
-          [ngModel]="yearSig()"
-          (ngModelChange)="yearSig.set($event); loadPublishedSchedule()"
-          [useGrouping]="false"
-          [min]="2020"
-          [max]="2100"
-        />
-      </div>
-      <div class="field-group">
-        <label class="field-label">Mês</label>
-        <p-inputNumber
-          [ngModel]="monthSig()"
-          (ngModelChange)="monthSig.set($event); loadPublishedSchedule()"
-          [useGrouping]="false"
-          [min]="1"
-          [max]="12"
-        />
-      </div>
-      <div class="field-group field-group--wide">
-        <label class="field-label">Funcionário</label>
-        <p-select
-          [options]="employeeOptions()"
-          [ngModel]="filterEmployeeId()"
-          (ngModelChange)="filterEmployeeId.set($event); onFiltersChange()"
-          optionLabel="label"
-          optionValue="value"
-          placeholder="Todos"
-          class="w-full"
-        />
-      </div>
-      <div class="field-group">
-        <label class="field-label">Cargo</label>
-        <p-select
-          [options]="typeOptions"
-          [ngModel]="filterType()"
-          (ngModelChange)="filterType.set($event)"
-          optionLabel="label"
-          optionValue="value"
-          class="w-full"
-        />
-      </div>
-      <div class="field-group field-group--check">
-        <p-checkbox
-          [ngModel]="singleEmployeeOnly()"
-          (ngModelChange)="singleEmployeeOnly.set($event); onFiltersChange()"
-          [binary]="true"
-          inputId="portalSingleEmp"
-        />
-        <label for="portalSingleEmp" class="check-label">Somente selecionado</label>
-      </div>
-      <div class="field-group">
-        <p-button
-          label="Exportar"
-          icon="pi pi-download"
-          severity="secondary"
-          [outlined]="true"
-          [disabled]="!scheduleData()"
-          (onClick)="openExportDialog()"
-          title="Exportar escala em PDF ou Excel"
-        />
-      </div>
-    </div>
+    </nav>
   </div>
 
-  <p-dialog
-    header="Exportar escala"
-    [modal]="true"
-    [draggable]="false"
-    [resizable]="false"
-    [style]="{ width: 'min(420px, 94vw)' }"
-    [visible]="exportDialogVisible()"
-    (visibleChange)="exportDialogVisible.set($event)"
-  >
-    <p class="export-dialog-hint">Escolha o escopo e o formato do arquivo.</p>
+  <p-card id="escala-print-root" styleClass="grid-card gol-card-accent">
 
-    <div class="export-scope-list" role="radiogroup" aria-label="Escopo da exportação">
-      @for (opt of exportScopeOptions; track opt.value) {
-        <label class="export-scope-option" [class.export-scope-option--active]="exportScope() === opt.value">
-          <input
-            type="radio"
-            name="portalExportScope"
-            [value]="opt.value"
-            [checked]="exportScope() === opt.value"
-            (change)="exportScope.set(opt.value)"
+    @if (isMobile()) {
+
+      <div class="portal-schedule-bar portal-schedule-bar--mobile">
+
+        <div class="portal-schedule-bar__period">
+
+          <p-button
+
+            icon="pi pi-chevron-left"
+
+            severity="secondary"
+
+            [rounded]="true"
+
+            [text]="true"
+
+            (onClick)="prevMonth()"
+
+            title="Mês anterior"
+
           />
-          <span class="export-scope-option__text">
-            <strong>{{ opt.label }}</strong>
-            <small>{{ opt.description }}</small>
-          </span>
-        </label>
-      }
-    </div>
 
-    <ng-template pTemplate="footer">
-      <p-button
-        label="Cancelar"
-        severity="secondary"
-        [text]="true"
-        (onClick)="exportDialogVisible.set(false)"
-      />
-      <p-button
-        label="Gerar Excel"
-        icon="pi pi-file-excel"
-        severity="success"
-        [outlined]="true"
-        [loading]="exportingExcel()"
-        (onClick)="exportSchedule('xlsx')"
-      />
-      <p-button
-        label="Gerar PDF"
-        icon="pi pi-file-pdf"
-        severity="danger"
-        [loading]="exportingPdf()"
-        (onClick)="exportSchedule('pdf')"
-      />
-    </ng-template>
-  </p-dialog>
+          <div class="portal-schedule-bar__period-text">
 
-  <app-schedule-legend />
+            <span class="portal-schedule-bar__month">{{ periodLabel() }}</span>
 
-  @if (loadingView()) {
-    <span class="loading-text">Carregando escala publicada...</span>
-  } @else if (loadError()) {
-    <p-message severity="warn" [text]="loadError()!" />
-  } @else {
-    @if (displayGrid(); as grid) {
-      @if (!hasVisibleRows(grid)) {
-        <p-message severity="info" text="Nenhum dado para os filtros selecionados." />
-      } @else {
-        <app-schedule-grid
-          [grid]="grid"
-          [auditTotals]="gridAuditTotals()"
-          [editable]="false"
-        />
-      }
+            @if (scheduleData()) {
+
+              <span class="status-chip" [class.status-chip--published]="isPublished()">
+
+                {{ isPublished() ? 'Publicada' : 'Rascunho' }}
+
+              </span>
+
+            }
+
+          </div>
+
+          <p-button
+
+            icon="pi pi-chevron-right"
+
+            severity="secondary"
+
+            [rounded]="true"
+
+            [text]="true"
+
+            (onClick)="nextMonth()"
+
+            title="Próximo mês"
+
+          />
+
+          <p-button
+            class="portal-schedule-bar__save portal-schedule-bar__save--mobile"
+            icon="pi pi-save"
+            [text]="true"
+            styleClass="portal-pdf-save"
+            size="small"
+            [loading]="exportingPdf()"
+            (onClick)="savePdf()"
+            title="Salvar escala em PDF"
+            aria-label="Salvar escala em PDF"
+          />
+
+        </div>
+
+
+
+        <div class="portal-schedule-bar__actions">
+
+          <p-button
+
+            label="Hoje"
+
+            icon="pi pi-calendar"
+
+            severity="secondary"
+
+            size="small"
+
+            (onClick)="goToday()"
+
+          />
+
+          <p-button
+
+            icon="pi pi-refresh"
+
+            severity="secondary"
+
+            size="small"
+
+            [loading]="loadingView()"
+
+            (onClick)="loadSchedule()"
+
+            title="Recarregar"
+
+          />
+
+          <p-button
+            [label]="mobileTeamView() ? 'Ver Sua' : 'Ver Todos'"
+            [icon]="mobileTeamView() ? 'pi pi-user' : 'pi pi-users'"
+            styleClass="portal-mobile-scope-toggle"
+            [severity]="mobileTeamView() ? 'warn' : 'secondary'"
+            size="small"
+            (onClick)="toggleMobileTeamView()"
+            [title]="mobileTeamView() ? 'Voltar ao seu calendário' : 'Ver escala de toda a equipe'"
+          />
+
+        </div>
+
+      </div>
+
     } @else {
-      <p-message severity="info" text="Selecione um período com escala publicada." />
+
+      <div class="portal-schedule-bar">
+
+        <div class="portal-schedule-bar__nav">
+
+          <p-button icon="pi pi-chevron-left" severity="secondary" (onClick)="prevMonth()" title="Mês anterior" />
+
+          <p-button label="Hoje" icon="pi pi-calendar" severity="secondary" (onClick)="goToday()" />
+
+          <p-button icon="pi pi-chevron-right" severity="secondary" (onClick)="nextMonth()" title="Próximo mês" />
+
+          <p-button
+            icon="pi pi-refresh"
+            severity="secondary"
+            [loading]="loadingView()"
+            (onClick)="loadSchedule()"
+            title="Recarregar"
+          />
+        </div>
+
+        <p-button
+          class="portal-schedule-bar__save"
+          icon="pi pi-save"
+          [text]="true"
+          styleClass="portal-pdf-save"
+          [loading]="exportingPdf()"
+          (onClick)="savePdf()"
+          title="Salvar escala em PDF"
+          aria-label="Salvar escala em PDF"
+        />
+      </div>
     }
-  }
-</p-card>
+
+    @if (loadingView()) {
+
+      <span class="loading-text">Carregando escala...</span>
+
+    } @else if (loadError()) {
+
+      <p-message severity="warn" [text]="loadError()!" />
+
+    } @else {
+
+      @if (displayGrid(); as grid) {
+
+        @if (!hasVisibleRows(grid)) {
+
+          <p-message severity="info" text="Nenhum dado disponível para este mês." />
+
+        } @else if (isMobile() && mobileTeamView()) {
+
+          <div id="schedule-grid-export-area" class="schedule-grid-export-area mobile-team-grid">
+
+            <app-schedule-grid
+              [grid]="grid"
+              [auditTotals]="gridAuditTotals()"
+              [editable]="false"
+              [requestMode]="!isExecutedView()"
+              [swapMode]="isExecutedView()"
+              [allowSelfSwap]="allowSelfSwap()"
+              [requestEmployeeId]="employeeId()"
+              [highlightEmployeeId]="employeeId()"
+              [showCoverageGaps]="false"
+              [showLegend]="true"
+              (cellClicked)="onCellClicked($event)"
+              (selectionCompleted)="onSelectionCompleted($event)"
+            />
+
+          </div>
+
+        } @else if (isMobile()) {
+
+          <div id="schedule-grid-export-area" class="schedule-grid-export-area">
+
+            <app-schedule-legend class="legend--mobile grid-legend" />
+
+          <div class="mobile-calendar">
+
+            @if (isExecutedView()) {
+              <p class="mobile-swap-hint">
+                Para trocar, selecione seu turno, ND ou dia em branco. Depois toque em “Ver Todos” e escolha o dia do colega.
+              </p>
+            }
+
+            <div class="mobile-calendar__weekdays">
+
+              @for (label of ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']; track label) {
+
+                <span class="mobile-calendar__weekday">{{ label }}</span>
+
+              }
+
+            </div>
+
+
+
+            @for (week of mobileCalendarWeeks(); track $index) {
+
+              <div class="mobile-calendar__week">
+
+                @for (item of week.days; track $index) {
+
+                  @if (item.day !== null && item.cell) {
+
+                    <button
+
+                      type="button"
+
+                      class="mobile-day"
+
+                      [class.mobile-day--today]="isToday(item.day!)"
+
+                      [class.mobile-day--selectable]="
+                        (!isExecutedView() && isSelectableCell(item.cell)) ||
+                        (isExecutedView() && isSwapOfferable(item.cell))
+                      "
+
+                      [class.mobile-day--pending]="item.cell.requestPending"
+
+                      [class.mobile-day--filled]="!isMobileDayTappable(item.cell)"
+
+                      [class.mobile-day--selected]="
+                        isMobileDaySelected(item.day!) ||
+                        swapPick().ownDays.includes(item.day!) ||
+                        swapPick().selfDestDays.includes(item.day!)
+                      "
+
+                      [disabled]="!isMobileDayTappable(item.cell)"
+
+                      (click)="onMobileDayTap(item.day!, item.cell)"
+
+                    >
+
+                      <span class="mobile-day__num">{{ item.day }}</span>
+
+                      <span
+
+                        class="mobile-day__cell"
+
+                        [class.mobile-day__cell--selected]="isMobileDaySelected(item.day!)"
+
+                      >
+
+                        <app-schedule-cell [cell]="item.cell" />
+
+                      </span>
+
+                    </button>
+
+                  } @else {
+
+                    <span class="mobile-day mobile-day--pad" aria-hidden="true"></span>
+
+                  }
+
+                }
+
+              </div>
+
+            }
+
+          </div>
+
+          </div>
+
+        } @else {
+
+          <app-schedule-grid
+
+            [grid]="grid"
+
+            [auditTotals]="gridAuditTotals()"
+
+            [editable]="false"
+
+            [requestMode]="!isExecutedView()"
+
+            [swapMode]="isExecutedView()"
+
+            [allowSelfSwap]="allowSelfSwap()"
+
+            [requestEmployeeId]="employeeId()"
+
+            [highlightEmployeeId]="employeeId()"
+
+            [showCoverageGaps]="false"
+
+            [showLegend]="true"
+
+            (cellClicked)="onCellClicked($event)"
+
+            (selectionCompleted)="onSelectionCompleted($event)"
+
+          />
+
+        }
+
+      }
+
+    }
+
+  </p-card>
+
+</div>
+
+
+
+@if (isMobile() && mobileSelectedCount() > 0 && !isExecutedView() && !mobileTeamView()) {
+
+  <div class="mobile-selection-bar">
+
+    <span>{{ mobileSelectedCount() }} {{ mobileSelectedCount() === 1 ? 'dia' : 'dias' }}</span>
+
+    <p-button label="Solicitar" icon="pi pi-send" size="small" (onClick)="openMobileMultiRequest()" />
+
+    <p-button icon="pi pi-times" severity="secondary" [text]="true" (onClick)="clearMobileSelection()" />
+
+  </div>
+
+}
+
+
+
+<app-portal-request-dialog
+  [visible]="requestDialogVisible()"
+  [context]="requestDialogContext()"
+  [employeeType]="employeeType()"
+  [submitting]="submittingRequest()"
+  [mobile]="isMobile()"
+  (visibleChange)="onRequestDialogVisibleChange($event)"
+  (requestSubmit)="submitRequest($event)"
+  (requestCancel)="cancelRequest($event)"
+/>
+
+<app-shift-swap-dialog
+  [visible]="swapDialogVisible()"
+  [context]="swapDialogContext()"
+  [submitting]="submittingSwap()"
+  [mobile]="isMobile()"
+  (visibleChange)="onSwapDialogVisibleChange($event)"
+  (offerSubmit)="submitSwapOffer($event)"
+  (accept)="acceptSwap()"
+  (reject)="rejectSwap()"
+  (cancel)="cancelSwapOffer()"
+/>
+
+<app-schedule-pdf-dialog
+  [visible]="pdfDialogVisible()"
+  [submitting]="exportingPdf()"
+  [mobile]="isMobile()"
+  [showMineOption]="!!employeeId()"
+  (visibleChange)="onPdfDialogVisibleChange($event)"
+  (confirm)="confirmPdfExport($event)"
+/>
+

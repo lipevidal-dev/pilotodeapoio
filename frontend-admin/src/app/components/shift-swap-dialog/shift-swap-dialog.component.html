@@ -1,0 +1,251 @@
+<p-dialog
+  [header]="dialogTitle()"
+  [visible]="visible()"
+  (visibleChange)="visibleChange.emit($event)"
+  [modal]="true"
+  [style]="mobile() ? { width: 'min(100vw - 1.5rem, 26rem)' } : { width: '26rem' }"
+  [position]="mobile() ? 'bottom' : 'center'"
+  [draggable]="false"
+  styleClass="shift-swap-dialog"
+  (onHide)="onHide()"
+>
+  @if (context(); as ctx) {
+    <p class="dialog-date">{{ ctx.dateIso }}</p>
+
+    @if (ctx.mode === 'offer') {
+      <div class="swap-box">
+        <p class="swap-title"><i class="pi pi-sync"></i> Ofertar troca</p>
+        <p class="swap-line swap-parties">
+          <strong>{{ ctx.requesterName || 'Você' }}</strong>
+          <span class="swap-role">(solicitante)</span>
+          <strong class="swap-code">{{ cellLabel(ctx.ownShiftCode || ctx.requesterShiftCode) }}</strong>
+          com
+          <strong class="swap-code">{{ cellLabel(ctx.targetShiftCode) }}</strong>
+          <strong>{{ ctx.targetName }}</strong>
+        </p>
+        <p class="dialog-hint">
+          Você pode trocar turnos, ND ou dias em branco. Use a mesma quantidade de dias dos dois lados. O colaborador precisa aceitar;
+          trocas APAO ainda passam por aprovação do admin.
+        </p>
+      </div>
+
+      <label class="notes-label" for="swapNotes">Observações (opcional)</label>
+      <textarea
+        pTextarea
+        id="swapNotes"
+        rows="2"
+        class="w-full"
+        [ngModel]="notes()"
+        (ngModelChange)="notes.set($event)"
+        placeholder="Motivo da troca"
+      ></textarea>
+    }
+
+    @if (ctx.mode === 'offer_self') {
+      <div class="swap-box">
+        <p class="swap-title"><i class="pi pi-arrows-h"></i> Realocação APAO</p>
+        <p class="swap-line">
+          @if (ctx.pairLength === 2) {
+            Mover o bloco
+            <strong>{{ ctx.sourceDate }}</strong>–(+1)
+            (<strong>{{ cellLabel(ctx.sourceLabel) }}</strong>)
+            para
+            <strong>{{ ctx.targetDate }}</strong>–(+1)
+            (<strong>{{ cellLabel(ctx.targetLabel) }}</strong>).
+          } @else {
+            Trocar
+            <strong>{{ ctx.sourceDate }}</strong>
+            (<strong>{{ cellLabel(ctx.sourceLabel) }}</strong>)
+            com
+            <strong>{{ ctx.targetDate }}</strong>
+            (<strong>{{ cellLabel(ctx.targetLabel) }}</strong>)
+            na sua escala.
+          }
+        </p>
+        <p class="dialog-hint">
+          Folga agrupada (FA) troca em bloco de 2 dias. Folga comum (F) é 1 dia.
+          A realocação APAO aguarda aprovação do admin.
+        </p>
+      </div>
+
+      <label class="notes-label" for="swapNotesSelf">Observações (opcional)</label>
+      <textarea
+        pTextarea
+        id="swapNotesSelf"
+        rows="2"
+        class="w-full"
+        [ngModel]="notes()"
+        (ngModelChange)="notes.set($event)"
+        placeholder="Motivo da realocação"
+      ></textarea>
+    }
+
+    @if (ctx.mode === 'respond') {
+      <div class="swap-box">
+        <p class="swap-title"><i class="pi pi-sync"></i> {{ ctx.requesterName }} quer trocar</p>
+        <p class="swap-line swap-parties">
+          <strong>{{ ctx.requesterName }}</strong>
+          <span class="swap-role">(solicitante)</span>
+          <strong class="swap-code">{{ cellLabel(ctx.requesterShiftCode) }}</strong>
+          com
+          <strong class="swap-code">{{ cellLabel(ctx.targetShiftCode || ctx.ownShiftCode) }}</strong>
+          <strong>{{ ctx.targetName }}</strong>
+        </p>
+        <p class="dialog-hint">
+          Se aceitar, trocas PAO são aplicadas na hora; trocas APAO seguem para aprovação do admin.
+        </p>
+      </div>
+    }
+
+    @if (ctx.mode === 'cancel') {
+      <div class="swap-box">
+        <p class="swap-title"><i class="pi pi-clock"></i> Aguardando resposta</p>
+        <p class="swap-line swap-parties">
+          @if (ctx.kind === 'SELF') {
+            <strong>{{ ctx.requesterName || 'Você' }}</strong>
+            <span class="swap-role">(solicitante)</span>
+            <strong class="swap-code">{{ cellLabel(ctx.ownShiftCode || ctx.requesterShiftCode) }}</strong>
+            com
+            <strong class="swap-code">{{ cellLabel(ctx.targetShiftCode) }}</strong>
+            (própria escala)
+          } @else {
+            <strong>{{ ctx.requesterName || 'Você' }}</strong>
+            <span class="swap-role">(solicitante)</span>
+            <strong class="swap-code">{{ cellLabel(ctx.ownShiftCode || ctx.requesterShiftCode) }}</strong>
+            com
+            <strong class="swap-code">{{ cellLabel(ctx.targetShiftCode) }}</strong>
+            <strong>{{ ctx.targetName }}</strong>
+          }
+        </p>
+      </div>
+    }
+
+    @if (ctx.mode === 'awaiting_peer') {
+      <div class="swap-box">
+        <p class="swap-title"><i class="pi pi-user"></i> Aguardando aceite do colaborador</p>
+        <p class="swap-line swap-parties">
+          @if (ctx.kind === 'SELF') {
+            <strong>{{ ctx.requesterName }}</strong>
+            <span class="swap-role">(solicitante)</span>
+            <strong class="swap-code">{{ cellLabel(ctx.requesterShiftCode) }}</strong>
+            com
+            <strong class="swap-code">{{ cellLabel(ctx.targetShiftCode) }}</strong>
+            (própria escala)
+          } @else {
+            <strong>{{ ctx.requesterName }}</strong>
+            <span class="swap-role">(solicitante)</span>
+            <strong class="swap-code">{{ cellLabel(ctx.requesterShiftCode) }}</strong>
+            com
+            <strong class="swap-code">{{ cellLabel(ctx.targetShiftCode) }}</strong>
+            <strong>{{ ctx.targetName }}</strong>
+          }
+        </p>
+      </div>
+    }
+
+    @if (ctx.mode === 'awaiting_admin') {
+      <div class="swap-box">
+        <p class="swap-title"><i class="pi pi-clock"></i> Aguardando admin</p>
+        <p class="swap-line swap-parties">
+          @if (ctx.kind === 'SELF') {
+            <strong>{{ ctx.requesterName }}</strong>
+            <span class="swap-role">(solicitante)</span>
+            <strong class="swap-code">{{ cellLabel(ctx.requesterShiftCode) }}</strong>
+            com
+            <strong class="swap-code">{{ cellLabel(ctx.targetShiftCode) }}</strong>
+            (própria escala)
+          } @else {
+            <strong>{{ ctx.requesterName }}</strong>
+            <span class="swap-role">(solicitante)</span>
+            <strong class="swap-code">{{ cellLabel(ctx.requesterShiftCode) }}</strong>
+            com
+            <strong class="swap-code">{{ cellLabel(ctx.targetShiftCode) }}</strong>
+            <strong>{{ ctx.targetName }}</strong>
+          }
+        </p>
+        <p class="dialog-hint">Aceite do colaborador registrado. Aguardando aprovação do administrador.</p>
+      </div>
+    }
+
+    @if (ctx.mode === 'admin_approve') {
+      <div class="swap-box">
+        <p class="swap-title"><i class="pi pi-shield"></i> Aprovar troca APAO</p>
+        <p class="swap-line swap-parties">
+          @if (ctx.kind === 'SELF') {
+            <strong>{{ ctx.requesterName }}</strong>
+            <span class="swap-role">(solicitante)</span>
+            <strong class="swap-code">{{ cellLabel(ctx.requesterShiftCode) }}</strong>
+            com
+            <strong class="swap-code">{{ cellLabel(ctx.targetShiftCode) }}</strong>
+            (própria escala)
+            @if (ctx.sourceDate && ctx.targetDate) {
+              <span class="swap-dates">{{ ctx.sourceDate }} ↔ {{ ctx.targetDate }}</span>
+            }
+          } @else {
+            <strong>{{ ctx.requesterName }}</strong>
+            <span class="swap-role">(solicitante)</span>
+            <strong class="swap-code">{{ cellLabel(ctx.requesterShiftCode) }}</strong>
+            com
+            <strong class="swap-code">{{ cellLabel(ctx.targetShiftCode) }}</strong>
+            <strong>{{ ctx.targetName }}</strong>
+          }
+        </p>
+        <p class="dialog-hint">Ao aprovar, a troca é aplicada na escala realizada.</p>
+      </div>
+    }
+  }
+
+  <ng-template pTemplate="footer">
+    <p-button label="Fechar" severity="secondary" [text]="true" (onClick)="onHide()" />
+
+    @if (context()?.mode === 'offer' || context()?.mode === 'offer_self') {
+      <p-button
+        [label]="context()?.mode === 'offer_self' ? 'Confirmar realocação' : 'Ofertar troca'"
+        icon="pi pi-sync"
+        [loading]="submitting()"
+        (onClick)="confirmOffer()"
+      />
+    }
+    @if (context()?.mode === 'respond') {
+      <p-button
+        label="Recusar"
+        icon="pi pi-times"
+        severity="danger"
+        [outlined]="true"
+        [loading]="submitting()"
+        (onClick)="reject.emit()"
+      />
+      <p-button
+        label="Aceitar troca"
+        icon="pi pi-check"
+        [loading]="submitting()"
+        (onClick)="accept.emit()"
+      />
+    }
+    @if (context()?.mode === 'cancel') {
+      <p-button
+        label="Cancelar oferta"
+        icon="pi pi-trash"
+        severity="danger"
+        [loading]="submitting()"
+        (onClick)="cancel.emit()"
+      />
+    }
+    @if (context()?.mode === 'admin_approve') {
+      <p-button
+        label="Rejeitar"
+        icon="pi pi-times"
+        severity="danger"
+        [outlined]="true"
+        [loading]="submitting()"
+        (onClick)="adminReject.emit()"
+      />
+      <p-button
+        label="Aprovar troca"
+        icon="pi pi-check"
+        [loading]="submitting()"
+        (onClick)="adminApprove.emit()"
+      />
+    }
+  </ng-template>
+</p-dialog>

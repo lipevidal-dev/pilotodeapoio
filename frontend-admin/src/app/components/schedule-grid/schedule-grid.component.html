@@ -36,8 +36,6 @@
   [class.request-grid]="requestMode()"
   [class.has-summary]="summaryVisible()"
   [class.preview-unpublished]="previewUnpublished()"
-  [class.fit-width]="true"
-  [style.--day-col-count]="displayColumns().length"
   (selectstart)="$event.preventDefault()"
   (mouseleave)="clearHoverCross()"
 >
@@ -46,33 +44,27 @@
       <thead>
         <tr>
           <th class="col-employee sticky-col">Funcionário</th>
-          @for (col of displayColumns(); track col.isoDate; let i = $index) {
-            <th
-              class="col-day"
-              [class.col-weekend]="col.isWeekend"
-              [class.col-lead]="col.isLead"
-              [class.col-month-start]="col.isMonthStart"
-              [class.col-crosshair]="isColumnHovered(i)"
-            >
+          @for (day of grid().dayNumbers; track day; let i = $index) {
+            <th class="col-day" [class.col-weekend]="isWeekend(i)" [class.col-crosshair]="isColumnHovered(i)">
               <div class="day-head-stack">
-                @if (!col.isLead && showCoverageGaps() && hasCoverageGap(col.day)) {
+                @if (showCoverageGaps() && hasCoverageGap(day)) {
                   <img
                     class="coverage-gap-icon"
                     src="assets/icons/coverage-attention.svg"
-                    [attr.alt]="'Falta cobertura PAO no dia ' + col.day"
-                    [title]="coverageGapTooltip(col.day)"
+                    [attr.alt]="'Falta cobertura PAO no dia ' + day"
+                    [title]="coverageGapTooltip(day)"
                   />
                 }
-                @if (!col.isLead && showCoverageGaps() && hasCoverageSurplus(col.day)) {
+                @if (showCoverageGaps() && hasCoverageSurplus(day)) {
                   <img
                     class="coverage-gap-icon coverage-gap-icon--surplus"
                     src="assets/icons/coverage-attention-warning.svg"
-                    [attr.alt]="'Sobrecobertura PAO no dia ' + col.day"
-                    [title]="coverageSurplusTooltip(col.day)"
+                    [attr.alt]="'Sobrecobertura PAO no dia ' + day"
+                    [title]="coverageSurplusTooltip(day)"
                   />
                 }
-                <span class="day-num">{{ col.day < 10 ? '0' + col.day : col.day }}</span>
-                <span class="day-wd">{{ col.weekdayLabel }}</span>
+                <span class="day-num">{{ day < 10 ? '0' + day : day }}</span>
+                <span class="day-wd">{{ grid().weekdayLabels[i] }}</span>
               </div>
             </th>
           }
@@ -101,18 +93,12 @@
       <tbody>
         @for (group of grid().groups; track group.type) {
           <tr class="group-row">
-            <td class="group-label sticky-col">{{ group.label }}</td>
-            @for (col of displayColumns(); track col.isoDate) {
-              <td
-                class="group-filler col-day"
-                [class.col-lead]="col.isLead"
-                [class.col-month-start]="col.isMonthStart"
-                [class.col-weekend]="col.isWeekend"
-              ></td>
-            }
-            @if (summaryVisible()) {
-              <td class="group-filler sticky-summary-block" [attr.colspan]="summaryColCount"></td>
-            }
+            <td
+              class="group-label sticky-col"
+              [attr.colspan]="grid().dayNumbers.length + 1 + (summaryVisible() ? summaryColCount : 0)"
+            >
+              {{ group.label }}
+            </td>
           </tr>
           @for (row of group.rows; track row.employeeId) {
             <tr class="data-row" [class.row-own]="isOwnRow(row.employeeId)">
@@ -122,36 +108,31 @@
                 (mouseenter)="onRowMouseEnter(row.employeeId)"
               >
                 <span class="emp-name">{{ row.name }}</span>
-                @if (row.preferredShiftCode) {
-                  <span class="emp-pref">({{ row.preferredShiftCode }})</span>
-                }
               </td>
-              @for (col of displayColumns(); track col.isoDate; let i = $index) {
-                @let cell = cellForColumn(row, col);
+              @for (cell of row.cells; track $index; let i = $index) {
                 <td
                   class="col-day"
-                  [class.col-weekend]="col.isWeekend"
-                  [class.col-lead]="col.isLead"
-                  [class.col-month-start]="col.isMonthStart"
+                  [class.col-weekend]="isWeekend(i)"
                   [class.col-crosshair]="isColumnHovered(i) || isRowHovered(row.employeeId)"
                   [class.col-crosshair-focus]="isCrosshairFocus(row.employeeId, i)"
-                  [class.cell-empty-select]="!col.isLead && (editable() || isRequestableCell(row.employeeId)) && isSelectableCell(cell)"
-                  [class.cell-filled-drag]="!col.isLead && editable() && isDraggableCell(cell)"
-                  [class.cell-filled-delete]="!col.isLead && editable() && isDeletableCell(cell)"
-                  [class.cell-selected]="!col.isLead && isCellHighlighted(row.employeeId, col.day)"
-                  [class.cell-delete-selected]="!col.isLead && isCellDeleteHighlighted(row.employeeId, col.day)"
-                  [class.cell-drag-over]="!col.isLead && isDragOver(row.employeeId, col.day)"
-                  [class.cell-dragging]="!col.isLead && isDragging(row.employeeId, col.day)"
-                  [class.cell-requestable]="!col.isLead && (isRequestableCell(row.employeeId) || isApprovableCell(cell))"
-                  [attr.draggable]="!col.isLead && editable() && isDraggableCell(cell)"
-                  (click)="onCellClick(row.employeeId, col.day, cell, col.isLead)"
-                  (mousedown)="onCellMouseDown($event, row.employeeId, col.day, cell, col.isLead)"
-                  (mouseenter)="onCellMouseEnter(row.employeeId, col.day, i, col.isLead)"
-                  (dragstart)="onDragStart($event, row.employeeId, col.day, cell, col.isLead)"
+                  [class.cell-empty-select]="(editable() || isRequestableCell(row.employeeId)) && isSelectableCell(cell)"
+                  [class.cell-filled-drag]="editable() && isDraggableCell(cell)"
+                  [class.cell-filled-delete]="editable() && isDeletableCell(cell)"
+                  [class.cell-selected]="isCellHighlighted(row.employeeId, grid().dayNumbers[i])"
+                  [class.cell-delete-selected]="isCellDeleteHighlighted(row.employeeId, grid().dayNumbers[i])"
+                  [class.cell-drag-over]="isDragOver(row.employeeId, grid().dayNumbers[i])"
+                  [class.cell-dragging]="isDragging(row.employeeId, grid().dayNumbers[i])"
+                  [class.cell-requestable]="isRequestableCell(row.employeeId) || isApprovableCell(cell)"
+                  [class.cell-swap-offerable]="swapMode() && isSwapOfferableCell(cell)"
+                  [attr.draggable]="editable() && isDraggableCell(cell)"
+                  (click)="onCellClick(row.employeeId, grid().dayNumbers[i], cell)"
+                  (mousedown)="onCellMouseDown($event, row.employeeId, grid().dayNumbers[i], cell)"
+                  (mouseenter)="onCellMouseEnter(row.employeeId, grid().dayNumbers[i], i)"
+                  (dragstart)="onDragStart($event, row.employeeId, grid().dayNumbers[i], cell)"
                   (dragend)="onDragEnd()"
-                  (dragover)="onDragOver($event, row.employeeId, col.day, col.isLead)"
-                  (dragleave)="onDragLeave(row.employeeId, col.day)"
-                  (drop)="onDrop($event, row.employeeId, col.day, col.isLead)"
+                  (dragover)="onDragOver($event, row.employeeId, grid().dayNumbers[i])"
+                  (dragleave)="onDragLeave(row.employeeId, grid().dayNumbers[i])"
+                  (drop)="onDrop($event, row.employeeId, grid().dayNumbers[i])"
                 >
                   <app-schedule-cell [cell]="cell" />
                 </td>
