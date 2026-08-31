@@ -49,7 +49,10 @@ export class ScheduleExportService {
   /** Gera uma planilha XLSX com a mesma grade e o mesmo escopo escolhidos no modal. */
   async exportExcel(payload: ScheduleExportPayload, scope?: SchedulePdfScope): Promise<boolean> {
     try {
-      const ExcelJS = await import('exceljs');
+      const excelModule = await import('exceljs');
+      // O bundle browser do ExcelJS expõe a API em `default`, enquanto alguns
+      // ambientes de execução também expõem propriedades no namespace.
+      const ExcelJS = excelModule.default;
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'PCoordenador';
       workbook.created = new Date(payload.generatedAt);
@@ -111,10 +114,15 @@ export class ScheduleExportService {
       const anchor = document.createElement('a');
       anchor.href = url;
       anchor.download = `escala-${payload.year}-${String(payload.month).padStart(2, '0')}-${scope ?? 'all'}.xlsx`;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
       anchor.click();
-      URL.revokeObjectURL(url);
+      anchor.remove();
+      // Safari/iOS ainda pode estar consumindo a URL quando o clique retorna.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
       return true;
-    } catch {
+    } catch (error) {
+      console.error('[ScheduleExportService] Falha ao gerar Excel.', error);
       return false;
     }
   }
