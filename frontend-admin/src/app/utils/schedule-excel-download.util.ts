@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import type { Workbook } from 'exceljs';
 import type { ScheduleCellData, ScheduleGridData } from '../models/schedule-grid.models';
 import { cellKindClass } from './schedule-cell.mapper';
 
@@ -39,14 +39,23 @@ const LIGHT_TEXT = new Set([
 ]);
 
 function toHex([r, g, b]: Rgb): string {
-  return [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('').toUpperCase();
+  return [r, g, b].map((value) => value.toString(16).padStart(2, '0')).join('').toUpperCase();
 }
 
 function styleForCell(cell: ScheduleCellData): { bg: string; fg: string } {
-  const cls = cellKindClass(cell.kind, cell.display);
-  const bg = toHex(CELL_COLORS[cls] ?? CELL_COLORS['cell-empty']!);
-  const fg = LIGHT_TEXT.has(cls) ? 'FFFFFF' : '111827';
-  return { bg, fg };
+  const cssClass = cellKindClass(cell.kind, cell.display);
+  const background = toHex(CELL_COLORS[cssClass] ?? CELL_COLORS['cell-empty']!);
+  const foreground = LIGHT_TEXT.has(cssClass) ? 'FFFFFF' : '111827';
+  return { bg: background, fg: foreground };
+}
+
+function asValidDate(value?: string | Date): Date {
+  const date = value instanceof Date ? new Date(value) : value ? new Date(value) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function worksheetName(title: string): string {
+  return title.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Escala';
 }
 
 function triggerDownload(buffer: ArrayBuffer, fileName: string): void {
@@ -54,58 +63,59 @@ function triggerDownload(buffer: ArrayBuffer, fileName: string): void {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  a.rel = 'noopener';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.rel = 'noopener';
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  // Safari/iOS ainda pode estar consumindo a URL quando o clique retorna.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-/** Excel A4-friendly: linhas = funcionários, colunas = dias, cores da escala. */
-export async function downloadScheduleExcel(
+/** Monta o workbook no padrão visual clássico da escala. */
+export async function buildScheduleExcelWorkbook(
   grid: ScheduleGridData,
   title?: string,
-): Promise<void> {
+  generatedAt?: string | Date,
+): Promise<Workbook> {
+  const excelModule = await import('exceljs');
+  const ExcelJS = excelModule.default;
   const monthLabel = String(grid.month).padStart(2, '0');
-  const docTitle = title ?? `Escala ${monthLabel}/${grid.year}`;
-  const fileName = `escala_${grid.year}_${monthLabel}.xlsx`;
+  const documentTitle = title ?? `Escala ${monthLabel}/${grid.year}`;
+  const generatedDate = asValidDate(generatedAt);
 
-  const wb = new ExcelJS.Workbook();
-  wb.creator = 'Escala PAO/APAO';
-  wb.created = new Date();
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Escala PAO/APAO';
+  workbook.created = generatedDate;
 
-  const sheetName = docTitle.replace(/[\\/?*[\]]/g, ' ').slice(0, 31) || 'Escala';
-  const ws = wb.addWorksheet(sheetName, {
+  const sheet = workbook.addWorksheet(worksheetName(documentTitle), {
     views: [{ state: 'frozen', xSplit: 1, ySplit: 2 }],
     pageSetup: {
       orientation: 'landscape',
       fitToPage: true,
       fitToWidth: 1,
       fitToHeight: 1,
-      paperSize: 9, // A4
+      paperSize: 9,
     },
   });
 
-  const dayCount = grid.dayNumbers.length;
-  const lastCol = dayCount + 1;
+  const lastColumn = grid.dayNumbers.length + 1;
 
-  // Título
-  ws.mergeCells(1, 1, 1, lastCol);
-  const titleCell = ws.getCell(1, 1);
-  titleCell.value = docTitle;
+  sheet.mergeCells(1, 1, 1, lastColumn);
+  const titleCell = sheet.getCell(1, 1);
+  titleCell.value = documentTitle;
   titleCell.font = { bold: true, size: 14, color: { argb: 'FF111827' } };
   titleCell.alignment = { vertical: 'middle', horizontal: 'left' };
-  ws.getRow(1).height = 22;
+  sheet.getRow(1).height = 22;
 
-  // Cabeçalho
-  const header = ws.getRow(2);
+  const header = sheet.getRow(2);
   header.getCell(1).value = 'Funcionário';
-  grid.dayNumbers.forEach((day, i) => {
-    const wd = grid.weekdayLabels[i] ?? '';
-    header.getCell(i + 2).value = wd ? `${day}\n${wd}` : day;
+  grid.dayNumbers.forEach((day, index) => {
+    const weekday = grid.weekdayLabels[index] ?? '';
+    header.getCell(index + 2).value = weekday ? `${day}\n${weekday}` : day;
   });
   header.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 };
@@ -120,26 +130,25 @@ export async function downloadScheduleExcel(
   });
   header.height = 28;
 
-  ws.getColumn(1).width = 22;
-  for (let c = 2; c <= lastCol; c++) {
-    ws.getColumn(c).width = 4.2;
+  sheet.getColumn(1).width = 22;
+  for (let column = 2; column <= lastColumn; column += 1) {
+    sheet.getColumn(column).width = 4.2;
   }
 
   let excelRow = 3;
   for (const group of grid.groups) {
-    // Linha de grupo (PAO / APAO)
-    ws.mergeCells(excelRow, 1, excelRow, lastCol);
-    const groupCell = ws.getCell(excelRow, 1);
+    sheet.mergeCells(excelRow, 1, excelRow, lastColumn);
+    const groupCell = sheet.getCell(excelRow, 1);
     groupCell.value = group.label;
     groupCell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
     groupCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF6900' } };
     groupCell.alignment = { vertical: 'middle', horizontal: 'left' };
-    excelRow++;
+    excelRow += 1;
 
-    for (const row of group.rows) {
-      const r = ws.getRow(excelRow);
-      const nameCell = r.getCell(1);
-      nameCell.value = row.name;
+    for (const employee of group.rows) {
+      const row = sheet.getRow(excelRow);
+      const nameCell = row.getCell(1);
+      nameCell.value = employee.name;
       nameCell.font = { bold: true, size: 9, color: { argb: 'FF111827' } };
       nameCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
       nameCell.alignment = { vertical: 'middle', horizontal: 'left' };
@@ -150,11 +159,12 @@ export async function downloadScheduleExcel(
         right: { style: 'thin', color: { argb: 'FFD1D5DB' } },
       };
 
-      grid.dayNumbers.forEach((day, i) => {
-        const cellData = row.cells[day - 1] ?? ({ display: '', kind: 'empty' } as ScheduleCellData);
-        const cell = r.getCell(i + 2);
-        cell.value = cellData.display || '';
+      grid.dayNumbers.forEach((day, index) => {
+        const cellData =
+          employee.cells[day - 1] ?? ({ display: '', kind: 'empty' } as ScheduleCellData);
+        const cell = row.getCell(index + 2);
         const { bg, fg } = styleForCell(cellData);
+        cell.value = cellData.display || '';
         cell.font = { bold: true, size: 8, color: { argb: `FF${fg}` } };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${bg}` } };
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -166,18 +176,36 @@ export async function downloadScheduleExcel(
         };
       });
 
-      r.height = 16;
-      excelRow++;
+      row.height = 16;
+      excelRow += 1;
     }
   }
 
-  // Rodapé leve
   excelRow += 1;
-  ws.mergeCells(excelRow, 1, excelRow, lastCol);
-  const foot = ws.getCell(excelRow, 1);
-  foot.value = `Gerado em ${new Date().toLocaleString('pt-BR')} · Escala PAO/APAO`;
-  foot.font = { size: 8, italic: true, color: { argb: 'FF6B7280' } };
+  sheet.mergeCells(excelRow, 1, excelRow, lastColumn);
+  const footer = sheet.getCell(excelRow, 1);
+  footer.value = `Gerado em ${generatedDate.toLocaleString('pt-BR')} · Escala PAO/APAO`;
+  footer.font = { size: 8, italic: true, color: { argb: 'FF6B7280' } };
 
-  const buffer = await wb.xlsx.writeBuffer();
-  triggerDownload(buffer as ArrayBuffer, fileName);
+  return workbook;
+}
+
+export async function buildScheduleExcelBuffer(
+  grid: ScheduleGridData,
+  title?: string,
+  generatedAt?: string | Date,
+): Promise<ArrayBuffer> {
+  const workbook = await buildScheduleExcelWorkbook(grid, title, generatedAt);
+  return (await workbook.xlsx.writeBuffer()) as ArrayBuffer;
+}
+
+/** Excel A4-friendly: linhas = funcionários, colunas = dias, cores da escala. */
+export async function downloadScheduleExcel(
+  grid: ScheduleGridData,
+  title?: string,
+  generatedAt?: string | Date,
+): Promise<void> {
+  const monthLabel = String(grid.month).padStart(2, '0');
+  const buffer = await buildScheduleExcelBuffer(grid, title, generatedAt);
+  triggerDownload(buffer, `escala_${grid.year}_${monthLabel}.xlsx`);
 }
