@@ -9,6 +9,17 @@ import { homeRouteForRole } from '../models/auth.models';
 const STORAGE_TOKEN = 'escala_auth_token';
 const STORAGE_USER = 'escala_auth_user';
 
+/** Resposta de login com desafio MFA (produção). */
+export interface MfaChallengeResponse {
+  mfaRequired?: true;
+  mfaSetupRequired?: true;
+  challengeToken: string;
+  qrCodeDataUrl?: string;
+  manualKey?: string;
+}
+
+export type LoginResult = LoginResponse | MfaChallengeResponse;
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
@@ -26,10 +37,47 @@ export class AuthService {
     return this.tokenSignal();
   }
 
-  login(email: string, password: string): Observable<LoginResponse> {
+  /** Produção espera campo `login` (não `email`). */
+  login(login: string, password: string): Observable<LoginResult> {
+    return this.http.post<LoginResult>(`${this.base}/auth/login`, { login, password }).pipe(
+      tap((res) => {
+        if (res && 'token' in res && res.token) {
+          this.persistSession(res.token, res.user);
+        }
+      }),
+    );
+  }
+
+  completeMfaLogin(challengeToken: string, code: string): Observable<LoginResponse> {
     return this.http
-      .post<LoginResponse>(`${this.base}/auth/login`, { email, password })
+      .post<LoginResponse>(`${this.base}/auth/login/mfa`, { challengeToken, code })
       .pipe(tap((res) => this.persistSession(res.token, res.user)));
+  }
+
+  mfaStatus() {
+    return this.http.get<{ enabled: boolean }>(`${this.base}/auth/mfa/status`);
+  }
+
+  setupMfa() {
+    return this.http.post<{ qrCodeDataUrl: string; manualKey: string }>(
+      `${this.base}/auth/mfa/setup`,
+      {},
+    );
+  }
+
+  enableMfa(code: string) {
+    return this.http.post<void>(`${this.base}/auth/mfa/enable`, { code });
+  }
+
+  disableMfa(code: string) {
+    return this.http.post<void>(`${this.base}/auth/mfa/disable`, { code });
+  }
+
+  changePassword(currentPassword: string, newPassword: string) {
+    return this.http.post<void>(`${this.base}/auth/change-password`, {
+      currentPassword,
+      newPassword,
+    });
   }
 
   restoreSession(): Observable<AuthUser | null> {

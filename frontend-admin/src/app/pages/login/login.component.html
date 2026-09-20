@@ -7,8 +7,8 @@
       <div class="login-brand">
         <img
           class="login-logo"
-          src="assets/brand/logo-gol-placeholder.svg"
-          alt="Piloto de Apoio"
+          [src]="brandLogoSrc"
+          [alt]="brandLogoAlt"
         />
         <h1 class="login-title">Portal Escala PAO</h1>
         <p class="login-subtitle">Acesso unificado — Administração e Colaboradores</p>
@@ -19,49 +19,73 @@
       }
 
       <form class="login-form" (ngSubmit)="submit()">
-        <div class="field">
-          <label for="email">E-mail</label>
-          <input
-            pInputText
-            id="email"
-            type="email"
-            name="email"
-            [(ngModel)]="email"
-            autocomplete="username"
-            placeholder="seu.email@gol.com.br"
-            class="w-full"
-            required
-          />
-        </div>
+        @if (!awaitingMfa()) {
+          <div class="field">
+            <label for="login">Login</label>
+            <input
+              pInputText
+              id="login"
+              type="text"
+              name="login"
+              [(ngModel)]="login"
+              (input)="sanitizeLogin()"
+              autocomplete="username"
+              placeholder="seu login"
+              class="w-full"
+              required
+            />
+          </div>
 
-        <div class="field">
-          <label for="password">Senha</label>
-          <p-password
-            inputId="password"
-            name="password"
-            [(ngModel)]="password"
-            [feedback]="false"
-            [toggleMask]="true"
-            autocomplete="current-password"
-            placeholder="••••••••"
-            styleClass="w-full"
-            inputStyleClass="w-full"
-            required
-          />
-        </div>
+          <div class="field">
+            <label for="password">Senha</label>
+            <p-password
+              inputId="password"
+              name="password"
+              [(ngModel)]="password"
+              [feedback]="false"
+              [toggleMask]="true"
+              autocomplete="current-password"
+              placeholder="••••••••"
+              styleClass="w-full"
+              inputStyleClass="w-full"
+              required
+            />
+          </div>
+        } @else {
+          @if (mfaSetupQrCode(); as qr) {
+            <div class="field mfa-setup">
+              <p>Escaneie o QR Code no autenticador:</p>
+              <img [src]="qr" alt="QR Code MFA" class="mfa-qr" />
+              @if (mfaManualKey(); as key) {
+                <p class="mfa-manual">Chave manual: <code>{{ key }}</code></p>
+              }
+            </div>
+          }
+          <div class="field">
+            <label for="mfaCode">Código do autenticador</label>
+            <input
+              pInputText
+              id="mfaCode"
+              type="text"
+              name="mfaCode"
+              [(ngModel)]="mfaCode"
+              autocomplete="one-time-code"
+              inputmode="numeric"
+              placeholder="000000"
+              class="w-full"
+              required
+            />
+          </div>
+        }
 
         <p-button
           type="submit"
-          label="Entrar"
+          [label]="awaitingMfa() ? 'Confirmar código' : 'Entrar'"
           styleClass="btn-gol-primary login-submit w-full"
           [loading]="loading()"
           [disabled]="showTransition()"
         />
       </form>
-
-      <p class="login-footnote">
-        Ambiente local — admin: admin&#64;escala.local · colaborador: funcionario&#64;escala.local
-      </p>
     </p-card>
   </div>
   }
