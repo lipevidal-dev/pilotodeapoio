@@ -38,3 +38,28 @@ export function applyInstructionShiftIfNeeded(
   }
   return toInstructionShiftCode(shiftCode);
 }
+
+type InstructionWindow = {
+  inInstruction?: boolean;
+  instructionStartDate?: string | null;
+  instructionEndDate?: string | null;
+};
+
+/**
+ * Instrução no dia civil:
+ * - Se há janela (início/fim), vale só dentro dela (flag stale fora da janela é ignorada).
+ * - Sem janela, usa o boolean `inInstruction`.
+ */
+export function isInInstructionOnDate(
+  employee: InstructionWindow,
+  date: string,
+): boolean {
+  const start = employee.instructionStartDate ?? null;
+  const end = employee.instructionEndDate ?? null;
+  if (start || end) {
+    if (start && date < start) return false;
+    if (end && date > end) return false;
+    return true;
+  }
+  return Boolean(employee.inInstruction);
+}

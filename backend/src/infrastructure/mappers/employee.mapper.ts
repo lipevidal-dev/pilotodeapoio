@@ -19,6 +19,12 @@ export function prismaEmployeeToDomain(row: PrismaEmployeeWithRole): DomainEmplo
     active: row.active,
     birthDate: row.birthDate ? isoDateKey(row.birthDate) : null,
     inInstruction: row.inInstruction ?? false,
+    instructionStartDate: row.instructionStartDate
+      ? isoDateKey(row.instructionStartDate)
+      : null,
+    instructionEndDate: row.instructionEndDate
+      ? isoDateKey(row.instructionEndDate)
+      : null,
   };
 }
 

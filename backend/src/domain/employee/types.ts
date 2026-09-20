@@ -17,4 +17,8 @@ export interface Employee {
   notes?: string;
   /** PAO/APAO em instrução — turnos alocados como TI6, TI7, etc. */
   inInstruction?: boolean;
+  /** yyyy-mm-dd — início da janela de instrução (opcional). */
+  instructionStartDate?: string | null;
+  /** yyyy-mm-dd — fim da janela de instrução (opcional). */
+  instructionEndDate?: string | null;
 }

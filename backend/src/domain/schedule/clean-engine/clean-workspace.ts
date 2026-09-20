@@ -35,6 +35,7 @@ import { isRateioTurnCode, type CleanEngineOptions } from "./clean-types.js";
 import {
   applyInstructionShiftIfNeeded,
   baseShiftCode,
+  isInInstructionOnDate,
   isInstructionShiftCode,
 } from "../instruction-shift.js";
 import {
@@ -100,6 +101,7 @@ export class CleanWorkspace {
       options.allowedShiftCodes ??
       (this.usesNextMotorRules() ? this.coverageShiftCodes : this.resolveCoverageShiftCodes());
     this.allowedShiftCodes = new Set(allowed.map((code) => code.toUpperCase()));
+    // Flag bruto do cadastro — a checagem efetiva usa a janela de datas no dia.
     this.instructionByUuid = new Map(
       input.employees.map((e) => [e.uuid, Boolean(e.employee.inInstruction)]),
     );
@@ -185,7 +187,11 @@ export class CleanWorkspace {
   isShiftAllowedForGeneration(shiftCode: string): boolean {
     if (!this.usesNextMotorRules()) return true;
     if (!isRateioTurnCode(shiftCode)) return true;
-    return this.allowedShiftCodes.has(shiftCode.toUpperCase());
+    const upper = shiftCode.toUpperCase();
+    if (this.allowedShiftCodes.has(upper)) return true;
+    // TI8 conta como T8 para elegibilidade do motor (cobertura usa baseShiftCode).
+    const base = baseShiftCode(upper);
+    return base !== upper && this.allowedShiftCodes.has(base);
   }
 
   private resolveCoverageShiftCodes(): string[] {
@@ -601,7 +607,10 @@ export class CleanWorkspace {
     });
   }
 
-  isEmployeeInInstruction(employeeUuid: string): boolean {
+  isEmployeeInInstruction(employeeUuid: string, date?: string): boolean {
+    const emp = this.input.employees.find((e) => e.uuid === employeeUuid);
+    if (!emp) return this.instructionByUuid.get(employeeUuid) ?? false;
+    if (date) return isInInstructionOnDate(emp.employee, date);
     return this.instructionByUuid.get(employeeUuid) ?? false;
   }
 
@@ -615,7 +624,10 @@ export class CleanWorkspace {
     const emp = this.input.employees.find((e) => e.uuid === employeeUuid);
     if (!emp) return false;
     let normalized = shiftCode.toUpperCase();
-    normalized = applyInstructionShiftIfNeeded(normalized, this.isEmployeeInInstruction(employeeUuid));
+    normalized = applyInstructionShiftIfNeeded(
+      normalized,
+      this.isEmployeeInInstruction(employeeUuid, date),
+    );
     if (isRateioTurnCode(normalized) && !this.isShiftAllowedForGeneration(normalized)) {
       this.audit.record("COVERAGE_FAILED", phase, `turno ${normalized} desabilitado na configuração do motor`, {
         date,
