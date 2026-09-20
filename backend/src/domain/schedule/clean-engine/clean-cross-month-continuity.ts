@@ -9,6 +9,7 @@ import type { GeneratedAllocation } from "../generation-types.js";
 import type { CleanWorkspace } from "./clean-workspace.js";
 import { isDateBeyondCurrentMonth } from "./clean-cross-month-t8.js";
 import { motorRuleEnabled } from "./clean-motor-rules.js";
+import { isRateioTurnCode } from "./clean-types.js";
 
 const PHASE = "CROSS_MONTH_CONTINUITY";
 
@@ -181,7 +182,8 @@ export function finalizeCrossMonthContinuations(ws: CleanWorkspace): void {
     if (did == null) continue;
     const key = assignmentKey(did, row.date);
     const upper = row.label.toUpperCase();
-    if (upper === "T8") continue;
+    // Turnos rateio (T6/T7/T8) e ND/FOLGA ficam só em crossMonthPreAllocations.
+    if (isRateioTurnCode(upper)) continue;
     if (isProductiveWorkAllocationLabel(row.label) || upper === "FOLGA") {
       ws.blocked.delete(key);
       ws.removeAllocationForDay(row.employeeUuid, row.date);

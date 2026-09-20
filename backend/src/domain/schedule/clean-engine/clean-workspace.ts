@@ -137,7 +137,8 @@ export class CleanWorkspace {
       if (lock.date < nextMonthStart) continue;
       const label = normalizeOperationalLabel(lock.label);
       const upper = label.toUpperCase();
-      if (upper === "T8" || upper === CROSS_MONTH_ND_LABEL.toUpperCase()) {
+      // T6/T7/T8 spillover de cobertura + ND CONTINUIDADE / FOLGA 6x1.
+      if (isRateioTurnCode(upper) || upper === CROSS_MONTH_ND_LABEL.toUpperCase() || upper === "FOLGA") {
         this.crossMonthPreAllocations.push({
           employeeUuid: lock.employeeUuid,
           date: lock.date,
@@ -167,7 +168,7 @@ export class CleanWorkspace {
     if (!uuid) return undefined;
     for (const row of this.crossMonthPreAllocations) {
       if (row.employeeUuid !== uuid || row.date !== date) continue;
-      if (row.label.toUpperCase() === "T8") return "T8";
+      if (isRateioTurnCode(row.label)) return baseShiftCode(row.label);
     }
     return undefined;
   }
@@ -178,10 +179,30 @@ export class CleanWorkspace {
     for (const row of this.crossMonthPreAllocations) {
       if (row.employeeUuid !== uuid || row.date !== date) continue;
       const upper = row.label.toUpperCase();
-      if (upper === "T8") return undefined;
+      if (isRateioTurnCode(upper)) return undefined;
       return row.label;
     }
     return undefined;
+  }
+
+  /** Outro PAO já tem este turno rateio pré-alocado no mês seguinte. */
+  otherPaoHasCrossMonthShift(date: string, shiftCode: string, excludeUuid: string): boolean {
+    const normalized = baseShiftCode(shiftCode);
+    for (const row of this.crossMonthPreAllocations) {
+      if (row.date !== date || row.employeeUuid === excludeUuid) continue;
+      if (baseShiftCode(row.label) !== normalized) continue;
+      if (this.paoEmployees.some((p) => p.uuid === row.employeeUuid)) return true;
+    }
+    return false;
+  }
+
+  /** Dia do mês seguinte livre para spillover de cobertura (sem turno/bloqueio fixo). */
+  isNextMonthDayFreeForCoverage(uuid: string, date: string): boolean {
+    const did = this.uuidToDomain.get(uuid);
+    if (did == null) return false;
+    if (this.getCrossMonthShiftOnDay(did, date)) return false;
+    if (this.getCrossMonthBlockLabel(did, date)) return false;
+    return true;
   }
 
   isShiftAllowedForGeneration(shiftCode: string): boolean {
@@ -247,8 +268,8 @@ export class CleanWorkspace {
     for (const row of this.crossMonthPreAllocations) {
       const did = this.uuidToDomain.get(row.employeeUuid);
       if (did == null) continue;
-      if (row.label.toUpperCase() === "T8") {
-        merged.set(assignmentKey(did, row.date), "T8");
+      if (isRateioTurnCode(row.label)) {
+        merged.set(assignmentKey(did, row.date), baseShiftCode(row.label));
       }
     }
     return merged;

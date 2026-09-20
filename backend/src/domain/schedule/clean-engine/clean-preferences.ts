@@ -113,6 +113,33 @@ function blockDatesFromStart(ws: CleanWorkspace, startDate: string, blockSize: n
   return dates;
 }
 
+/**
+ * Bloco que pode transbordar para o mês seguinte.
+ * `inMonth` = dias do mês corrente; `spillover` = datas no mês seguinte (pré-alocação fixa).
+ */
+export function blockDatesWithSpillover(
+  ws: CleanWorkspace,
+  startDate: string,
+  blockSize: number,
+): { inMonth: string[]; spillover: string[] } | null {
+  const startIdx = ws.days.indexOf(startDate);
+  if (startIdx < 0 || blockSize <= 0) return null;
+  const lastIdx = ws.days.length - 1;
+  const lastDay = ws.days[lastIdx]!;
+  const inMonth: string[] = [];
+  const spillover: string[] = [];
+  for (let i = 0; i < blockSize; i++) {
+    const idx = startIdx + i;
+    if (idx <= lastIdx) {
+      inMonth.push(ws.days[idx]!);
+    } else {
+      spillover.push(addDays(lastDay, idx - lastIdx));
+    }
+  }
+  if (inMonth.length === 0) return null;
+  return { inMonth, spillover };
+}
+
 function canPlacePreferredBlockDay(
   ws: CleanWorkspace,
   emp: (typeof ws.paoEmployees)[number],
@@ -207,7 +234,8 @@ export function tryPlacePreferredBlock(
 
 /**
  * Cobertura T6/T7: fecha furo só com bloco do tamanho do agrupamento configurado.
- * Não encolhe para 3/4 — se o bloco não cabe, o furo permanece (gap).
+ * Não encolhe para 3/4 — se o bloco não cabe no mês, tenta spillover cross-month
+ * (dias no mês + pré-alocações fixas no mês seguinte).
  */
 export function tryFillCoverageBlock(
   ws: CleanWorkspace,
@@ -230,6 +258,10 @@ export function tryFillCoverageBlock(
   const anyCandidate = opts?.anyCandidate === true;
   const spacingDays = bypassSpacing ? 0 : getTurnSpacingDays(ws, shiftCode);
 
+  // Candidatos já vêm ordenados por sortCoverageCandidatesForShift
+  // (dívida de rateio justo → preferência → mais novo no residual).
+  const ordered = candidates;
+
   for (const blockSize of sizes) {
     for (let offset = 0; offset >= -(blockSize - 1); offset--) {
       const startIdx = gapIdx + offset;
@@ -239,22 +271,9 @@ export function tryFillCoverageBlock(
       if (!blockDates || !blockDates.includes(gapDate)) continue;
       if (!blockDates.every((d) => !ws.hasPaoCoverage(d, shiftCode))) continue;
 
-      for (const emp of candidates) {
-        if (!bypassSpacing) {
-          if (
-            motorShiftRuleEnabled(ws.options, "pao_espacamento_turnos", shiftCode) &&
-            prefersRateioShift(ws, emp.domainId, shiftCode) &&
-            isBlockedOnlyByTurnSpacing(ws, emp.domainId, startDate, shiftCode)
-          ) {
-            continue;
-          }
-        } else if (!anyCandidate) {
-          if (
-            !prefersRateioShift(ws, emp.domainId, shiftCode) ||
-            !isBlockedOnlyByTurnSpacing(ws, emp.domainId, startDate, shiftCode)
-          ) {
-            continue;
-          }
+      for (const emp of ordered) {
+        if (!candidatePassesCoverageFilters(ws, emp, shiftCode, startDate, bypassSpacing, anyCandidate)) {
+          continue;
         }
         const placed = tryPlacePreferredBlock(
           ws,
@@ -284,8 +303,204 @@ export function tryFillCoverageBlock(
         }
       }
     }
+
+    // Spillover: bloco atravessa o fim do mês (ex.: 28–30 + 01–02).
+    if (
+      tryFillCoverageBlockWithSpillover(
+        ws,
+        gapDate,
+        gapIdx,
+        shiftCode,
+        phase,
+        ordered,
+        blockSize,
+        spacingDays,
+        bypassSpacing,
+        anyCandidate,
+      )
+    ) {
+      return true;
+    }
   }
   return false;
+}
+
+/** Prioriza maior dívida de rateio justo; empate → menos turnos do código → mais novo. */
+export function sortCandidatesByFairRateioDebt(
+  ws: CleanWorkspace,
+  candidates: (typeof ws.paoEmployees)[number][],
+  shiftCode: string,
+): (typeof ws.paoEmployees)[number][] {
+  const normalized = shiftCode.toUpperCase();
+  return [...candidates].sort((a, b) => {
+    const deficitCmp = ws.metaTurnosDeficit(b.uuid) - ws.metaTurnosDeficit(a.uuid);
+    if (deficitCmp !== 0) return deficitCmp;
+    const ta = ws.countRateioTurnsForShift(a.uuid, normalized);
+    const tb = ws.countRateioTurnsForShift(b.uuid, normalized);
+    if (ta !== tb) return ta - tb;
+    // Residual: mais novo primeiro (seniority maior = mais novo no cadastro piloto).
+    const senCmp = b.employee.seniority - a.employee.seniority;
+    if (senCmp !== 0) return senCmp;
+    return a.employee.name.localeCompare(b.employee.name);
+  });
+}
+
+function candidatePassesCoverageFilters(
+  ws: CleanWorkspace,
+  emp: (typeof ws.paoEmployees)[number],
+  shiftCode: string,
+  startDate: string,
+  bypassSpacing: boolean,
+  anyCandidate: boolean,
+): boolean {
+  if (!bypassSpacing) {
+    if (
+      motorShiftRuleEnabled(ws.options, "pao_espacamento_turnos", shiftCode) &&
+      prefersRateioShift(ws, emp.domainId, shiftCode) &&
+      isBlockedOnlyByTurnSpacing(ws, emp.domainId, startDate, shiftCode)
+    ) {
+      return false;
+    }
+  } else if (!anyCandidate) {
+    if (
+      !prefersRateioShift(ws, emp.domainId, shiftCode) ||
+      !isBlockedOnlyByTurnSpacing(ws, emp.domainId, startDate, shiftCode)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Fecha furo de cobertura com bloco parcial no mês + pré-alocações no mês seguinte.
+ * Só cobre gaps do mês corrente; spillover garante o tamanho do agrupamento.
+ */
+function tryFillCoverageBlockWithSpillover(
+  ws: CleanWorkspace,
+  gapDate: string,
+  gapIdx: number,
+  shiftCode: string,
+  phase: string,
+  candidates: (typeof ws.paoEmployees)[number][],
+  blockSize: number,
+  spacingDays: number,
+  bypassSpacing: boolean,
+  anyCandidate: boolean,
+): boolean {
+  const normalized = shiftCode.toUpperCase();
+
+  for (let offset = 0; offset >= -(blockSize - 1); offset--) {
+    const startIdx = gapIdx + offset;
+    if (startIdx < 0) break;
+    const startDate = ws.days[startIdx]!;
+    const resolved = blockDatesWithSpillover(ws, startDate, blockSize);
+    if (!resolved || resolved.spillover.length === 0) continue;
+    if (!resolved.inMonth.includes(gapDate)) continue;
+    if (!resolved.inMonth.every((d) => !ws.hasPaoCoverage(d, shiftCode))) continue;
+
+    for (const emp of candidates) {
+      if (!candidatePassesCoverageFilters(ws, emp, shiftCode, startDate, bypassSpacing, anyCandidate)) {
+        continue;
+      }
+      if (
+        !canPlaceCoverageSpilloverBlock(
+          ws,
+          emp,
+          normalized,
+          resolved.inMonth,
+          resolved.spillover,
+          spacingDays,
+        )
+      ) {
+        continue;
+      }
+
+      let placed = 0;
+      for (const date of resolved.inMonth) {
+        if (!ws.tryAssign(emp.uuid, date, normalized, phase)) {
+          for (let j = 0; j < placed; j++) {
+            ws.unassignPlannedDay(emp.domainId, resolved.inMonth[j]!);
+          }
+          placed = -1;
+          break;
+        }
+        placed++;
+      }
+      if (placed < 0) continue;
+
+      const spillRows = resolved.spillover.map((date) => ({
+        employeeUuid: emp.uuid,
+        date,
+        label: normalized,
+      }));
+      ws.addCrossMonthPreAllocations(spillRows);
+
+      ws.audit.record(
+        "COVERAGE_ASSIGNED",
+        phase,
+        `bloco ${blockSize} dias — ${resolved.inMonth.length} no mês + ${resolved.spillover.length} spillover cross-month`,
+        {
+          date: gapDate,
+          shiftCode: normalized,
+          employeeUuid: emp.uuid,
+          employeeName: emp.employee.name,
+        },
+      );
+      return true;
+    }
+  }
+  return false;
+}
+
+function canPlaceCoverageSpilloverBlock(
+  ws: CleanWorkspace,
+  emp: (typeof ws.paoEmployees)[number],
+  shiftCode: string,
+  inMonth: string[],
+  spillover: string[],
+  spacingDays: number,
+): boolean {
+  for (let i = 0; i < inMonth.length; i++) {
+    if (!canPlacePreferredBlockDay(ws, emp, shiftCode, inMonth[i]!, i === 0, spacingDays)) {
+      return false;
+    }
+  }
+
+  for (const date of spillover) {
+    if (!ws.isNextMonthDayFreeForCoverage(emp.uuid, date)) return false;
+    if (ws.otherPaoHasCrossMonthShift(date, shiftCode, emp.uuid)) return false;
+  }
+
+  // Pré-valida canWork nos dias do mês (com probe) e nos spillover via snapshot+probe.
+  let plannedProbe = ws.mergedPlannedForContinuity();
+  for (const date of inMonth) {
+    const check = ws.checkCanWork(emp.uuid, date, shiftCode, plannedProbe);
+    if (!check.ok) return false;
+    plannedProbe = new Map(plannedProbe);
+    plannedProbe.set(assignmentKey(emp.domainId, date), shiftCode);
+  }
+
+  // Inclui spillover já existentes no probe para consecutivos/12h.
+  const withCross = ws.mergedPlannedSnapshot();
+  for (const [key, code] of plannedProbe) withCross.set(key, code);
+
+  for (const date of spillover) {
+    const check = ws.checkCanWork(emp.uuid, date, shiftCode, withCross);
+    if (!check.ok) return false;
+    withCross.set(assignmentKey(emp.domainId, date), shiftCode);
+  }
+
+  // Meta: só os dias do mês corrente contam no teto deste mês.
+  if (
+    ws.usesNextMotorRules() &&
+    motorRuleEnabled(ws.options, "pao_meta_turnos") &&
+    ws.wouldExceedTotalMetaTurnos(emp.uuid, inMonth.length)
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 /** T6/T7 exigem bloco ≥3; T9 (e similares unitários) podem fechar furo em 1 dia. */
