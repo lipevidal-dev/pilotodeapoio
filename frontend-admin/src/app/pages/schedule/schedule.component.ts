@@ -314,7 +314,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     const grid = this.displayGrid();
     const data = this.scheduleData();
     if (!grid) return null;
-    return computeGridAuditTotals(grid, data?.assignments ?? [], data?.employees ?? []);
+    return computeGridAuditTotals(grid, data?.assignments ?? []);
   });
 
   hasVisibleRows(grid: ScheduleGridData): boolean {

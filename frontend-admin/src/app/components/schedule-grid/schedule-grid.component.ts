@@ -196,10 +196,10 @@ export class ScheduleGridComponent {
   }
 
   isDraggableCell = (cell: ScheduleCellData): boolean =>
-    cellIsDraggable(cell, { fullyEditable: this.fullyEditable() });
+    cellIsDraggable(cell);
 
   isDeletableCell = (cell: ScheduleCellData): boolean =>
-    cellIsDeletable(cell, { fullyEditable: this.fullyEditable() });
+    cellIsDeletable(cell);
 
   onCellClick(employeeId: string, day: number, cell: ScheduleCellData, isLead = false): void {
     if (isLead) return;
