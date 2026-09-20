@@ -5,6 +5,7 @@ import {
 } from "../../domain/schedule/schedule-engine-router.js";
 import { buildCleanEngineOptionsFromMotorConfig } from "../../domain/schedule/next-motor/next-motor-engine-options.js";
 import { MANUAL_PREALLOC_LABELS } from "../../domain/schedule/operational-labels.js";
+import { isPreAllocationRemovedOnClear } from "../../domain/schedule/clear-generated-policy.js";
 import { validateCleanGenerationBeforeSave, filterPersistenceBlockingIssues } from "../../domain/schedule/clean-engine/clean-validator.js";
 import type { CleanEngineOptions } from "../../domain/schedule/clean-engine/clean-types.js";
 import { CalendarRepository } from "../../infrastructure/repositories/calendar.repository.js";
@@ -14,7 +15,10 @@ import { NextMotorConfigRepository } from "../../infrastructure/repositories/nex
 import { applyMotorEmployeeShiftPrefs } from "../../domain/schedule/next-motor/next-motor-employee-prefs.js";
 import {
   buildGenerationInput,
+  filterStaleCrossMonthPreAllocations,
+  manualAssignmentsToLocked,
   filterLockedAllocationsForEmployees,
+  mergeLockedAllocations,
   preAllocationsToLocked,
 } from "../../infrastructure/mappers/generation-input.mapper.js";
 import {
@@ -70,13 +74,23 @@ export class GenerateScheduleUseCase {
     },
   ) {}
 
-  async execute(year: number, month: number): Promise<GenerateScheduleResult> {
+  async execute(
+    year: number,
+    month: number,
+    opts: { preferencesOnly?: boolean } = {},
+  ): Promise<GenerateScheduleResult> {
     const existing = await this.scheduleRepo.findMonth(year, month);
     if (existing?.status === "PUBLISHED") {
       throw new PublishedScheduleCannotRegenerateError(year, month);
     }
 
-    const employees = await this.scheduleRepo.listActiveEmployees();
+    const employees = await this.scheduleRepo.listActiveEmployees(year, month);
+    // Estes colaboradores continuam disponíveis no grid, mas não participam de
+    // nenhuma decisão do motor nem são apagados na regeneração.
+    const manualScheduleOnlyEmployeeIds = employees
+      .filter((employee) => employee.manualScheduleOnly)
+      .map((employee) => employee.id);
+    const automaticEmployees = employees.filter((employee) => !employee.manualScheduleOnly);
     const shifts = await this.scheduleRepo.listShifts(true);
     const roles = await this.scheduleRepo.listRoles(true);
 
@@ -97,11 +111,30 @@ export class GenerateScheduleUseCase {
       shifts,
     });
 
-    const preAllocRows =
+    const preAllocRowsRaw =
       existing?.preAllocations ?? (await this.preAllocRepo.findAll({ year, month }));
+    const preAllocRows = filterStaleCrossMonthPreAllocations(
+      preAllocRowsRaw,
+      crossMonthHistory,
+    );
+    // ND/FOLGA/VOO gerados na rodada anterior são apagados no clearForRegeneration —
+    // não podem travar o motor (senão regenerar herda ND órfão e zera T6/T7).
     const lockedFromDb = filterLockedAllocationsForEmployees(
-      preAllocationsToLocked(preAllocRows),
-      employees.map((e) => e.id),
+      mergeLockedAllocations(
+        preAllocationsToLocked(
+          preAllocRows.filter(
+            (row) =>
+              !manualScheduleOnlyEmployeeIds.includes(row.employeeId) &&
+              !isPreAllocationRemovedOnClear(row.label, row.notes),
+          ),
+        ),
+        manualAssignmentsToLocked(
+          (existing?.assignments ?? []).filter(
+            (row) => !manualScheduleOnlyEmployeeIds.includes(row.employeeId),
+          ),
+        ),
+      ),
+      automaticEmployees.map((e) => e.id),
     );
 
     const skipPersistKeys = new Set(
@@ -113,7 +146,7 @@ export class GenerateScheduleUseCase {
     const input = buildGenerationInput({
       year,
       month,
-      employees,
+      employees: automaticEmployees,
       shifts,
       roles,
       lockedAllocations: lockedFromDb,
@@ -129,6 +162,7 @@ export class GenerateScheduleUseCase {
     });
 
     const engineOptions = buildCleanEngineOptionsFromMotorConfig(motorCfg, shifts);
+    engineOptions.preferencesOnly = opts.preferencesOnly ?? false;
 
     if (
       engineOptions.scopeEmployeeUuids &&
@@ -166,7 +200,7 @@ export class GenerateScheduleUseCase {
 
     const monthRecord = await this.scheduleRepo.upsertGeneratedMonth(year, month);
 
-    await this.scheduleRepo.clearForRegeneration(monthRecord.id);
+    await this.scheduleRepo.clearForRegeneration(monthRecord.id, manualScheduleOnlyEmployeeIds);
     await this.scheduleRepo.saveAssignments(monthRecord.id, generated.assignments);
     await this.scheduleRepo.saveGeneratedPreAllocations(
       monthRecord.id,
@@ -174,16 +208,15 @@ export class GenerateScheduleUseCase {
       skipPersistKeys,
     );
 
-    const dbViolations = validationIssuesToDb(generated.violations, employees);
+    const dbViolations = validationIssuesToDb(generated.violations, automaticEmployees);
     await this.scheduleRepo.saveViolations(monthRecord.id, dbViolations);
 
-    if (generated.crossMonthPreAllocations && generated.crossMonthPreAllocations.length > 0) {
-      await this.scheduleRepo.saveCrossMonthContinuations(
-        year,
-        month,
-        generated.crossMonthPreAllocations,
-      );
-    }
+    // Sempre sincroniza (lista vazia limpa spills antigos no mês seguinte).
+    await this.scheduleRepo.saveCrossMonthContinuations(
+      year,
+      month,
+      generated.crossMonthPreAllocations ?? [],
+    );
 
     const summary = {
       ...generated.summary,

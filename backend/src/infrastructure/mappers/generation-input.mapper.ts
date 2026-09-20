@@ -1,4 +1,4 @@
-import type { Employee, PreAllocation, Role, Shift } from "@prisma/client";
+import type { Employee, Role, Shift } from "@prisma/client";
 import type {
   GenerationInput,
   GenerationInputEmployee,
@@ -8,17 +8,29 @@ import type {
 } from "../../domain/schedule/generation-types.js";
 import { isoDateKey } from "../../domain/rules/date-keys.js";
 import { resolveMotorRoleCodes } from "../../domain/role/motor-codes.js";
-import { normalizeOperationalLabel } from "../../domain/schedule/operational-labels.js";
+import { addDays, iterDays } from "../../domain/rules/dates.js";
+import {
+  CROSS_MONTH_ND_LABEL,
+  normalizeOperationalLabel,
+} from "../../domain/schedule/operational-labels.js";
 import { compareEmployeesBySeniority } from "../../domain/employee/seniority.js";
 import { expandSpecificShiftRequests } from "../../domain/schedule/specific-shift-requests.js";
-import { iterDays } from "../../domain/rules/dates.js";
 import type { EmployeeFcfRule } from "../../domain/employee/fcf-config.js";
 import { buildFcfRulesFromMotorPrefs } from "../../domain/schedule/next-motor/next-motor-employee-prefs.js";
 import type { EmployeeMotorPrefStored } from "../../domain/schedule/next-motor/next-motor-stored-config.js";
 import { prismaEmployeeToDomain } from "./employee.mapper.js";
 import { prismaShiftToDomain } from "./shift.mapper.js";
+import type { CrossMonthHistory } from "../../domain/schedule/cross-month-history.js";
 
 type EmployeeWithRole = Employee & { role?: Role | null };
+type PreAllocationLockRow = {
+  employeeId: string;
+  date: Date;
+  label: string;
+  notes?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+};
 
 export function buildFcfRules(
   employees: EmployeeWithRole[],
@@ -130,7 +142,7 @@ export function buildPreferredShiftMap(
 }
 
 export function preAllocationsToLocked(
-  rows: (PreAllocation & { employee: Employee })[],
+  rows: PreAllocationLockRow[],
 ): Array<{ employeeUuid: string; date: string; label: string; startTime?: string; endTime?: string }> {
   return rows.map((p) => ({
     employeeUuid: p.employeeId,
@@ -139,6 +151,84 @@ export function preAllocationsToLocked(
     startTime: p.startTime ?? undefined,
     endTime: p.endTime ?? undefined,
   }));
+}
+
+/**
+ * Remove continuidades cross-month que sobraram de uma geração anterior e não
+ * são mais sustentadas pelo histórico publicado do mês anterior.
+ *
+ * Ex.: se agosto foi alterado e o funcionário não fecha mais o mês em T8,
+ * pré-alocações T8/ND CONTINUIDADE em setembro deixam de ser obrigatórias.
+ */
+export function filterStaleCrossMonthPreAllocations(
+  rows: PreAllocationLockRow[],
+  crossMonthHistory?: CrossMonthHistory,
+): PreAllocationLockRow[] {
+  const planned = new Map(
+    (crossMonthHistory?.assignments ?? []).map((row) => [
+      `${row.employeeUuid}|${row.date}`,
+      row.shiftCode.toUpperCase(),
+    ]),
+  );
+  const acceptedCrossMonthTurns = new Map<string, string>();
+  const keep = new Set<PreAllocationLockRow>();
+
+  const shiftOn = (employeeUuid: string, date: string): string | undefined =>
+    acceptedCrossMonthTurns.get(`${employeeUuid}|${date}`) ??
+    planned.get(`${employeeUuid}|${date}`);
+
+  const sorted = [...rows].sort((a, b) => isoDateKey(a.date).localeCompare(isoDateKey(b.date)));
+  for (const row of sorted) {
+    const label = normalizeOperationalLabel(row.label).toUpperCase();
+    const isCrossMonth = String(row.notes ?? "").toLowerCase().startsWith("cross-month:");
+    if (!isCrossMonth || (label !== "T8" && label !== CROSS_MONTH_ND_LABEL.toUpperCase())) {
+      keep.add(row);
+      continue;
+    }
+
+    const date = isoDateKey(row.date);
+    const prev = addDays(date, -1);
+    const prev2 = addDays(date, -2);
+
+    if (label === "T8") {
+      if (shiftOn(row.employeeId, prev) === "T8") {
+        keep.add(row);
+        acceptedCrossMonthTurns.set(`${row.employeeId}|${date}`, "T8");
+      }
+      continue;
+    }
+
+    if (shiftOn(row.employeeId, prev) === "T8" && shiftOn(row.employeeId, prev2) === "T8") {
+      keep.add(row);
+    }
+  }
+
+  return rows.filter((row) => keep.has(row));
+}
+
+/** Turnos alocados manualmente na escala — preservados na regeneração sem validação de regras. */
+export function manualAssignmentsToLocked(
+  rows: Array<{ employeeId: string; date: Date; shiftCode: string; source: string }>,
+): Array<{ employeeUuid: string; date: string; label: string }> {
+  return rows
+    .filter((a) => a.source === "MANUAL")
+    .map((a) => ({
+      employeeUuid: a.employeeId,
+      date: isoDateKey(a.date),
+      label: a.shiftCode.toUpperCase(),
+    }));
+}
+
+export function mergeLockedAllocations(
+  ...groups: Array<Array<{ employeeUuid: string; date: string; label: string; startTime?: string; endTime?: string }>>
+): Array<{ employeeUuid: string; date: string; label: string; startTime?: string; endTime?: string }> {
+  const map = new Map<string, { employeeUuid: string; date: string; label: string; startTime?: string; endTime?: string }>();
+  for (const group of groups) {
+    for (const row of group) {
+      map.set(`${row.employeeUuid}|${row.date}`, row);
+    }
+  }
+  return [...map.values()];
 }
 
 /** Mantém só pré-alocações de funcionários que entram na geração (ativos no input). */

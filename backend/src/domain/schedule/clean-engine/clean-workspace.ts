@@ -227,11 +227,9 @@ export class CleanWorkspace {
 
     if (!this.usesNextMotorRules()) return opts;
 
-    if (motorRuleEnabled(this.options, "max_6_consecutive")) {
-      const codes = this.coverageShiftCodes.length ? this.coverageShiftCodes : ["T6", "T7", "T8", "T9"];
-      const maxValues = codes.map((code) => motorShiftMaxConsecutivos(this.options, code, 6));
-      opts.maxConsecutiveWork = Math.min(...maxValues);
-    }
+    // maxConsecutiveWork é por turno (T6=5, T8=3…) — definido em checkCanWork.
+    // NÃO usar Math.min entre turnos: isso forçava T6/T7 ao teto do T8 (=3)
+    // e impedia blocos do agrupamento (ex.: 5 dias).
 
     opts.continuityBlocked = this.mergedBlockedForContinuity();
 
@@ -272,6 +270,13 @@ export class CleanWorkspace {
     const employee = { ...emp.employee, id: emp.domainId };
     const opts: CanWorkOptions = { ...this.canWorkOpts(), ...overrides };
     const normalized = shiftCode.toUpperCase();
+    if (
+      this.usesNextMotorRules() &&
+      motorRuleEnabled(this.options, "max_6_consecutive") &&
+      opts.maxConsecutiveWork == null
+    ) {
+      opts.maxConsecutiveWork = motorShiftMaxConsecutivos(this.options, normalized, 6);
+    }
     if (
       this.usesNextMotorRules() &&
       !opts.fcfPriorityBypass &&
