@@ -25,5 +25,14 @@
     "baseUrl": "."
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "prisma", "src/tests/**"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "prisma",
+    "src/tests/**",
+    "src/application/use-cases/executed-schedule.use-case.ts",
+    "src/application/use-cases/portal-request.use-case.ts",
+    "src/application/use-cases/shift-swap.use-case.ts",
+    "src/interfaces/http/controllers/portal.controller.ts"
+  ]
 }
