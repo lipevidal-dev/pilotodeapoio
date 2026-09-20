@@ -21,7 +21,7 @@ import { MOTOR_VERSION_NEXT } from "../engine-metadata.js";
 import { CleanAuditLog } from "./clean-audit.js";
 import { motorRuleEnabled, motorShiftMaxConsecutivos, motorShiftMetaTurnos, motorShiftRuleEnabled } from "./clean-motor-rules.js";
 import { motorShiftParamValue } from "../next-motor/next-motor-shift-params.js";
-import { fairRateioTargetPerEmployee } from "./clean-fair-rateio.js";
+import { fairRateioExpectedYearToDate, fairRateioTargetPerEmployee, yearRateioSaldo, MAX_MONTHLY_RATEIO_OVERSHOOT } from "./clean-fair-rateio.js";
 import {
   allowsIsolatedCoverageDay,
   employeePrefersShift,
@@ -75,6 +75,13 @@ export class CleanWorkspace {
   /** PAOs em férias quinzenais — metas e alocações só na quinzena livre. */
   readonly vacationFortnightByUuid = new Map<string, VacationFortnight>();
   readonly instructionByUuid = new Map<string, boolean>();
+  /** Contador acumulado jan..(mês−1) — uuid → turnos rateio. */
+  readonly yearRateioPriorByUuid = new Map<string, number>();
+  /**
+   * Folga acima da meta mensal justa (0 na geração normal; 1..2 na EXTRA_COBERTURA).
+   * Afeta teto de checkCanWork / fillCoverageGaps.
+   */
+  metaOvershootAllowance = 0;
 
   constructor(input: GenerationInput, options: CleanEngineOptions = {}) {
     this.input = input;
@@ -107,7 +114,18 @@ export class CleanWorkspace {
     );
     this.loadCrossMonthHistory();
     this.loadCrossMonthPreAllocationsFromInput();
+    this.loadYearRateioPriorCounts();
     this.indexVacationFortnights();
+  }
+
+  private loadYearRateioPriorCounts(): void {
+    const src = this.input.yearRateioPriorCounts;
+    if (!src) return;
+    for (const [uuid, count] of src) {
+      if (typeof count === "number" && Number.isFinite(count) && count > 0) {
+        this.yearRateioPriorByUuid.set(uuid, Math.floor(count));
+      }
+    }
   }
 
   private indexVacationFortnights(): void {
@@ -362,8 +380,7 @@ export class CleanWorkspace {
 
   /**
    * Teto mensal de turnos rateio do PAO.
-   * Com meta ligada: floor(demanda do mês / nº de PAOs) — igual para todos.
-   * A sobra da divisão (parte quebrada) não é redistribuída; vira gap.
+   * Base: floor(demanda / nº de PAOs). Na fase EXTRA, soma metaOvershootAllowance (até +2).
    */
   effectiveTotalMetaForEmployee(uuid: string): number {
     if (!this.usesNextMotorRules()) return Number.POSITIVE_INFINITY;
@@ -377,8 +394,50 @@ export class CleanWorkspace {
       this.coverageShiftCodes,
       this.paoEmployees.length,
     );
-    if (this.hasHalfMonthVacation(uuid)) return Math.ceil(fair / 2);
-    return fair;
+    const overshoot = Math.max(
+      0,
+      Math.min(MAX_MONTHLY_RATEIO_OVERSHOOT, Math.floor(this.metaOvershootAllowance)),
+    );
+    const base = fair + overshoot;
+    if (this.hasHalfMonthVacation(uuid)) return Math.ceil(base / 2);
+    return base;
+  }
+
+  /** Meta justa do mês sem overshoot (para auditoria / UI). */
+  fairMonthlyMetaTurnos(): number {
+    return fairRateioTargetPerEmployee(
+      this.days.length,
+      this.coverageShiftCodes,
+      this.paoEmployees.length,
+    );
+  }
+
+  priorYearRateioTurns(uuid: string): number {
+    return this.yearRateioPriorByUuid.get(uuid) ?? 0;
+  }
+
+  /** Acumulado no ano = jan..(mês−1) + turnos já alocados neste mês. */
+  accumulatedYearRateioTurns(uuid: string): number {
+    return this.priorYearRateioTurns(uuid) + this.countRateioTurns(uuid);
+  }
+
+  /** Esperado YTD (jan..mês corrente) com a mesma meta justa por mês. */
+  expectedYearRateioToDate(): number {
+    return fairRateioExpectedYearToDate(
+      this.input.year,
+      this.input.month,
+      this.coverageShiftCodes,
+      this.paoEmployees.length,
+    );
+  }
+
+  /** Saldo do contador: mais negativo = prioridade para extras. */
+  yearRateioSaldo(uuid: string): number {
+    return yearRateioSaldo(
+      this.priorYearRateioTurns(uuid),
+      this.countRateioTurns(uuid),
+      this.expectedYearRateioToDate(),
+    );
   }
 
   /** Alinhado ao `resolveEmployeeTurnoMeta` / scope-projection-summary. */
@@ -769,7 +828,8 @@ export class CleanWorkspace {
     return false;
   }
 
-  /** Cobertura: déficit de meta (puxar quem está abaixo) → mais novo primeiro no residual. */
+  /** Cobertura: déficit de meta (puxar quem está abaixo) → mais novo primeiro no residual.
+   * Na EXTRA (+overshoot): saldo do contador anual primeiro (mais negativo = prioridade). */
   sortCoverageCandidatesForShift(
     shiftCode: string,
     employees: GenerationInputEmployee[] = this.paoEmployees,
@@ -779,6 +839,7 @@ export class CleanWorkspace {
       this.usesNextMotorRules() && motorRuleEnabled(this.options, "preferred_shifts");
     const applyMeta =
       this.usesNextMotorRules() && motorRuleEnabled(this.options, "pao_meta_turnos");
+    const useYearSaldo = applyMeta && this.metaOvershootAllowance > 0;
 
     const pool = applyMeta
       ? employees.filter((e) => !this.isAtOrAboveTotalMetaTurnos(e.uuid))
@@ -789,6 +850,11 @@ export class CleanWorkspace {
       b: GenerationInputEmployee,
       oldestFirst: boolean,
     ): number => {
+      if (useYearSaldo) {
+        const saldoCmp = this.yearRateioSaldo(a.uuid) - this.yearRateioSaldo(b.uuid);
+        if (saldoCmp !== 0) return saldoCmp;
+      }
+
       if (applyMeta) {
         const deficitCmp = this.metaTurnosDeficit(b.uuid) - this.metaTurnosDeficit(a.uuid);
         if (deficitCmp !== 0) return deficitCmp;
@@ -817,7 +883,34 @@ export class CleanWorkspace {
   }
 
   fillCoverageGaps(): void {
-    const phase = "COVERAGE";
+    this.fillCoverageGapsInternal("COVERAGE");
+  }
+
+  /**
+   * Fase EXTRA_COBERTURA: libera até +1 e depois +2 acima da meta mensal justa,
+   * priorizando quem está abaixo no contador acumulado do ano.
+   * `afterRound` roda com o overshoot ainda ativo (ex.: cobertura T8).
+   */
+  fillCoverageGapsExtra(afterRound?: () => void): void {
+    if (!this.usesNextMotorRules()) return;
+    if (!motorRuleEnabled(this.options, "pao_meta_turnos")) return;
+
+    for (let allowance = 1; allowance <= MAX_MONTHLY_RATEIO_OVERSHOOT; allowance++) {
+      if (this.listCoverageGaps().length === 0) break;
+      this.metaOvershootAllowance = allowance;
+      this.audit.record(
+        "COVERAGE_ATTEMPT",
+        "EXTRA_COBERTURA",
+        `rodada +${allowance} acima da meta justa (contador anual)`,
+        {},
+      );
+      this.fillCoverageGapsInternal("EXTRA_COBERTURA");
+      afterRound?.();
+    }
+    this.metaOvershootAllowance = 0;
+  }
+
+  private fillCoverageGapsInternal(phase: string): void {
     const excludeT8PrefFromT6T7 =
       this.usesNextMotorRules() && motorRuleEnabled(this.options, "preferred_shifts");
 
@@ -841,7 +934,9 @@ export class CleanWorkspace {
           motorRuleEnabled(this.options, "pao_meta_turnos");
         const applyPerShiftMeta =
           applyTotalMeta &&
-          motorShiftRuleEnabled(this.options, "pao_meta_turnos", normalized);
+          motorShiftRuleEnabled(this.options, "pao_meta_turnos", normalized) &&
+          // Na EXTRA não bloqueia por meta por turno — só o teto total com overshoot.
+          this.metaOvershootAllowance <= 0;
         const applyDiasMeta =
           this.usesNextMotorRules() &&
           motorRuleEnabled(this.options, "pao_meta_dias_trabalhados");
@@ -873,10 +968,16 @@ export class CleanWorkspace {
 
         let assigned = false;
         const nextMotor = this.usesNextMotorRules();
-        // T6/T7 no NEXT: só bloco do agrupamento — nunca turno isolado (gap se não couber).
-        const allowIsolate = !nextMotor || allowsIsolatedCoverageDay(normalized);
+        // T6/T7 no NEXT: bloco do agrupamento. Na EXTRA, permite isolado para fechar o resto.
+        const allowIsolate =
+          !nextMotor ||
+          allowsIsolatedCoverageDay(normalized) ||
+          phase === "EXTRA_COBERTURA";
 
-        if (nextMotor) {
+        if (nextMotor && !allowIsolate) {
+          assigned = tryFillCoverageBlock(this, date, shiftCode, phase, candidates);
+        } else if (nextMotor && phase === "EXTRA_COBERTURA") {
+          // Tenta bloco completo primeiro; se não couber, dia isolado.
           assigned = tryFillCoverageBlock(this, date, shiftCode, phase, candidates);
         }
 
@@ -934,14 +1035,35 @@ export class CleanWorkspace {
                 break;
               }
             }
+            if (!assigned) {
+              for (const c of candidates) {
+                if (this.tryAssign(c.uuid, date, shiftCode, phase)) {
+                  assigned = true;
+                  this.audit.record(
+                    "COVERAGE_ASSIGNED",
+                    phase,
+                    "cobertura com exceção de espaçamento (qualquer candidato)",
+                    {
+                      date,
+                      shiftCode: normalized,
+                      employeeUuid: c.uuid,
+                      employeeName: c.employee.name,
+                    },
+                  );
+                  break;
+                }
+              }
+            }
           }
         }
+
         if (!assigned) {
-          const reasons = candidates.length
-            ? nextMotor && !allowIsolate
-              ? `nenhum bloco ≥ agrupamento elegível entre ${candidates.length} candidato(s)`
-              : `nenhum PAO elegível entre ${candidates.length} candidato(s)`
-            : "nenhum PAO cadastrado";
+          const reasons =
+            candidates.length > 0
+              ? nextMotor && !allowIsolate
+                ? `nenhum bloco ≥ agrupamento elegível entre ${candidates.length} candidato(s)`
+                : `nenhum PAO elegível entre ${candidates.length} candidato(s)`
+              : "nenhum PAO cadastrado";
           this.audit.record("COVERAGE_FAILED", phase, reasons, { date, shiftCode });
         }
       }

@@ -33,6 +33,12 @@ export interface GenerationInput {
   approvedDayOff: Array<{ employeeUuid: string; date: string }>;
   flightDays: Array<{ employeeUuid: string; date: string; description?: string }>;
   crossMonthHistory?: CrossMonthHistory;
+  /**
+   * Contador acumulado de turnos rateio (T6/T7/T8…) no ano civil,
+   * de janeiro até o mês anterior ao gerado (uuid → quantidade).
+   * Usado na fase EXTRA_COBERTURA (+1/+2 acima da meta mensal).
+   */
+  yearRateioPriorCounts?: Map<string, number>;
   /** employeeId (domínio) → turnos bloqueados no mês */
   shiftRestrictions?: Map<number, Set<string>>;
   /** employeeId (domínio) → turnos preferidos (alocação específica) */

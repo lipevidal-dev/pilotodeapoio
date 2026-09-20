@@ -56,6 +56,8 @@ export function buildGenerationInput(params: {
   approvedDayOff: Array<{ employeeUuid: string; date: string }>;
   flightDays: Array<{ employeeUuid: string; date: string; description?: string }>;
   crossMonthHistory?: import("../../domain/schedule/cross-month-history.js").CrossMonthHistory;
+  /** Contador acumulado jan..(mês−1) de turnos rateio por employee uuid. */
+  yearRateioPriorCounts?: Map<string, number>;
   shiftRestrictionRows?: ShiftRestrictionRow[];
   preferredShiftRows?: PreferredShiftRow[];
   specificShiftDayPreferences?: SpecificShiftDayPreferenceRow[];
@@ -92,6 +94,7 @@ export function buildGenerationInput(params: {
     approvedDayOff: params.approvedDayOff,
     flightDays: params.flightDays,
     crossMonthHistory: params.crossMonthHistory,
+    yearRateioPriorCounts: params.yearRateioPriorCounts,
     shiftRestrictions: buildShiftRestrictionMap(genEmployees, params.shiftRestrictionRows ?? []),
     preferredShifts: buildPreferredShiftMap(genEmployees, params.preferredShiftRows ?? []),
     noFlightDates: params.noFlightDates ?? [],

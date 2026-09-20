@@ -307,6 +307,37 @@ export class ScheduleRepository {
     return { assignments, allocations };
   }
 
+  /**
+   * Contador acumulado de turnos rateio (T6–T9) no ano civil, de janeiro
+   * até o mês anterior a `month`. Preferência: realizada; senão planejada.
+   */
+  async loadYearRateioPriorCounts(year: number, month: number): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+    if (month <= 1) return counts;
+
+    const RATEIO = new Set(["T6", "T7", "T8", "T9"]);
+    const months = await prisma.scheduleMonth.findMany({
+      where: { year, month: { lt: month } },
+      include: {
+        executedAssignments: { select: { employeeId: true, shiftCode: true } },
+        assignments: { select: { employeeId: true, shiftCode: true } },
+      },
+    });
+
+    for (const m of months) {
+      const rows =
+        m.executedAssignments.length > 0 ? m.executedAssignments : m.assignments;
+      for (const row of rows) {
+        const code = row.shiftCode.toUpperCase();
+        // TI6/TI7 etc. — base sem prefixo de instrução.
+        const base = code.startsWith("TI") ? code.slice(2) : code;
+        if (!RATEIO.has(base) && !RATEIO.has(code)) continue;
+        counts.set(row.employeeId, (counts.get(row.employeeId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }
+
   /** Voos cadastrados no calendário do mês anterior (não duplicar preAllocations). */
   private async loadCalendarCrossMonthAllocations(
     targetYear: number,

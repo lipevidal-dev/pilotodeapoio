@@ -195,6 +195,8 @@ export function generateCleanSchedule(
     if (options.motorVersion === MOTOR_VERSION_NEXT) {
       fillT8CoverageGaps(ws);
       removeIsolatedT8ForPreferredPaos(ws);
+      // Extras (+1/+2) acima da meta justa, priorizando saldo do contador anual.
+      ws.fillCoverageGapsExtra(() => fillT8CoverageGaps(ws));
     }
   }
   if (ruleEnabled(options, "t8_t8_nd")) {
