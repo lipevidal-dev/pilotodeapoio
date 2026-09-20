@@ -7,6 +7,8 @@ export type CleanDecisionKind =
   | "APPLY_VACATION"
   | "APPLY_DAY_OFF"
   | "APPLY_FLIGHT"
+  | "APPLY_FANI"
+  | "APPLY_POST_FANI"
   | "COVERAGE_ATTEMPT"
   | "COVERAGE_ASSIGNED"
   | "COVERAGE_FAILED"
@@ -40,6 +42,11 @@ export interface CleanEngineOptions {
   motorParams?: Record<string, number>;
   /** Identificador reportado no summary. */
   motorVersion?: string;
+  /**
+   * Só preferências: aloca por lista/round-robin e não preenche furos de cobertura.
+   * Gaps ficam abertos para o coordenador.
+   */
+  preferencesOnly?: boolean;
 }
 
 export interface CleanEngineState {

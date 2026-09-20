@@ -513,6 +513,10 @@ describe("CleanEngine", () => {
       emp(1, "Palombino"),
       emp(2, "Antonio"),
       emp(3, "Lucas Wiltgen"),
+      emp(4, "Pao4"),
+      emp(5, "Pao5"),
+      emp(6, "Pao6"),
+      emp(7, "Pao7"),
     ];
     paos[0]!.uuid = "uuid-pal";
     paos[1]!.uuid = "uuid-ant";
@@ -526,7 +530,7 @@ describe("CleanEngine", () => {
       ]),
     };
     const options = {
-      scopeEmployeeUuids: ["uuid-pal", "uuid-ant", "uuid-luc"],
+      scopeEmployeeUuids: paos.map((p) => p.uuid),
       motorVersion: MOTOR_VERSION_NEXT,
       coverageShiftCodes: ["T8"],
       enabledRules: {
@@ -536,9 +540,11 @@ describe("CleanEngine", () => {
         t8_t8_nd: true,
         coverage_t8: true,
       },
-      motorParams: { pao_meta_turnos: 4, pao_espacamento_turnos: 2, pao_max_consecutivos: 6 },
+      motorParams: { pao_espacamento_turnos: 2, pao_max_consecutivos: 6 },
     };
     const ws = new CleanWorkspace(input, options);
+    // Rateio justo: floor(31×1 / 7) = 4 turnos por PAO.
+    expect(ws.effectiveTotalMetaForEmployee("uuid-luc")).toBe(4);
     // Lucas no teto (2 blocos = 4 turnos); Antonio abaixo da meta
     expect(tryPlaceT8Block(ws, "uuid-luc", "2026-07-05")).toBe(true);
     expect(tryPlaceT8Block(ws, "uuid-luc", "2026-07-15")).toBe(true);

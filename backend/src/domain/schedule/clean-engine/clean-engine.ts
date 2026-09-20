@@ -7,6 +7,7 @@ import { CleanWorkspace } from "./clean-workspace.js";
 import type { CleanEngineOptions } from "./clean-types.js";
 import { validateCleanGeneration } from "./clean-validator.js";
 import { applyFcfRules } from "./clean-fcf.js";
+import { fillDailyRateioAllocation } from "./clean-daily-allocation.js";
 import { fillPreferredShifts } from "./clean-preferences.js";
 import {
   fillT8CoverageGaps,
@@ -18,6 +19,7 @@ import {
   enforceMonthStartSixByOneFromPrevious,
   finalizeCrossMonthContinuations,
 } from "./clean-cross-month-continuity.js";
+import { applyBirthdayFolgas, applyPostFaniRestDays } from "./clean-fani.js";
 
 function ruleEnabled(options: CleanEngineOptions, ruleId: string): boolean {
   return motorRuleEnabled(options, ruleId);
@@ -157,11 +159,24 @@ export function generateCleanSchedule(
   if (ruleEnabled(options, "locked_preallocations")) {
     ws.applyLockedPreAllocations();
   }
+  const faniWarnings = applyBirthdayFolgas(ws);
+  const postFaniWarnings = applyPostFaniRestDays(ws);
   if (ruleEnabled(options, "max_6_consecutive")) {
     enforceMonthStartSixByOneFromPrevious(ws);
   }
   const fcfWarnings = ruleEnabled(options, "fcf_weekday_shift") ? applyFcfRules(ws) : [];
   if (options.motorVersion === MOTOR_VERSION_NEXT) {
+    // No modo "só preferências", a onda T8 também segue a lista (round-robin).
+    // Senão o fillT8PreferredBlocks enche o mais sênior antes de passar aos outros.
+    if (
+      !options.preferencesOnly &&
+      (ruleEnabled(options, "preferred_shifts") || ruleEnabled(options, "t8_t8_nd"))
+    ) {
+      fillT8PreferredBlocks(ws);
+    }
+    // Fase preferencial: só quem prefere o turno; não preferenciais na cobertura.
+    fillDailyRateioAllocation(ws);
+  } else {
     if (
       ruleEnabled(options, "preferred_shifts") ||
       ruleEnabled(options, "pao_meta_turnos") ||
@@ -173,7 +188,9 @@ export function generateCleanSchedule(
       fillT8PreferredBlocks(ws);
     }
   }
-  if (hasCoverageRules(options)) {
+  // Modo "só preferências": pula o preenchimento de furos de cobertura.
+  // Os gaps ficam abertos para o coordenador alocar manualmente.
+  if (!options.preferencesOnly && hasCoverageRules(options)) {
     ws.fillCoverageGaps();
     if (options.motorVersion === MOTOR_VERSION_NEXT) {
       fillT8CoverageGaps(ws);
@@ -206,7 +223,7 @@ export function generateCleanSchedule(
   }
 
   const saveValidation = validateCleanGeneration(input, assignments, allocations);
-  const violations = [...gapViolations, ...fcfWarnings, ...saveValidation.issues];
+  const violations = [...gapViolations, ...fcfWarnings, ...faniWarnings, ...postFaniWarnings, ...saveValidation.issues];
   const generationMs = Date.now() - started;
   const summary = buildSummary(ws, violations, generationMs, options);
 

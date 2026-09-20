@@ -3,7 +3,7 @@ import { addDays } from "../../rules/dates.js";
 import { isRateioTurnCode } from "./clean-types.js";
 import { motorRuleEnabled, motorShiftAgrupamento, motorShiftEspacamento, motorShiftRuleEnabled } from "./clean-motor-rules.js";
 import { findLastT8BlockEndDate } from "./clean-t8-blocks.js";
-import { MIN_RATEIO_BLOCK_SIZE, minimumBlockSizeForShift } from "./clean-block-rules.js";
+import { MIN_RATEIO_BLOCK_SIZE, minimumBlockSizeForShift, requiredBlockSizeForShift } from "./clean-block-rules.js";
 import type { CleanWorkspace } from "./clean-workspace.js";
 const RATEIO_PREF_ORDER = ["T8", "T6", "T7", "T9"] as const;
 
@@ -24,8 +24,18 @@ export function employeePrefersShift(
   domainId: number,
   shiftCode: string,
 ): boolean {
+  const normalized = shiftCode.toUpperCase();
   const prefs = ws.input.preferredShifts?.get(domainId);
-  return prefs?.has(shiftCode.toUpperCase()) ?? false;
+  if (prefs?.has(normalized)) return true;
+
+  // Piloto FCF: o turno prioritário (ex.: T9) também conta como preferência,
+  // para entrar na onda de alocação daquele turno — não só no dia fixo da semana.
+  const emp = ws.input.employees.find((e) => e.domainId === domainId);
+  if (!emp) return false;
+  return (ws.input.fcfRules ?? []).some(
+    (rule) =>
+      rule.employeeUuid === emp.uuid && rule.shiftCode.toUpperCase() === normalized,
+  );
 }
 
 function employeeCoversShiftOnDay(
@@ -165,9 +175,29 @@ export function tryPlacePreferredBlock(
     }
     if (!canPlaceAll) continue;
 
+    // Pré-valida canWork em todos os dias (com planned acumulado) antes de gravar.
+    let plannedProbe = ws.mergedPlannedForContinuity();
+    let rulesOk = true;
+    for (const date of blockDates) {
+      const check = ws.checkCanWork(emp.uuid, date, pref, plannedProbe);
+      if (!check.ok) {
+        rulesOk = false;
+        break;
+      }
+      plannedProbe = new Map(plannedProbe);
+      plannedProbe.set(assignmentKey(emp.domainId, date), pref);
+    }
+    if (!rulesOk) continue;
+
     let placed = 0;
     for (const date of blockDates) {
-      if (!ws.tryAssign(emp.uuid, date, pref, phase)) return placed;
+      if (!ws.tryAssign(emp.uuid, date, pref, phase)) {
+        // Rollback parcial — bloco é tudo ou nada.
+        for (let j = 0; j < placed; j++) {
+          ws.unassignPlannedDay(emp.domainId, blockDates[j]!);
+        }
+        return 0;
+      }
       placed++;
     }
     return placed;
@@ -176,7 +206,8 @@ export function tryPlacePreferredBlock(
 }
 
 /**
- * Cobertura T6/T7: tenta fechar furo com bloco consecutivo (mín. 3 dias) antes de turno isolado.
+ * Cobertura T6/T7: fecha furo só com bloco do tamanho do agrupamento configurado.
+ * Não encolhe para 3/4 — se o bloco não cabe, o furo permanece (gap).
  */
 export function tryFillCoverageBlock(
   ws: CleanWorkspace,
@@ -184,53 +215,82 @@ export function tryFillCoverageBlock(
   shiftCode: string,
   phase: string,
   candidates: (typeof ws.paoEmployees)[number][],
+  opts?: { bypassSpacing?: boolean; anyCandidate?: boolean },
 ): boolean {
-  const minSize = minimumBlockSizeForShift(shiftCode);
-  if (minSize < MIN_RATEIO_BLOCK_SIZE) return false;
+  const hardMin = minimumBlockSizeForShift(shiftCode);
+  if (hardMin < MIN_RATEIO_BLOCK_SIZE) return false;
 
   const gapIdx = ws.days.indexOf(gapDate);
   if (gapIdx < 0) return false;
 
-  const spacingDays = getTurnSpacingDays(ws, shiftCode);
+  const size = requiredBlockSizeForShift(shiftCode, getTurnAgrupamentoDays(ws, shiftCode));
+  const sizes = [size];
 
-  for (let offset = 0; offset >= -(minSize - 1); offset--) {
-    const startIdx = gapIdx + offset;
-    if (startIdx < 0) break;
-    const startDate = ws.days[startIdx]!;
-    const blockDates = blockDatesFromStart(ws, startDate, minSize);
-    if (!blockDates || !blockDates.includes(gapDate)) continue;
-    if (!blockDates.every((d) => !ws.hasPaoCoverage(d, shiftCode))) continue;
+  const bypassSpacing = opts?.bypassSpacing === true;
+  const anyCandidate = opts?.anyCandidate === true;
+  const spacingDays = bypassSpacing ? 0 : getTurnSpacingDays(ws, shiftCode);
 
-    for (const emp of candidates) {
-      if (
-        motorShiftRuleEnabled(ws.options, "pao_espacamento_turnos", shiftCode) &&
-        prefersRateioShift(ws, emp.domainId, shiftCode) &&
-        isBlockedOnlyByTurnSpacing(ws, emp.domainId, startDate, shiftCode)
-      ) {
-        continue;
-      }
-      const placed = tryPlacePreferredBlock(
-        ws,
-        emp,
-        shiftCode,
-        startDate,
-        minSize,
-        spacingDays,
-        phase,
-        minSize,
-      );
-      if (placed >= minSize) {
-        ws.audit.record("COVERAGE_ASSIGNED", phase, `bloco ${minSize} dias`, {
-          date: gapDate,
-          shiftCode: shiftCode.toUpperCase(),
-          employeeUuid: emp.uuid,
-          employeeName: emp.employee.name,
-        });
-        return true;
+  for (const blockSize of sizes) {
+    for (let offset = 0; offset >= -(blockSize - 1); offset--) {
+      const startIdx = gapIdx + offset;
+      if (startIdx < 0) break;
+      const startDate = ws.days[startIdx]!;
+      const blockDates = blockDatesFromStart(ws, startDate, blockSize);
+      if (!blockDates || !blockDates.includes(gapDate)) continue;
+      if (!blockDates.every((d) => !ws.hasPaoCoverage(d, shiftCode))) continue;
+
+      for (const emp of candidates) {
+        if (!bypassSpacing) {
+          if (
+            motorShiftRuleEnabled(ws.options, "pao_espacamento_turnos", shiftCode) &&
+            prefersRateioShift(ws, emp.domainId, shiftCode) &&
+            isBlockedOnlyByTurnSpacing(ws, emp.domainId, startDate, shiftCode)
+          ) {
+            continue;
+          }
+        } else if (!anyCandidate) {
+          if (
+            !prefersRateioShift(ws, emp.domainId, shiftCode) ||
+            !isBlockedOnlyByTurnSpacing(ws, emp.domainId, startDate, shiftCode)
+          ) {
+            continue;
+          }
+        }
+        const placed = tryPlacePreferredBlock(
+          ws,
+          emp,
+          shiftCode,
+          startDate,
+          blockSize,
+          spacingDays,
+          phase,
+          blockSize,
+        );
+        if (placed >= blockSize) {
+          ws.audit.record(
+            "COVERAGE_ASSIGNED",
+            phase,
+            bypassSpacing
+              ? `bloco ${placed} dias — cobertura sem espaçamento`
+              : `bloco ${placed} dias`,
+            {
+              date: gapDate,
+              shiftCode: shiftCode.toUpperCase(),
+              employeeUuid: emp.uuid,
+              employeeName: emp.employee.name,
+            },
+          );
+          return true;
+        }
       }
     }
   }
   return false;
+}
+
+/** T6/T7 exigem bloco ≥3; T9 (e similares unitários) podem fechar furo em 1 dia. */
+export function allowsIsolatedCoverageDay(shiftCode: string): boolean {
+  return minimumBlockSizeForShift(shiftCode) < MIN_RATEIO_BLOCK_SIZE;
 }
 
 export function respectsTurnSpacingBefore(
@@ -344,16 +404,27 @@ function tryPlaceNextPreferredShiftByDayAndSeniority(
       if (diasCount >= diasLimit) continue;
 
       const agrupamento = getTurnAgrupamentoDays(ws, pref);
+      const required = requiredBlockSizeForShift(pref, agrupamento);
       const blockSize = Math.min(
-        agrupamento,
+        required,
         target - currentCount,
         totalLimit - totalCount,
         diasLimit - diasCount,
       );
-      if (blockSize <= 0) continue;
+      // Só aloca se couber o bloco inteiro do agrupamento (sem encolher).
+      if (blockSize < required) continue;
       const spacingDays = getTurnSpacingDays(ws, pref);
 
-      const placed = tryPlacePreferredBlock(ws, emp, pref, date, blockSize, spacingDays, phase);
+      const placed = tryPlacePreferredBlock(
+        ws,
+        emp,
+        pref,
+        date,
+        required,
+        spacingDays,
+        phase,
+        required,
+      );
       if (placed > 0) return true;
     }
   }

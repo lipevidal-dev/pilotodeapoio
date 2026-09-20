@@ -19,8 +19,9 @@ import { normalizeOperationalLabel, isOperationalHardBlock, CROSS_MONTH_ND_LABEL
 import { assignmentKey, type BlockedMap, type PlannedMap } from "../types.js";
 import { MOTOR_VERSION_NEXT } from "../engine-metadata.js";
 import { CleanAuditLog } from "./clean-audit.js";
-import { motorRuleEnabled, motorShiftMaxConsecutivos, motorShiftMetaTurnos, motorShiftRuleEnabled, sumMotorShiftMetaTurnos } from "./clean-motor-rules.js";
+import { motorRuleEnabled, motorShiftMaxConsecutivos, motorShiftMetaTurnos, motorShiftRuleEnabled } from "./clean-motor-rules.js";
 import { motorShiftParamValue } from "../next-motor/next-motor-shift-params.js";
+import { fairRateioTargetPerEmployee } from "./clean-fair-rateio.js";
 import {
   employeePrefersShift,
   isBlockedOnlyByTurnSpacing,
@@ -326,7 +327,11 @@ export class CleanWorkspace {
     return base;
   }
 
-  /** Teto mensal de turnos rateio do PAO (meta do turno preferido; soma se sem preferência). */
+  /**
+   * Teto mensal de turnos rateio do PAO.
+   * Com meta ligada: floor(demanda do mês / nº de PAOs) — igual para todos.
+   * A sobra da divisão (parte quebrada) não é redistribuída; vira gap.
+   */
   effectiveTotalMetaForEmployee(uuid: string): number {
     if (!this.usesNextMotorRules()) return Number.POSITIVE_INFINITY;
     if (!motorRuleEnabled(this.options, "pao_meta_turnos")) return Number.POSITIVE_INFINITY;
@@ -334,16 +339,13 @@ export class CleanWorkspace {
     const did = this.uuidToDomain.get(uuid);
     if (did == null) return Number.POSITIVE_INFINITY;
 
-    const preferred = primaryPreferredRateio(this, did);
-    if (preferred) {
-      const base = motorShiftMetaTurnos(this.options, preferred, 20);
-      if (this.hasHalfMonthVacation(uuid)) return Math.ceil(base / 2);
-      return base;
-    }
-
-    const sum = sumMotorShiftMetaTurnos(this.options, this.coverageShiftCodes);
-    if (this.hasHalfMonthVacation(uuid)) return Math.ceil(sum / 2);
-    return sum;
+    const fair = fairRateioTargetPerEmployee(
+      this.days.length,
+      this.coverageShiftCodes,
+      this.paoEmployees.length,
+    );
+    if (this.hasHalfMonthVacation(uuid)) return Math.ceil(fair / 2);
+    return fair;
   }
 
   /** Alinhado ao `resolveEmployeeTurnoMeta` / scope-projection-summary. */
