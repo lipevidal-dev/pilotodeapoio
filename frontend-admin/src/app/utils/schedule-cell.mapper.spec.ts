@@ -686,4 +686,59 @@ describe('schedule-cell.mapper — cores por turno', () => {
     expect(summary.fa).toBe(2);
     expect(summary.folgas).toBe(2);
   });
+
+  it('lead-in antepõe 6 dias do mês anterior com células do espelho', () => {
+    const emp: Employee = {
+      id: 'pao-1',
+      name: 'PAO Test',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 11,
+      employees: [emp],
+      assignments: [],
+      preAllocations: [],
+      leadDays: 6,
+      previousMonth: {
+        year: 2026,
+        month: 10,
+        assignments: [
+          {
+            id: 'p1',
+            scheduleMonthId: 'm-oct',
+            employeeId: 'pao-1',
+            date: '2026-10-26T00:00:00.000Z',
+            shiftCode: 'T7',
+            label: null,
+            source: 'generated',
+            employee: emp,
+          },
+          {
+            id: 'p2',
+            scheduleMonthId: 'm-oct',
+            employeeId: 'pao-1',
+            date: '2026-10-31T00:00:00.000Z',
+            shiftCode: 'T7',
+            label: null,
+            source: 'generated',
+            employee: emp,
+          },
+        ],
+        preAllocations: [],
+      },
+    });
+
+    expect(grid.leadDayCount).toBe(6);
+    expect(grid.columns.filter((c) => c.isLead).map((c) => c.day)).toEqual([26, 27, 28, 29, 30, 31]);
+    expect(grid.columns.find((c) => c.isMonthStart)?.day).toBe(1);
+    const row = grid.groups[0]!.rows[0]!;
+    expect(row.leadCells?.length).toBe(6);
+    expect(row.leadCells?.[0]?.display).toBe('T7');
+    expect(row.leadCells?.[5]?.display).toBe('T7');
+  });
 });

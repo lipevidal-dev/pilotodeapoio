@@ -89,6 +89,7 @@ $crosshair-focus-bg: #fce1d7;
   --col-employee-w: #{$col-employee-w};
   --col-day-w: #{$col-day-w};
   --col-summary-w: #{$summary-block-w};
+  --day-col-count: 31;
 
   overflow-x: auto;
   overflow-y: visible;
@@ -100,6 +101,62 @@ $crosshair-focus-bg: #fce1d7;
   &.preview-unpublished {
     border: 3px solid #dc2626;
     box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.15);
+  }
+
+  // Encaixa a grade na largura disponível (sem scroll horizontal).
+  &.fit-width {
+    overflow-x: hidden;
+
+    .schedule-grid-scroller {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .schedule-grid {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      table-layout: fixed;
+    }
+
+    .col-day {
+      width: auto;
+      min-width: 0;
+      max-width: none;
+      padding: 0.1rem 0 !important;
+    }
+
+    &.has-summary {
+      .col-day {
+        width: calc(
+          (100% - var(--col-employee-w) - var(--col-summary-w)) / max(var(--day-col-count), 1)
+        );
+      }
+    }
+
+    &:not(.has-summary) {
+      .col-day {
+        width: calc((100% - var(--col-employee-w)) / max(var(--day-col-count), 1));
+      }
+    }
+
+    thead .col-day .day-num {
+      font-size: clamp(0.5rem, 1.1vw, 0.72rem);
+    }
+
+    thead .col-day .day-wd {
+      font-size: clamp(0.42rem, 0.9vw, 0.58rem);
+    }
+
+    thead .col-lead .day-num {
+      font-size: clamp(0.42rem, 0.95vw, 0.62rem);
+    }
+
+    .coverage-gap-icon {
+      width: 0.7rem;
+      height: 0.7rem;
+    }
   }
 }
 
@@ -338,6 +395,69 @@ $crosshair-focus-bg: #fce1d7;
     background: #fffaf5;
   }
 
+  // Dias do mês anterior (contexto) — levemente esmaecidos.
+  .col-lead {
+    background: #f3f4f6 !important;
+    opacity: 0.78;
+
+    &.col-weekend {
+      background: #eceff3 !important;
+    }
+  }
+
+  // Linha divisória contínua (cabeçalho → última linha) entre mês anterior e corrente.
+  .col-month-start {
+    border-left: 1.5px solid #f0a090 !important;
+    position: relative;
+  }
+
+  thead .col-month-start {
+    border-left-color: #e85d4c !important;
+  }
+
+  thead .col-lead .day-num,
+  thead .col-lead .day-wd {
+    color: #6b7280;
+    font-weight: 500;
+  }
+
+  .lead-toggle {
+    position: absolute;
+    left: -0.55rem;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 4;
+    width: 1.05rem;
+    height: 1.05rem;
+    padding: 0;
+    margin: 0;
+    border: 1px solid #e85d4c;
+    border-radius: 999px;
+    background: #fff;
+    color: #e85d4c;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    line-height: 1;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
+
+    i {
+      font-size: 0.55rem;
+      font-weight: 700;
+    }
+
+    &:hover {
+      background: #e85d4c;
+      color: #fff;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #e85d4c;
+      outline-offset: 1px;
+    }
+  }
+
   thead .col-weekend {
     background: var(--gol-white);
   }
@@ -452,6 +572,14 @@ $crosshair-focus-bg: #fce1d7;
     font-size: 0.78rem;
     color: var(--gol-gray-dark);
   }
+
+  .emp-pref {
+    margin-left: 0.2rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #dc2626;
+    white-space: nowrap;
+  }
 }
 
 .editable-grid .col-day,
@@ -534,6 +662,10 @@ $gol-pointer-cursor: url('/assets/cursors/gol-pointer.png') 3 2, pointer;
 
     .emp-name {
       font-size: 0.72rem;
+    }
+
+    .emp-pref {
+      font-size: 0.68rem;
     }
 
     .day-num {

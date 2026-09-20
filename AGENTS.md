@@ -47,7 +47,9 @@ Observações de pré-alocações (voo/descrição, curso, simulador, CMA, outro
 
 ### Escala — lead-in do mês anterior (não publicada)
 
-Na escala **planejada não publicada** (DRAFT/GENERATED), a grade antepõe os **últimos 6 dias do mês anterior** (ex.: set/2026 mostra 26–31/ago antes do dia 01), com coluna `.col-lead` esmaecida e linha vermelha (`.col-month-start`) no dia 1. O conteúdo do lead-in vem da **escala realizada** do mês anterior (`GET .../executed`), não da planejada. Dias lead são **somente leitura**. Escala publicada/realizada/portal **não** mostram lead-in. A grade usa `fit-width` (sem scroll horizontal).
+Na escala **planejada não publicada** (DRAFT/GENERATED), a grade antepõe os **últimos 6 dias do mês anterior** (ex.: nov/2026 mostra 26–31/out antes do dia 01), com coluna `.col-lead` esmaecida e linha vermelha (`.col-month-start`) no dia 1. O conteúdo do lead-in vem da **escala realizada** do mês anterior (`GET .../executed`), não da planejada. Dias lead são **somente leitura**. Escala publicada/realizada/portal **não** mostram lead-in. A grade usa `fit-width` (sem scroll horizontal).
+
+Ao lado da linha divisória (dia 1) há um mini-ícone **(−)/(+)**: (−) comprime/esconde os 6 dias do espelho; (+) restaura. A geração 6x1 no motor usa o histórico cross-month (lookback ≥ 6 dias) — o espelho visual é o mesmo critério de continuidade ao lado do dia 1.
 
 ### Serviços úteis (produção VPS)
 

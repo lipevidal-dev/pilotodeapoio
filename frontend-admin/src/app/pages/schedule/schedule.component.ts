@@ -1,5 +1,6 @@
 import { Component, OnDestroy, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
-import { Subscription, concatMap, from, last } from 'rxjs';
+import { Subscription, concatMap, forkJoin, from, last, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -16,6 +17,7 @@ import { ScheduleRefreshService } from '../../services/schedule-refresh.service'
 import { ScheduleWorkspaceService } from '../../services/schedule-workspace.service';
 import { ScheduleExportService } from '../../services/schedule-export.service';
 import { NextMotorConfigService } from '../../services/next-motor-config.service';
+import { EmployeeService } from '../../services/employee.service';
 import {
   ScheduleGridComponent,
   type GridCellClickEvent,
@@ -62,13 +64,17 @@ import {
   type AuditViolation,
   type GridAuditTotals,
 } from '../../utils/operational-audit.util';
+import { isAdminRole } from '../../models/auth.models';
 import type {
   ManualEditResponse,
   ScheduleMonthResponse,
   ScheduleViolation,
   ViolationSeverity,
 } from '../../models/api.models';
-import type { ScheduleGridData } from '../../models/schedule-grid.models';
+import {
+  PREVIOUS_MONTH_LEAD_DAYS,
+  type ScheduleGridData,
+} from '../../models/schedule-grid.models';
 import {
   formatGenerationPersistenceIssueLine,
   generationRuleLabel,
@@ -114,7 +120,11 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   private readonly portalService = inject(PortalService);
   private readonly shiftSwapService = inject(ShiftSwapService);
   private readonly auth = inject(AuthService);
+  private readonly employeeService = inject(EmployeeService);
   private refreshSub?: Subscription;
+
+  /** Preferência de turno do portal no mês corrente: employeeId → T6/T7/... */
+  private readonly monthlyPrefByEmployee = signal<ReadonlyMap<string, string>>(new Map());
 
   readonly yearSig = signal(this.workspace.year());
   readonly monthSig = signal(this.workspace.month());
@@ -144,6 +154,11 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   readonly generationBlocked = signal<GenerationPersistenceValidation | null>(null);
   readonly publishResult = signal<{ status: string } | null>(null);
   readonly scheduleData = signal<ScheduleMonthResponse | null>(null);
+  /**
+   * Escala **realizada** do mês anterior (contexto visual dos últimos 6 dias
+   * na escala planejada não publicada — espelho ao lado do dia 1).
+   */
+  readonly previousScheduleData = signal<ScheduleMonthResponse | null>(null);
   readonly executedScheduleData = signal<ScheduleMonthResponse | null>(null);
   readonly scheduleView = signal<ScheduleViewMode>('planned');
   readonly manualEditing = signal(false);
@@ -270,14 +285,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   readonly rawGrid = computed(() => {
     const data = this.activeScheduleData();
     if (!data) return null;
-    return buildScheduleGrid({
-      year: this.yearSig(),
-      month: this.monthSig(),
-      employees: data.employees,
-      assignments: data.assignments,
-      preAllocations: data.preAllocations,
-      operationalCadastros: data.operationalCadastros,
-      shifts: data.shifts,
+    return this.composeGridFromData(data, {
       // Troca de turno só aparece/age na escala realizada.
       shiftSwaps: this.isExecutedView() ? data.shiftSwaps : undefined,
     });
@@ -783,9 +791,8 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     this.deleteContext.set(null);
 
     const applyGrid = () => {
-      const grid = buildScheduleGrid({
-        year: this.yearSig(),
-        month: this.monthSig(),
+      const grid = this.composeGridFromData({
+        scheduleMonth: res.scheduleMonth,
         employees: res.employees,
         assignments: res.assignments,
         preAllocations: res.preAllocations,
@@ -853,12 +860,47 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     this.syncWorkspacePeriod();
     this.loadingView.set(true);
     if (this.isExecutedView()) this.executedScheduleData.set(null);
-    this.scheduleService.getSchedule(this.yearSig(), this.monthSig()).subscribe({
-      next: (data) => {
+
+    const year = this.yearSig();
+    const month = this.monthSig();
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevMonth = month === 1 ? 12 : month - 1;
+
+    const prefs$ = this.canShowPortalPreferences()
+      ? this.employeeService.listMonthlyShiftPreferences(year, month).pipe(
+          catchError(() =>
+            of({ year, month, preferences: [] as Array<{ employeeId: string; shiftCode: string }> }),
+          ),
+        )
+      : of({ year, month, preferences: [] as Array<{ employeeId: string; shiftCode: string }> });
+
+    forkJoin({
+      schedule: this.scheduleService.getSchedule(year, month),
+      prefs: prefs$,
+      // Lead-in espelha a escala REALIZADA do mês anterior (não a planejada).
+      previous: this.scheduleService
+        .getExecutedSchedule(prevYear, prevMonth)
+        .pipe(catchError(() => of(null))),
+    }).subscribe({
+      next: ({ schedule: data, prefs, previous }) => {
         this.scheduleData.set(data);
         this.workspace.scheduleMonthId.set(data.scheduleMonth.id);
-        const periodKey = `${this.yearSig()}-${this.monthSig()}`;
+        if (this.canShowPortalPreferences()) {
+          this.monthlyPrefByEmployee.set(
+            new Map(
+              (prefs.preferences ?? [])
+                .filter((p) => !!p.employeeId && !!p.shiftCode)
+                .map((p) => [p.employeeId, p.shiftCode.toUpperCase()] as const),
+            ),
+          );
+        } else {
+          this.monthlyPrefByEmployee.set(new Map());
+        }
+
+        const periodKey = `${year}-${month}`;
         const published = data.scheduleMonth.status === 'PUBLISHED';
+        const archived = data.scheduleMonth.status === 'ARCHIVED';
+        this.previousScheduleData.set(!published && !archived ? previous : null);
 
         if (!published) {
           this.executedDefaultPeriodKey = null;
@@ -879,20 +921,13 @@ export class ScheduleComponent implements OnInit, OnDestroy {
 
         this.loadingView.set(false);
 
-        const grid = buildScheduleGrid({
-          year: this.yearSig(),
-          month: this.monthSig(),
-          employees: data.employees,
-          assignments: data.assignments,
-          preAllocations: data.preAllocations,
-          operationalCadastros: data.operationalCadastros,
-          shifts: data.shifts,
-        });
+        const grid = this.composeGridFromData(data);
         this.exportService.prepareExportPayload(grid);
       },
       error: () => {
         this.loadingView.set(false);
         this.scheduleData.set(null);
+        this.previousScheduleData.set(null);
         this.messages.add({
           severity: 'error',
           summary: 'Escala',
@@ -909,16 +944,7 @@ export class ScheduleComponent implements OnInit, OnDestroy {
       next: (data) => {
         this.loadingView.set(false);
         this.executedScheduleData.set(data);
-        const grid = buildScheduleGrid({
-          year: this.yearSig(),
-          month: this.monthSig(),
-          employees: data.employees,
-          assignments: data.assignments,
-          preAllocations: data.preAllocations,
-          operationalCadastros: data.operationalCadastros,
-          shifts: data.shifts,
-          shiftSwaps: data.shiftSwaps,
-        });
+        const grid = this.composeGridFromData(data, { shiftSwaps: data.shiftSwaps });
         this.exportService.prepareExportPayload(grid);
       },
       error: () => {
@@ -951,17 +977,84 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     }
     const data = this.scheduleData();
     if (data) {
-      const grid = buildScheduleGrid({
-        year: this.yearSig(),
-        month: this.monthSig(),
+      const grid = this.composeGridFromData(data);
+      this.exportService.prepareExportPayload(grid);
+    }
+  }
+
+  private canShowPortalPreferences(): boolean {
+    const role = this.auth.user()?.role;
+    return !!role && isAdminRole(role);
+  }
+
+  /**
+   * Preferência do portal só para admin montar a escala.
+   * Não altera o nome; preenche preferredShiftCode na linha da grade.
+   */
+  private withPortalPreferenceOnGrid(grid: ScheduleGridData): ScheduleGridData {
+    if (!this.canShowPortalPreferences()) return grid;
+    const prefs = this.monthlyPrefByEmployee();
+    if (prefs.size === 0) return grid;
+    return {
+      ...grid,
+      groups: grid.groups.map((group) => ({
+        ...group,
+        rows: group.rows.map((row) => {
+          const code = prefs.get(row.employeeId);
+          return code ? { ...row, preferredShiftCode: code } : row;
+        }),
+      })),
+    };
+  }
+
+  /** Lead-in dos últimos 6 dias do mês anterior — só em planejada não publicada. */
+  private shouldShowPreviousMonthLead(status?: string | null): boolean {
+    if (this.isExecutedView()) return false;
+    const st = status ?? this.scheduleData()?.scheduleMonth.status;
+    return !!st && st !== 'PUBLISHED' && st !== 'ARCHIVED';
+  }
+
+  private composeGridFromData(
+    data: Pick<
+      ScheduleMonthResponse,
+      | 'employees'
+      | 'assignments'
+      | 'preAllocations'
+      | 'operationalCadastros'
+      | 'shifts'
+      | 'scheduleMonth'
+    > & { shiftSwaps?: ScheduleMonthResponse['shiftSwaps'] },
+    opts?: { shiftSwaps?: ScheduleMonthResponse['shiftSwaps'] },
+  ): ScheduleGridData {
+    const year = this.yearSig();
+    const month = this.monthSig();
+    const showLead = this.shouldShowPreviousMonthLead(data.scheduleMonth?.status);
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prev = showLead ? this.previousScheduleData() : null;
+
+    return this.withPortalPreferenceOnGrid(
+      buildScheduleGrid({
+        year,
+        month,
         employees: data.employees,
         assignments: data.assignments,
         preAllocations: data.preAllocations,
         operationalCadastros: data.operationalCadastros,
         shifts: data.shifts,
-      });
-      this.exportService.prepareExportPayload(grid);
-    }
+        shiftSwaps: opts?.shiftSwaps,
+        leadDays: showLead ? PREVIOUS_MONTH_LEAD_DAYS : 0,
+        previousMonth: showLead
+          ? {
+              year: prevYear,
+              month: prevMonth,
+              assignments: prev?.assignments ?? [],
+              preAllocations: prev?.preAllocations ?? [],
+              operationalCadastros: prev?.operationalCadastros,
+            }
+          : null,
+      }),
+    );
   }
 
   private manualEditRangeRequest(

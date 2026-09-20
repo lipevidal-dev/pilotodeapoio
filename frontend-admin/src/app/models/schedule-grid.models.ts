@@ -1,5 +1,11 @@
 import type { EmployeeType } from './api.models';
 
+/**
+ * Dias do mês anterior antepostos na escala planejada não publicada
+ * (contexto visual + critério 6x1 ao lado do dia 1).
+ */
+export const PREVIOUS_MONTH_LEAD_DAYS = 6;
+
 /** Cor padrão única para todos os turnos (T6, T7, T8, T1–T4, etc.). */
 export const SHIFT_DEFAULT_COLOR = {
   background: '#dbeafe',

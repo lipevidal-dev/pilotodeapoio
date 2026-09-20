@@ -2,7 +2,12 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import type { CreateEmployeePayload, Employee, UpdateEmployeePayload } from '../models/api.models';
+import type {
+  CreateEmployeePayload,
+  Employee,
+  EmployeeMonthlyShiftPreferencesResponse,
+  UpdateEmployeePayload,
+} from '../models/api.models';
 
 @Injectable({ providedIn: 'root' })
 export class EmployeeService {
@@ -27,5 +32,15 @@ export class EmployeeService {
 
   delete(id: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/employees/${id}`);
+  }
+
+  /** Preferências de turno do portal no mês (admin — exibe código ao lado do nome). */
+  listMonthlyShiftPreferences(
+    year: number,
+    month: number,
+  ): Observable<EmployeeMonthlyShiftPreferencesResponse> {
+    return this.http.get<EmployeeMonthlyShiftPreferencesResponse>(
+      `${this.base}/employees/monthly-shift-preferences/${year}/${month}`,
+    );
   }
 }

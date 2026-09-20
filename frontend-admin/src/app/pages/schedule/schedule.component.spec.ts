@@ -76,9 +76,25 @@ describe('ScheduleComponent — geração principal', () => {
     http.verify();
   });
 
-  function flushScheduleView(): void {
+  function flushScheduleView(status: 'DRAFT' | 'PUBLISHED' | 'GENERATED' = 'DRAFT'): void {
+    const monthPayload = {
+      ...emptyMonth,
+      scheduleMonth: { ...emptyMonth.scheduleMonth, status },
+    };
     fixture.detectChanges();
-    http.expectOne(`${base}/schedules/${year}/${month}`).flush(emptyMonth);
+    http.expectOne(`${base}/schedules/${year}/${month}`).flush(monthPayload);
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevMonth = month === 1 ? 12 : month - 1;
+    // Lead-in busca a realizada do mês anterior (falha silenciosa → null).
+    const prevReq = http.expectOne(`${base}/schedules/${prevYear}/${prevMonth}/executed`);
+    prevReq.flush({
+      scheduleMonth: { id: 'sm-prev', year: prevYear, month: prevMonth, status: 'PUBLISHED' },
+      employees: [],
+      shifts: [],
+      assignments: [],
+      preAllocations: [],
+      operationalCadastros: [],
+    });
     http.expectOne(`${base}/config/next-motor`).flush(nextMotorConfig);
   }
 
@@ -110,10 +126,24 @@ describe('ScheduleComponent — geração principal', () => {
       enginePath: 'domain/schedule/clean-engine/clean-engine.ts',
       realEngineExecuted: true,
     });
-    http.expectOne(`${base}/schedules/${year}/${month}`);
+    // reload após gerar
+    http.expectOne(`${base}/schedules/${year}/${month}`).flush({
+      ...emptyMonth,
+      scheduleMonth: { id: 'sm-1', year, month, status: 'GENERATED' },
+    });
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevMonth = month === 1 ? 12 : month - 1;
+    http.expectOne(`${base}/schedules/${prevYear}/${prevMonth}/executed`).flush({
+      scheduleMonth: { id: 'sm-prev', year: prevYear, month: prevMonth, status: 'PUBLISHED' },
+      employees: [],
+      shifts: [],
+      assignments: [],
+      preAllocations: [],
+      operationalCadastros: [],
+    });
   });
 
-  it('Despublicar abre popup e confirma com POST /unpublish', () => {
+  it('Despublicar chama POST /unpublish', () => {
     flushScheduleView();
     component.scheduleData.set({
       ...emptyMonth,
@@ -124,10 +154,7 @@ describe('ScheduleComponent — geração principal', () => {
     const html = fixture.nativeElement as HTMLElement;
     expect(html.textContent).toContain('Despublicar');
 
-    component.openUnpublishConfirm();
-    expect(component.unpublishConfirmVisible()).toBe(true);
-
-    component.confirmUnpublish();
+    component.unpublish();
     const req = http.expectOne(`${base}/schedules/sm-1/unpublish`);
     expect(req.request.method).toBe('POST');
     req.flush({
@@ -136,10 +163,19 @@ describe('ScheduleComponent — geração principal', () => {
       month,
       status: 'GENERATED',
     });
-    expect(component.unpublishConfirmVisible()).toBe(false);
     http.expectOne(`${base}/schedules/${year}/${month}`).flush({
       ...emptyMonth,
       scheduleMonth: { id: 'sm-1', year, month, status: 'GENERATED' },
+    });
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevMonth = month === 1 ? 12 : month - 1;
+    http.expectOne(`${base}/schedules/${prevYear}/${prevMonth}/executed`).flush({
+      scheduleMonth: { id: 'sm-prev', year: prevYear, month: prevMonth, status: 'PUBLISHED' },
+      employees: [],
+      shifts: [],
+      assignments: [],
+      preAllocations: [],
+      operationalCadastros: [],
     });
   });
 });

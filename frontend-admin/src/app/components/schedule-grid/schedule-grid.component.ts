@@ -141,6 +141,9 @@ export class ScheduleGridComponent {
 
   private readonly emptyCell: ScheduleCellData = { display: '', kind: 'empty' };
 
+  /** Espelho do mês anterior comprimido (só UI — dados do lead continuam no grid). */
+  readonly leadCollapsed = signal(false);
+
   /** Colunas exibidas (lead-in + mês); fallback para dayNumbers em grids antigos. */
   displayColumns(): ScheduleDayColumn[] {
     const grid = this.grid();
@@ -159,6 +162,30 @@ export class ScheduleGridComponent {
         leadIndex: -1,
       };
     });
+  }
+
+  /** Colunas visíveis respeitando o compress/expand do espelho. */
+  visibleColumns(): ScheduleDayColumn[] {
+    const cols = this.displayColumns();
+    if (!this.leadCollapsed()) return cols;
+    return cols.filter((c) => !c.isLead);
+  }
+
+  hasLeadColumns(): boolean {
+    return (this.grid().leadDayCount ?? 0) > 0 || this.displayColumns().some((c) => c.isLead);
+  }
+
+  toggleLeadCollapsed(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.leadCollapsed.update((v) => !v);
+  }
+
+  dayHeaderLabel(col: ScheduleDayColumn): string {
+    const day = col.day < 10 ? `0${col.day}` : String(col.day);
+    if (!col.isLead) return day;
+    const month = col.month < 10 ? `0${col.month}` : String(col.month);
+    return `${day}/${month}`;
   }
 
   cellForColumn(row: EmployeeRowData, col: ScheduleDayColumn): ScheduleCellData {
