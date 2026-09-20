@@ -122,7 +122,10 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   readonly generatingNextMotor = signal(false);
   readonly generatingPreferencesOnly = signal(false);
   /** Geração completa com cobertura — oculto na UI; ligue para reexibir o botão antigo. */
-  readonly showFullGenerateButton = signal(false);
+  /** Botão de geração completa (com cobertura) — modo padrão do coordenador. */
+  readonly showFullGenerateButton = signal(true);
+  /** Botão “só preferências” (não preenche furos) — opcional / avançado. */
+  readonly showPreferencesOnlyGenerateButton = signal(false);
   readonly nextMotorSummary = signal<{
     enabledCount: number;
     totalCount: number;

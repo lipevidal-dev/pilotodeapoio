@@ -139,7 +139,7 @@
             @if (!isExecutedView()) {
             @if (canGenerateSchedule()) {
 
-              <!-- Geração completa (com cobertura): oculto por enquanto — reative com showFullGenerateButton. -->
+              <!-- Geração completa (com cobertura) — botão principal. -->
               @if (showFullGenerateButton()) {
               <p-button
 
@@ -164,6 +164,7 @@
               </p-button>
               }
 
+              @if (showPreferencesOnlyGenerateButton()) {
               <p-button
 
                 styleClass="btn-gol-primary ops-btn-motor"
@@ -172,7 +173,7 @@
 
                 (onClick)="generateWithNextMotor(true)"
 
-                [title]="'Gerar escala para ' + periodLabel()"
+                [title]="'Gerar só preferências (sem preencher furos) para ' + periodLabel()"
 
               >
 
@@ -180,11 +181,12 @@
 
                   <app-airplane-icon />
 
-                  <span>Gerar</span>
+                  <span>Só preferências</span>
 
                 </span>
 
               </p-button>
+              }
 
             }
 
