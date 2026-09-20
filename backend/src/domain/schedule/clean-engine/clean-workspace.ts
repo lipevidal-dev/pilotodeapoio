@@ -987,6 +987,41 @@ export class CleanWorkspace {
         });
       }
     }
+    this.scrubOrphanNdAllocations();
+  }
+
+  /**
+   * Remove ND sem par T8/T8 imediatamente anterior (inclui histórico cross-month).
+   * Evita ND “aleatório” / consecutivos após remoção de T8 isolado ou regeneração parcial.
+   */
+  scrubOrphanNdAllocations(): void {
+    const phase = "T8_ND";
+    for (const emp of this.paoEmployees) {
+      const did = emp.domainId;
+      for (const day of this.days) {
+        const label = this.blocked.get(assignmentKey(did, day));
+        if (!label) continue;
+        const upper = normalizeOperationalLabel(label).toUpperCase();
+        if (upper !== "ND" && upper !== CROSS_MONTH_ND_LABEL.toUpperCase()) continue;
+        const prev = addDays(day, -1);
+        const prev2 = addDays(day, -2);
+        const merged = this.mergedPlannedSnapshot();
+        const t8Prev = merged.get(assignmentKey(did, prev))?.toUpperCase() === "T8";
+        const t8Prev2 = merged.get(assignmentKey(did, prev2))?.toUpperCase() === "T8";
+        if (t8Prev && t8Prev2) continue;
+        this.clearBlock(did, day);
+        this.audit.record(
+          "T8_ND_BLOCKED",
+          phase,
+          "ND órfão removido — exige par T8/T8 no dia anterior",
+          {
+            date: day,
+            employeeUuid: emp.uuid,
+            employeeName: emp.employee.name,
+          },
+        );
+      }
+    }
   }
 
   listCoverageGaps(): Array<{ date: string; shiftCode: string }> {
