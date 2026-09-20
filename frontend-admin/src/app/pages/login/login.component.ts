@@ -54,7 +54,7 @@ export class LoginComponent implements OnInit {
   }
 
   sanitizeLogin(): void {
-    this.login = this.login.trim();
+    this.login = this.login.replace(/[^a-zA-Z0-9._@-]/g, '').slice(0, 20);
   }
 
   submit(): void {
