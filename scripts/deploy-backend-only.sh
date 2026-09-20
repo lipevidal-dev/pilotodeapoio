@@ -33,10 +33,18 @@ DEPLOY_PATH='${DEPLOY_PATH}'
 mkdir -p "\$DEPLOY_PATH"
 tar -xzf '${REMOTE_ARCHIVE}' -C "\$DEPLOY_PATH"
 cd "\$DEPLOY_PATH"
+# Snapshot ANTES do rebuild — permite voltar se der merda
+if [ -f scripts/snapshot-before-deploy.sh ]; then
+  sed -i 's/\r\$//' scripts/snapshot-before-deploy.sh scripts/rollback-docker.sh 2>/dev/null || true
+  chmod +x scripts/snapshot-before-deploy.sh scripts/rollback-docker.sh
+  sh scripts/snapshot-before-deploy.sh || true
+fi
 docker compose --env-file .env.prod -f docker-compose.prod.yml build backend
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d backend
 echo "Backend atualizado."
+echo "Se precisar voltar: cd \$DEPLOY_PATH && sh scripts/rollback-docker.sh"
 REMOTE
 
 echo
 echo "Pronto! Teste: https://pcoordenador.com.br/"
+echo "Rollback no VPS (se precisar): cd /opt/pilotodeapoiov2 && sh scripts/rollback-docker.sh"

@@ -501,6 +501,13 @@ export class CleanWorkspace {
     );
   }
 
+  /** Qualquer pré-alocação travada no dia (turno, ND, FOLGA, etc.). */
+  isLockedAllocationDay(employeeUuid: string, date: string): boolean {
+    return this.input.lockedAllocations.some(
+      (lock) => lock.employeeUuid === employeeUuid && lock.date === date,
+    );
+  }
+
   private mergedPlanned(): PlannedMap {
     const merged = new Map(this.historyPlanned);
     for (const [key, code] of this.planned) merged.set(key, code);
@@ -1025,6 +1032,8 @@ export class CleanWorkspace {
         if (!label) continue;
         const upper = normalizeOperationalLabel(label).toUpperCase();
         if (upper !== "ND" && upper !== CROSS_MONTH_ND_LABEL.toUpperCase()) continue;
+        // Não remove ND travado por pré-alocação / cross-month.
+        if (this.isLockedAllocationDay(emp.uuid, day)) continue;
         const prev = addDays(day, -1);
         const prev2 = addDays(day, -2);
         const merged = this.mergedPlannedSnapshot();
