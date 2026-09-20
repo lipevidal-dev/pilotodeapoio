@@ -108,23 +108,41 @@ export function maxSimultaneousWorkersIfAdded(
   type Event = { time: Date; delta: number };
   const events: Event[] = [];
 
-  const pushInterval = (eid: number, day: string, code: string) => {
+  const candInfo = shiftMap[shiftCode];
+  // Sem janela candidata válida, não há como exceder o limite neste turno.
+  if (!candInfo) return 0;
+  const { start: candStart, end: candEnd } = shiftStartEnd(
+    workDay,
+    candInfo.startTime,
+    candInfo.endTime,
+  );
+
+  /**
+   * Conta só a concorrência DENTRO da janela do turno candidato.
+   * Intervalos de outros dias (ex.: histórico cross-month do mês anterior) entram
+   * apenas se sobrepõem essa janela — evita bloquear o mês inteiro porque outubro
+   * já teve pico > 2 estações em outro dia.
+   */
+  const pushIntervalClippedToCandidate = (eid: number, day: string, code: string) => {
     if (code === "T9" || code === "T09") return;
     if (roleByEmployeeId.get(eid) === "PAO FCF") return;
     const info = shiftMap[code];
     if (!info) return;
     const { start, end } = shiftStartEnd(day, info.startTime, info.endTime);
-    events.push({ time: start, delta: 1 });
-    events.push({ time: end, delta: -1 });
+    const clippedStart = start > candStart ? start : candStart;
+    const clippedEnd = end < candEnd ? end : candEnd;
+    if (clippedEnd <= clippedStart) return;
+    events.push({ time: clippedStart, delta: 1 });
+    events.push({ time: clippedEnd, delta: -1 });
   };
 
   for (const [key, code] of planned) {
     const { employeeId: eid, day } = parseAssignmentKey(key);
-    pushInterval(eid, day, code);
+    pushIntervalClippedToCandidate(eid, day, code);
   }
 
   if (roleByEmployeeId.get(employeeId) !== "PAO FCF" && shiftCode !== "T9" && shiftCode !== "T09") {
-    pushInterval(employeeId, workDay, shiftCode);
+    pushIntervalClippedToCandidate(employeeId, workDay, shiftCode);
   }
 
   events.sort((a, b) => a.time.getTime() - b.time.getTime() || a.delta - b.delta);

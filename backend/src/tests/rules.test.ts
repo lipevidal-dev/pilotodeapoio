@@ -154,6 +154,19 @@ describe("máximo 2 pessoas simultâneas", () => {
     const peak = maxSimultaneousWorkersIfAdded(2, "2026-06-10", "T6", plan, shiftMap, roleMap);
     expect(peak).toBeLessThanOrEqual(2);
   });
+
+  it("pico alto em outro dia do histórico não bloqueia o dia candidato", () => {
+    // Simula cross-month: outubro com 3+ no mesmo horário, novembro vazio.
+    const plan = planned([
+      [1, "2026-10-27", "T6"],
+      [2, "2026-10-27", "T6"],
+      [4, "2026-10-27", "T6"],
+      [5, "2026-10-27", "T7"],
+      [6, "2026-10-27", "T8"],
+    ]);
+    const peak = maxSimultaneousWorkersIfAdded(3, "2026-11-01", "T6", plan, shiftMap, roleMap);
+    expect(peak).toBeLessThanOrEqual(2);
+  });
 });
 
 describe("APAO nunca sozinho (P-002)", () => {
