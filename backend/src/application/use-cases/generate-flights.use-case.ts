@@ -7,6 +7,7 @@ import { CalendarRepository } from "../../infrastructure/repositories/calendar.r
 import { ScheduleRepository } from "../../infrastructure/repositories/schedule.repository.js";
 import {
   buildGenerationInput,
+  filterLockedAllocationsForEmployees,
   preAllocationsToLocked,
 } from "../../infrastructure/mappers/generation-input.mapper.js";
 import {
@@ -59,7 +60,10 @@ export class GenerateFlightsUseCase {
     const preferredShiftRows = await this.scheduleRepo.listPreferredShiftsForMonth(year, month);
     const noFlightDates = await this.scheduleRepo.listNoFlightDatesForMonth(year, month);
 
-    const lockedFromDb = preAllocationsToLocked(record.preAllocations);
+    const lockedFromDb = filterLockedAllocationsForEmployees(
+      preAllocationsToLocked(record.preAllocations),
+      employees.map((e) => e.id),
+    );
     const skipPersistKeys = new Set(
       lockedFromDb
         .filter((row) => MANUAL_PREALLOC_LABELS.has(row.label.toUpperCase()))

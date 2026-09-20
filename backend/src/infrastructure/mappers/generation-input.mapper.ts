@@ -140,3 +140,11 @@ export function preAllocationsToLocked(
     endTime: p.endTime ?? undefined,
   }));
 }
+
+/** Mantém só pré-alocações de funcionários que entram na geração (ativos no input). */
+export function filterLockedAllocationsForEmployees<
+  T extends { employeeUuid: string },
+>(locks: T[], employeeUuids: Iterable<string>): T[] {
+  const active = new Set(employeeUuids);
+  return locks.filter((row) => active.has(row.employeeUuid));
+}

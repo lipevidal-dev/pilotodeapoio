@@ -78,6 +78,7 @@ export function validatePreAllocationsPreserved(
   assignments: GeneratedAssignment[],
   allocations: GeneratedAllocation[],
 ): ValidationIssue[] {
+  const activeUuids = new Set(input.employees.map((e) => e.uuid));
   const byAssign = new Map(assignments.map((a) => [`${a.employeeUuid}|${a.date}`, a.shiftCode]));
   const byAlloc = new Map(
     allocations.map((a) => [
@@ -87,6 +88,8 @@ export function validatePreAllocationsPreserved(
   );
   const out: ValidationIssue[] = [];
   for (const lock of input.lockedAllocations) {
+    // Pré-alocações de inativos/órfãos (ex.: continuidade cross-month) não entram no motor.
+    if (!activeUuids.has(lock.employeeUuid)) continue;
     const label = normalizeOperationalLabel(lock.label).toUpperCase();
     const key = `${lock.employeeUuid}|${lock.date}`;
     if (isRateioTurnCode(label)) {

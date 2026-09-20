@@ -2,6 +2,7 @@ import { MANUAL_PREALLOC_LABELS } from "../../domain/schedule/operational-labels
 import type { GenerationInput } from "../../domain/schedule/generation-types.js";
 import {
   buildGenerationInput,
+  filterLockedAllocationsForEmployees,
   preAllocationsToLocked,
 } from "../../infrastructure/mappers/generation-input.mapper.js";
 import { CalendarRepository } from "../../infrastructure/repositories/calendar.repository.js";
@@ -31,7 +32,10 @@ export class ScheduleGenerationInputService {
     const flightDays = await this.calendarRepo.listFlightDaysForMonth(year, month);
 
     const preAllocRows = existing?.preAllocations ?? (await this.preAllocRepo.findAll({ year, month }));
-    const lockedFromDb = preAllocationsToLocked(preAllocRows);
+    const lockedFromDb = filterLockedAllocationsForEmployees(
+      preAllocationsToLocked(preAllocRows),
+      employees.map((e) => e.id),
+    );
 
     return buildGenerationInput({
       year,
