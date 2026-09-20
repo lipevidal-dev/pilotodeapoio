@@ -23,6 +23,7 @@ import { motorRuleEnabled, motorShiftMaxConsecutivos, motorShiftMetaTurnos, moto
 import { motorShiftParamValue } from "../next-motor/next-motor-shift-params.js";
 import { fairRateioTargetPerEmployee } from "./clean-fair-rateio.js";
 import {
+  allowsIsolatedCoverageDay,
   employeePrefersShift,
   isBlockedOnlyByTurnSpacing,
   isT8PreferredPao,
@@ -826,54 +827,75 @@ export class CleanWorkspace {
           });
 
         let assigned = false;
-        if (this.usesNextMotorRules()) {
+        const nextMotor = this.usesNextMotorRules();
+        // T6/T7 no NEXT: só bloco do agrupamento — nunca turno isolado (gap se não couber).
+        const allowIsolate = !nextMotor || allowsIsolatedCoverageDay(normalized);
+
+        if (nextMotor) {
           assigned = tryFillCoverageBlock(this, date, shiftCode, phase, candidates);
         }
-        for (const c of candidates) {
-          if (assigned) break;
-          if (
-            motorShiftRuleEnabled(this.options, "pao_espacamento_turnos", normalized) &&
-            prefersRateioShift(this, c.domainId, normalized) &&
-            isBlockedOnlyByTurnSpacing(this, c.domainId, date, normalized)
-          ) {
-            continue;
-          }
-          if (this.tryAssign(c.uuid, date, shiftCode, phase)) {
-            assigned = true;
-            break;
-          }
-        }
-        if (
-          !assigned &&
-          motorShiftRuleEnabled(this.options, "pao_espacamento_turnos", normalized)
-        ) {
+
+        if (!assigned && allowIsolate) {
           for (const c of candidates) {
             if (
-              !prefersRateioShift(this, c.domainId, normalized) ||
-              !isBlockedOnlyByTurnSpacing(this, c.domainId, date, normalized)
+              motorShiftRuleEnabled(this.options, "pao_espacamento_turnos", normalized) &&
+              prefersRateioShift(this, c.domainId, normalized) &&
+              isBlockedOnlyByTurnSpacing(this, c.domainId, date, normalized)
             ) {
               continue;
             }
             if (this.tryAssign(c.uuid, date, shiftCode, phase)) {
               assigned = true;
-              this.audit.record(
-                "COVERAGE_ASSIGNED",
-                phase,
-                "cobertura com exceção de espaçamento",
-                {
-                  date,
-                  shiftCode: normalized,
-                  employeeUuid: c.uuid,
-                  employeeName: c.employee.name,
-                },
-              );
               break;
+            }
+          }
+        }
+
+        if (
+          !assigned &&
+          motorShiftRuleEnabled(this.options, "pao_espacamento_turnos", normalized)
+        ) {
+          if (nextMotor && !allowIsolate) {
+            assigned = tryFillCoverageBlock(this, date, shiftCode, phase, candidates, {
+              bypassSpacing: true,
+            });
+            if (!assigned) {
+              assigned = tryFillCoverageBlock(this, date, shiftCode, phase, candidates, {
+                bypassSpacing: true,
+                anyCandidate: true,
+              });
+            }
+          } else if (allowIsolate) {
+            for (const c of candidates) {
+              if (
+                !prefersRateioShift(this, c.domainId, normalized) ||
+                !isBlockedOnlyByTurnSpacing(this, c.domainId, date, normalized)
+              ) {
+                continue;
+              }
+              if (this.tryAssign(c.uuid, date, shiftCode, phase)) {
+                assigned = true;
+                this.audit.record(
+                  "COVERAGE_ASSIGNED",
+                  phase,
+                  "cobertura com exceção de espaçamento",
+                  {
+                    date,
+                    shiftCode: normalized,
+                    employeeUuid: c.uuid,
+                    employeeName: c.employee.name,
+                  },
+                );
+                break;
+              }
             }
           }
         }
         if (!assigned) {
           const reasons = candidates.length
-            ? `nenhum PAO elegível entre ${candidates.length} candidato(s)`
+            ? nextMotor && !allowIsolate
+              ? `nenhum bloco ≥ agrupamento elegível entre ${candidates.length} candidato(s)`
+              : `nenhum PAO elegível entre ${candidates.length} candidato(s)`
             : "nenhum PAO cadastrado";
           this.audit.record("COVERAGE_FAILED", phase, reasons, { date, shiftCode });
         }
