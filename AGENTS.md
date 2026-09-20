@@ -49,7 +49,9 @@ Observações de pré-alocações (voo/descrição, curso, simulador, CMA, outro
 
 Na escala **planejada não publicada** (DRAFT/GENERATED), a grade antepõe os **últimos 6 dias do mês anterior** (ex.: nov/2026 mostra 26–31/out antes do dia 01), com coluna `.col-lead` esmaecida e linha vermelha (`.col-month-start`) no dia 1. O conteúdo do lead-in vem da **escala realizada** do mês anterior (`GET .../executed`), não da planejada. Dias lead são **somente leitura**. Escala publicada/realizada/portal **não** mostram lead-in. A grade usa `fit-width` (sem scroll horizontal).
 
-Ao lado da linha divisória (dia 1) há um mini-ícone **(−)/(+)**: (−) comprime/esconde os 6 dias do espelho; (+) restaura. A geração 6x1 no motor usa o histórico cross-month (lookback ≥ 6 dias) — o espelho visual é o mesmo critério de continuidade ao lado do dia 1.
+Ao lado da linha divisória (dia 1) há um mini-ícone **(−)/(+)**: (−) comprime/esconde os 6 dias do espelho; (+) restaura.
+
+**6x1 cross-month:** na geração, a folga obrigatória no dia 1 usa o **mesmo espelho (−6) da realizada** — só **turnos** (`executed_schedule_assignment`), não ND/pré-alocações. Ex.: 6× T7 em 26–31/out → FOLGA em 01/nov.
 
 ### Serviços úteis (produção VPS)
 

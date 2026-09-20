@@ -1,7 +1,11 @@
 import { addDays, iterDays } from "../rules/dates.js";
 import { isoDateKey } from "../rules/date-keys.js";
 
-export const CROSS_MONTH_LOOKBACK_DAYS = 15;
+/**
+ * Janela de continuidade alinhada ao espelho visual (−6) da escala planejada
+ * não publicada: só os últimos N dias do mês anterior entram no histórico.
+ */
+export const CROSS_MONTH_LOOKBACK_DAYS = 6;
 
 export interface CrossMonthAssignment {
   employeeUuid: string;
@@ -27,7 +31,8 @@ export interface VacationReturnDay {
 
 export function lookbackStartDate(year: number, month: number): string {
   const first = iterDays(year, month)[0];
-  return addDays(first, -(CROSS_MONTH_LOOKBACK_DAYS - 1));
+  // Inclusivo: −6 → 26–31/out antes de 01/nov (espelho visual).
+  return addDays(first, -CROSS_MONTH_LOOKBACK_DAYS);
 }
 
 export function filterHistoryByLookback<T extends { date: string }>(

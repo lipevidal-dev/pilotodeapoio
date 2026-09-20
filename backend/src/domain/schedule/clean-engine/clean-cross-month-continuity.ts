@@ -45,8 +45,22 @@ export function consecutiveWorkDaysBefore(
 }
 
 /**
- * Folga obrigatória no 1º dia do mês quando o mês anterior encerrou com 6+ dias consecutivos.
- * Espelha enforceMonthStart6x1FromPrevious do motor legado.
+ * Dias com **turno** consecutivos antes de `day` (só assignments — não ND/VOO/etc.).
+ * Critério do espelho (−6) da realizada: 6 turnos seguidos → folga no dia 1.
+ */
+export function consecutiveShiftDaysBefore(
+  ws: CleanWorkspace,
+  uuid: string,
+  day: string,
+): number {
+  const did = ws.uuidToDomain.get(uuid);
+  if (did == null) return 0;
+  return consecutiveWorkCount(did, day, ws.mergedPlannedForContinuity(), undefined);
+}
+
+/**
+ * Folga obrigatória no 1º dia do mês quando o mês anterior encerrou com 6+ **turnos** consecutivos
+ * (espelho da realizada −6). ND/pré-alocações sozinhas não contam.
  */
 export function enforceMonthStartSixByOneFromPrevious(ws: CleanWorkspace): void {
   if (!ws.usesNextMotorRules()) return;
@@ -57,7 +71,7 @@ export function enforceMonthStartSixByOneFromPrevious(ws: CleanWorkspace): void 
   for (const emp of ws.input.employees) {
     const role = emp.employee.role?.toUpperCase();
     if (role !== "PAO" && role !== "APAO") continue;
-    if (consecutiveWorkDaysBefore(ws, emp.uuid, firstDay) < 6) continue;
+    if (consecutiveShiftDaysBefore(ws, emp.uuid, firstDay) < 6) continue;
 
     const did = emp.domainId;
     if (ws.planned.has(assignmentKey(did, firstDay)) || ws.blocked.has(assignmentKey(did, firstDay))) {
@@ -125,7 +139,7 @@ export function ensureCrossMonthT8Continuations(ws: CleanWorkspace): void {
   }
 }
 
-/** Pré-aloca folga 6x1 no mês seguinte para quem encerrou o mês com 6 dias consecutivos. */
+/** Pré-aloca folga 6x1 no mês seguinte para quem encerrou o mês com 6 **turnos** consecutivos. */
 export function appendCrossMonthSixByOneFolgas(ws: CleanWorkspace): void {
   if (!ws.usesNextMotorRules()) return;
   if (!motorRuleEnabled(ws.options, "max_6_consecutive")) return;
@@ -137,7 +151,7 @@ export function appendCrossMonthSixByOneFolgas(ws: CleanWorkspace): void {
   for (const emp of ws.input.employees) {
     const role = emp.employee.role?.toUpperCase();
     if (role !== "PAO" && role !== "APAO") continue;
-    if (consecutiveWorkDaysBefore(ws, emp.uuid, firstNext) < 6) continue;
+    if (consecutiveShiftDaysBefore(ws, emp.uuid, firstNext) < 6) continue;
     if (hasCrossMonthFixOnDay(ws, emp.uuid, firstNext)) continue;
 
     ws.addCrossMonthPreAllocations([

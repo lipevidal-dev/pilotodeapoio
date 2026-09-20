@@ -155,10 +155,10 @@ export function preAllocationsToLocked(
 
 /**
  * Remove continuidades cross-month que sobraram de uma geração anterior e não
- * são mais sustentadas pelo histórico publicado do mês anterior.
+ * são mais sustentadas pelo histórico **realizado** do mês anterior (espelho −6).
  *
- * Ex.: se agosto foi alterado e o funcionário não fecha mais o mês em T8,
- * pré-alocações T8/ND CONTINUIDADE em setembro deixam de ser obrigatórias.
+ * Ex.: se outubro mudou e o funcionário não fecha mais com 6 turnos, FOLGA em
+ * 01/11 deixa de ser obrigatória. T8/ND CONTINUIDADE seguem a mesma ideia.
  */
 export function filterStaleCrossMonthPreAllocations(
   rows: PreAllocationLockRow[],
@@ -177,11 +177,24 @@ export function filterStaleCrossMonthPreAllocations(
     acceptedCrossMonthTurns.get(`${employeeUuid}|${date}`) ??
     planned.get(`${employeeUuid}|${date}`);
 
+  const consecutiveShiftsBefore = (employeeUuid: string, date: string): number => {
+    let count = 0;
+    let d = addDays(date, -1);
+    while (shiftOn(employeeUuid, d)) {
+      count++;
+      d = addDays(d, -1);
+    }
+    return count;
+  };
+
   const sorted = [...rows].sort((a, b) => isoDateKey(a.date).localeCompare(isoDateKey(b.date)));
   for (const row of sorted) {
     const label = normalizeOperationalLabel(row.label).toUpperCase();
     const isCrossMonth = String(row.notes ?? "").toLowerCase().startsWith("cross-month:");
-    if (!isCrossMonth || (label !== "T8" && label !== CROSS_MONTH_ND_LABEL.toUpperCase())) {
+    if (
+      !isCrossMonth ||
+      (label !== "T8" && label !== CROSS_MONTH_ND_LABEL.toUpperCase() && label !== "FOLGA")
+    ) {
       keep.add(row);
       continue;
     }
@@ -189,6 +202,14 @@ export function filterStaleCrossMonthPreAllocations(
     const date = isoDateKey(row.date);
     const prev = addDays(date, -1);
     const prev2 = addDays(date, -2);
+
+    if (label === "FOLGA") {
+      // Só turnos contam (igual ao espelho −6 da realizada).
+      if (consecutiveShiftsBefore(row.employeeId, date) >= 6) {
+        keep.add(row);
+      }
+      continue;
+    }
 
     if (label === "T8") {
       if (shiftOn(row.employeeId, prev) === "T8") {

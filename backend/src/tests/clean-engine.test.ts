@@ -1058,4 +1058,45 @@ describe("CleanEngine", () => {
       ),
     ).toBe(true);
   });
+
+  it("6x1 cross-month: só turnos contam — 6 ND no fim do mês NÃO pré-aloca FOLGA", () => {
+    const ana = emp(1, "Ana", "PAO", 1);
+    ana.uuid = "uuid-a";
+    const input: GenerationInput = {
+      year: 2026,
+      month: 10,
+      employees: [ana],
+      shifts: baseShifts(),
+      lockedAllocations: [],
+      vacationDays: [],
+      approvedDayOff: [],
+      flightDays: [],
+      crossMonthHistory: {
+        assignments: [],
+        allocations: [
+          { employeeUuid: "uuid-a", date: "2026-10-26", label: "ND" },
+          { employeeUuid: "uuid-a", date: "2026-10-27", label: "ND" },
+          { employeeUuid: "uuid-a", date: "2026-10-28", label: "ND" },
+          { employeeUuid: "uuid-a", date: "2026-10-29", label: "ND" },
+          { employeeUuid: "uuid-a", date: "2026-10-30", label: "ND" },
+          { employeeUuid: "uuid-a", date: "2026-10-31", label: "ND" },
+        ],
+      },
+    };
+    const options = {
+      scopeEmployeeUuids: ["uuid-a"],
+      motorVersion: MOTOR_VERSION_NEXT,
+      coverageShiftCodes: ["T6", "T7", "T8"],
+      enabledRules: { max_6_consecutive: true },
+      motorParams: { pao_max_consecutivos: 6 },
+    };
+    const ws = new CleanWorkspace(input, options);
+    ws.applyLockedPreAllocations();
+    finalizeCrossMonthContinuations(ws);
+    expect(
+      ws.crossMonthPreAllocations.some(
+        (r) => r.employeeUuid === "uuid-a" && r.date === "2026-11-01" && r.label === "FOLGA",
+      ),
+    ).toBe(false);
+  });
 });

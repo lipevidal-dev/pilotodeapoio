@@ -277,7 +277,11 @@ export class ScheduleRepository {
     }));
   }
 
-  /** Histórico operacional do mês anterior (últimos 15 dias) para continuidade. */
+  /**
+   * Histórico operacional do mês anterior para continuidade (6x1, 12h, T8).
+   * Fonte: escala **realizada** (não a planejada), últimos {@link CROSS_MONTH_LOOKBACK_DAYS}
+   * dias — o mesmo critério do espelho (−6) na grade.
+   */
   async loadCrossMonthHistory(year: number, month: number): Promise<CrossMonthHistory> {
     const prevMonth = month === 1 ? 12 : month - 1;
     const prevYear = month === 1 ? year - 1 : year;
@@ -285,16 +289,16 @@ export class ScheduleRepository {
     const prev = await prisma.scheduleMonth.findUnique({
       where: { year_month: { year: prevYear, month: prevMonth } },
       include: {
-        assignments: { orderBy: { date: "asc" } },
-        preAllocations: { orderBy: { date: "asc" } },
+        executedAssignments: { orderBy: { date: "asc" } },
+        executedPreAllocations: { orderBy: { date: "asc" } },
       },
     });
 
     let assignments = prev
-      ? filterHistoryByLookback(assignmentsFromDb(prev.assignments), year, month)
+      ? filterHistoryByLookback(assignmentsFromDb(prev.executedAssignments), year, month)
       : [];
     let allocations = prev
-      ? filterHistoryByLookback(allocationsFromDb(prev.preAllocations), year, month)
+      ? filterHistoryByLookback(allocationsFromDb(prev.executedPreAllocations), year, month)
       : [];
 
     const calendarAllocations = await this.loadCalendarCrossMonthAllocations(year, month);
