@@ -162,14 +162,14 @@ $crosshair-focus-bg: #fce1d7;
 }
 
 .schedule-grid-scroller {
-  width: max-content;
+  width: 100%;
   min-width: 100%;
 }
 
 .coverage-gaps-rail {
   display: flex;
   align-items: flex-end;
-  width: max-content;
+  width: 100%;
   min-width: 100%;
   min-height: 1rem;
   margin-bottom: 0.15rem;
@@ -183,8 +183,9 @@ $crosshair-focus-bg: #fce1d7;
 }
 
 .coverage-gaps-rail__day {
-  flex: 0 0 var(--col-day-w);
-  width: var(--col-day-w);
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
   display: flex;
   justify-content: center;
   align-items: flex-end;
@@ -212,7 +213,8 @@ $crosshair-focus-bg: #fce1d7;
 .schedule-grid {
   border-collapse: separate;
   border-spacing: 0;
-  width: max-content;
+  /* Preenche a sanfona: dias absorvem o resto; resumo fica na largura justa. */
+  width: 100%;
   min-width: 100%;
   font-size: 0.75rem;
   table-layout: fixed;
@@ -254,7 +256,6 @@ $crosshair-focus-bg: #fce1d7;
     width: var(--col-summary-w);
     min-width: var(--col-summary-w);
     max-width: var(--col-summary-w);
-    margin-left: auto; /* cola o bloco na direita se a célula sobrar */
     min-height: 100%;
     background: $summary-head-bg;
     border: 1px solid $summary-peach-border;
@@ -328,11 +329,9 @@ $crosshair-focus-bg: #fce1d7;
   .summary-block-inner {
     display: flex;
     align-items: stretch;
-    justify-content: flex-end;
     width: var(--col-summary-w);
     min-width: var(--col-summary-w);
     max-width: var(--col-summary-w);
-    margin-left: auto;
     box-sizing: border-box;
   }
 
@@ -380,9 +379,10 @@ $crosshair-focus-bg: #fce1d7;
     overflow: visible;
     text-align: center;
     padding: 0.15rem !important;
-    width: var(--col-day-w);
-    min-width: var(--col-day-w);
-    max-width: var(--col-day-w);
+    /* Sem max fixo: na tabela 100% o restante vai para os dias, não para o resumo. */
+    width: auto;
+    min-width: 0;
+    max-width: none;
   }
 
   .day-head-stack {
