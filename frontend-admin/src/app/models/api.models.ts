@@ -63,6 +63,9 @@ export interface Employee {
   inInstruction?: boolean;
   instructionStartDate?: string | null;
   instructionEndDate?: string | null;
+  /** Comandante — fora do rateio PAO no dashboard. */
+  isCmte?: boolean;
+  manualScheduleOnly?: boolean;
   portalLogin?: string | null;
   createdAt?: string;
   updatedAt?: string;

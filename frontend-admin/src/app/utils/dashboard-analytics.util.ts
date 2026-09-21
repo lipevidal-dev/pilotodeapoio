@@ -1,4 +1,4 @@
-import type { ChartData, ChartOptions } from 'chart.js';
+import { Chart, type ChartData, type ChartOptions } from 'chart.js';
 import type {
   Employee,
   EmployeeMonthlyShiftPreferenceRow,
@@ -7,6 +7,40 @@ import type {
 } from '../models/api.models';
 import { mapLabelToCell, mapShiftToCell } from './schedule-cell.mapper';
 import { isRateioShiftCode } from './shift-code.util';
+
+const DASHBOARD_BAR_VALUES_PLUGIN_ID = 'dashboardBarValueLabels';
+
+/** Plugin: desenha o valor total em cima de cada coluna do gráfico. */
+function ensureBarValueLabelsPlugin(): void {
+  if (Chart.registry.plugins.get(DASHBOARD_BAR_VALUES_PLUGIN_ID)) return;
+  Chart.register({
+    id: DASHBOARD_BAR_VALUES_PLUGIN_ID,
+    afterDatasetsDraw(chart) {
+      const conf = (chart.options.plugins as Record<string, { display?: boolean }> | undefined)
+        ?.['dashboardBarValues'];
+      if (!conf?.display) return;
+      const { ctx } = chart;
+      chart.data.datasets.forEach((dataset, datasetIndex) => {
+        const meta = chart.getDatasetMeta(datasetIndex);
+        if (meta.hidden) return;
+        meta.data.forEach((element, index) => {
+          const value = dataset.data[index];
+          if (value == null || typeof value === 'object') return;
+          const { x, y } = element.getProps(['x', 'y'], true);
+          ctx.save();
+          ctx.fillStyle = '#2d2d2d';
+          ctx.font = "bold 11px 'Segoe UI', system-ui, sans-serif";
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(String(value), x, y - 4);
+          ctx.restore();
+        });
+      });
+    },
+  });
+}
+
+ensureBarValueLabelsPlugin();
 
 export type DashboardRoleFilter = 'ALL' | 'PAO' | 'APAO';
 export type DashboardCategoryFilter = 'ALL' | 'SHIFTS' | 'OFF' | 'OTHER';
@@ -82,6 +116,13 @@ function employeeRole(emp: Employee): 'PAO' | 'APAO' | 'OTHER' {
   if (code.includes('APAO')) return 'APAO';
   if (code.includes('PAO')) return 'PAO';
   return 'OTHER';
+}
+
+/** Total de Turnos: só PAO de rateio — sem APAO e sem comandantes. */
+function isRateioPaoForWorkloadChart(emp: Employee): boolean {
+  if (!emp.active) return false;
+  if (emp.isCmte) return false;
+  return employeeRole(emp) === 'PAO';
 }
 
 function classifyBucket(row: ScheduleAssignmentRow): string {
@@ -243,25 +284,25 @@ function buildEmployeeWorkload(
   filtered: ScheduleAssignmentRow[],
   employees: Employee[],
 ): ChartData<'bar'> {
+  const eligible = employees.filter(isRateioPaoForWorkloadChart);
+  const eligibleIds = new Set(eligible.map((e) => e.id));
   const counts = new Map<string, number>();
-  for (const emp of employees) {
-    if (!emp.active) continue;
+  for (const emp of eligible) {
     counts.set(emp.id, 0);
   }
   for (const row of filtered) {
+    if (!eligibleIds.has(row.employeeId)) continue;
     if (!isShiftBucket(classifyBucket(row))) continue;
-    if (!counts.has(row.employeeId)) counts.set(row.employeeId, 0);
     counts.set(row.employeeId, (counts.get(row.employeeId) ?? 0) + 1);
   }
   const nameById = new Map(employees.map((e) => [e.id, e.name]));
-  // Todos os colaboradores ativos; ordenado por total (maior → menor).
-  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1] || (nameById.get(a[0]) ?? '').localeCompare(nameById.get(b[0]) ?? ''));
+  const ranked = [...counts.entries()].sort(
+    (a, b) => b[1] - a[1] || (nameById.get(a[0]) ?? '').localeCompare(nameById.get(b[0]) ?? ''),
+  );
   return {
-    labels: ranked.map(([id, n]) => {
+    labels: ranked.map(([id]) => {
       const name = nameById.get(id) ?? id;
-      const short = name.length > 14 ? `${name.slice(0, 12)}…` : name;
-      // Contador visível em cada coluna (rótulo multilinha no eixo X).
-      return [short, String(n)];
+      return name.length > 14 ? `${name.slice(0, 12)}…` : name;
     }),
     datasets: [
       {
@@ -447,18 +488,17 @@ export function buildDashboardAnalytics(
   const employeeWorkloadOptions: ChartOptions<'bar'> = {
     maintainAspectRatio: false,
     resizeDelay: 150,
+    layout: { padding: { top: 18, bottom: 2, left: 4, right: 4 } },
     plugins: {
       legend: { display: false },
+      // plugin custom dashboardBarValueLabels
+      dashboardBarValues: { display: true },
       tooltip: {
         callbacks: {
-          title: (items) => {
-            const raw = items[0]?.label;
-            return Array.isArray(raw) ? String(raw[0] ?? '') : String(raw ?? '');
-          },
           label: (ctx) => ` Total de turnos: ${ctx.parsed.y}`,
         },
       },
-    },
+    } as ChartOptions<'bar'>['plugins'],
     scales: {
       x: {
         ticks: {
