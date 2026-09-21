@@ -195,6 +195,50 @@
   margin: 0 -0.35rem;
   padding: 0 0.15rem 0.35rem;
   max-width: 100%;
+
+  /* Ver Todos: dias em largura fixa + scroll horizontal (não esmagar no fit-width). */
+  ::ng-deep .schedule-grid-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+  ::ng-deep .schedule-grid-scroller {
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+  }
+
+  ::ng-deep .schedule-grid {
+    width: max-content !important;
+    min-width: max-content !important;
+    max-width: none !important;
+    table-layout: fixed;
+  }
+
+  ::ng-deep .col-day {
+    width: var(--col-day-w, 2.35rem) !important;
+    min-width: var(--col-day-w, 2.35rem) !important;
+    max-width: var(--col-day-w, 2.35rem) !important;
+  }
+
+  ::ng-deep .col-employee,
+  ::ng-deep .sticky-col {
+    width: 6.5rem !important;
+    min-width: 6.5rem !important;
+    max-width: 6.5rem !important;
+  }
+
+  ::ng-deep .coverage-gaps-rail {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  ::ng-deep .coverage-gaps-rail__day {
+    flex: 0 0 var(--col-day-w, 2.35rem) !important;
+    width: var(--col-day-w, 2.35rem) !important;
+    min-width: var(--col-day-w, 2.35rem) !important;
+  }
 }
 
 

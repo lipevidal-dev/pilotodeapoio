@@ -104,72 +104,114 @@ $crosshair-focus-bg: #fce1d7;
     box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.15);
   }
 
-  // Encaixa a grade na largura disponível (sem scroll horizontal).
+  // Encaixa a grade na largura disponível (sem scroll horizontal) — só desktop largo.
+  // No mobile / telas estreitas: scroll horizontal com dia em largura fixa (Ver Todos).
   &.fit-width {
-    overflow-x: hidden;
+    @media (min-width: 901px) {
+      overflow-x: hidden;
 
-    .schedule-grid-scroller {
-      width: 100%;
-      min-width: 0;
-      max-width: 100%;
-    }
+      .schedule-grid-scroller {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+      }
 
-    .schedule-grid {
-      width: 100%;
-      min-width: 0;
-      max-width: 100%;
-      table-layout: fixed;
-    }
+      .schedule-grid {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        table-layout: fixed;
+      }
 
-    .col-day {
-      width: auto;
-      min-width: 0;
-      max-width: none;
-      padding: 0.1rem 0 !important;
-    }
-
-    &.has-summary {
       .col-day {
-        width: calc(
-          (100% - var(--col-employee-w) - var(--col-summary-w)) / max(var(--day-col-count), 1)
-        );
+        width: auto;
+        min-width: 0;
+        max-width: none;
+        padding: 0.1rem 0 !important;
+      }
+
+      &.has-summary {
+        .col-day {
+          width: calc(
+            (100% - var(--col-employee-w) - var(--col-summary-w)) / max(var(--day-col-count), 1)
+          );
+        }
+
+        .coverage-gaps-rail__day {
+          flex: 1 1 0;
+          min-width: 0;
+          width: auto;
+        }
+      }
+
+      &:not(.has-summary) {
+        .col-day {
+          width: calc((100% - var(--col-employee-w)) / max(var(--day-col-count), 1));
+        }
+
+        .coverage-gaps-rail__day {
+          flex: 1 1 0;
+          min-width: 0;
+          width: auto;
+        }
+      }
+
+      .coverage-gaps-rail {
+        width: 100%;
+      }
+
+      thead .col-day .day-num {
+        font-size: clamp(0.5rem, 1.1vw, 0.72rem);
+      }
+
+      thead .col-day .day-wd {
+        font-size: clamp(0.42rem, 0.9vw, 0.58rem);
+      }
+
+      thead .col-lead .day-num {
+        font-size: clamp(0.42rem, 0.95vw, 0.62rem);
+      }
+
+      .coverage-gap-icon {
+        width: 0.7rem;
+        height: 0.7rem;
       }
     }
 
-    &:not(.has-summary) {
-      .col-day {
-        width: calc((100% - var(--col-employee-w)) / max(var(--day-col-count), 1));
+    @media (max-width: 900px) {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+
+      .schedule-grid-scroller {
+        width: max-content;
+        min-width: 100%;
+        max-width: none;
       }
-    }
 
-    thead .col-day .day-num {
-      font-size: clamp(0.5rem, 1.1vw, 0.72rem);
-    }
+      .schedule-grid {
+        width: max-content;
+        min-width: max-content;
+        max-width: none;
+      }
 
-    thead .col-day .day-wd {
-      font-size: clamp(0.42rem, 0.9vw, 0.58rem);
-    }
-
-    thead .col-lead .day-num {
-      font-size: clamp(0.42rem, 0.95vw, 0.62rem);
-    }
-
-    .coverage-gap-icon {
-      width: 0.7rem;
-      height: 0.7rem;
+      .col-day {
+        width: var(--col-day-w);
+        min-width: var(--col-day-w);
+        max-width: var(--col-day-w);
+      }
     }
   }
 }
 
 .schedule-grid-scroller {
-  width: 100%;
+  width: max-content;
   min-width: 100%;
 }
 
 .coverage-gaps-rail {
   display: flex;
   align-items: flex-end;
-  width: 100%;
+  width: max-content;
   min-width: 100%;
   min-height: 1rem;
   margin-bottom: 0.15rem;
@@ -183,9 +225,8 @@ $crosshair-focus-bg: #fce1d7;
 }
 
 .coverage-gaps-rail__day {
-  flex: 1 1 0;
-  min-width: 0;
-  width: auto;
+  flex: 0 0 var(--col-day-w);
+  width: var(--col-day-w);
   display: flex;
   justify-content: center;
   align-items: flex-end;
@@ -213,8 +254,7 @@ $crosshair-focus-bg: #fce1d7;
 .schedule-grid {
   border-collapse: separate;
   border-spacing: 0;
-  /* Preenche a sanfona: dias absorvem o resto; resumo fica na largura justa. */
-  width: 100%;
+  width: max-content;
   min-width: 100%;
   font-size: 0.75rem;
   table-layout: fixed;
@@ -379,10 +419,9 @@ $crosshair-focus-bg: #fce1d7;
     overflow: visible;
     text-align: center;
     padding: 0.15rem !important;
-    /* Sem max fixo: na tabela 100% o restante vai para os dias, não para o resumo. */
-    width: auto;
-    min-width: 0;
-    max-width: none;
+    width: var(--col-day-w);
+    min-width: var(--col-day-w);
+    max-width: var(--col-day-w);
   }
 
   .day-head-stack {
