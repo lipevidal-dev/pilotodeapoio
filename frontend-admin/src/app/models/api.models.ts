@@ -271,6 +271,30 @@ export interface OperationalBalanceReport {
   shiftsAdded: number;
 }
 
+export interface FairRateioEmployeeRow {
+  uuid: string;
+  name: string;
+  prior: number;
+  monthCount: number;
+  accumulated: number;
+  expected: number;
+  saldo: number;
+  activeMonths: number[];
+}
+
+export interface FairRateioReport {
+  year: number;
+  month: number;
+  daysInMonth: number;
+  employeeCount: number;
+  demand: number;
+  meta: number;
+  remainderGaps: number;
+  coverageShiftCodes: string[];
+  employeeCountByMonth: Record<string, number>;
+  employees: FairRateioEmployeeRow[];
+}
+
 export interface GenerationSummary {
   totalViolations?: number;
   criticalCount?: number;
@@ -291,6 +315,8 @@ export interface GenerationSummary {
   enginePath?: string;
   realEngineExecuted?: boolean;
   realMotorReport?: Record<string, unknown>;
+  /** Rateio justo: N do mês, meta, saldo anual por PAO (quadro oscilante). */
+  fairRateioReport?: FairRateioReport;
   blockOptimizerMetrics?: {
     turnosIsolados: number;
     blocosDe2: number;

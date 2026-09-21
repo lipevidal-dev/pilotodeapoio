@@ -156,6 +156,63 @@
   vertical-align: top;
 }
 
+.rateio-report-panel {
+  border: 1px solid #cfe2ff;
+  border-radius: 8px;
+  background: #f5f9ff;
+  padding: 0.85rem 1rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.rateio-report-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-weight: 600;
+  color: #084298;
+}
+
+.rateio-report-panel__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.rateio-report-panel__hint {
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.82rem;
+  color: #345;
+}
+
+.rateio-saldo--neg {
+  color: #b02a37;
+  font-weight: 700;
+}
+
+.rateio-saldo--pos {
+  color: #0f5132;
+  font-weight: 600;
+}
+
+:host ::ng-deep .rateio-report-table .p-datatable-thead > tr > th {
+  font-size: 0.78rem;
+  padding: 0.45rem 0.6rem;
+}
+
+:host ::ng-deep .rateio-report-table .p-datatable-tbody > tr > td {
+  font-size: 0.82rem;
+  padding: 0.45rem 0.6rem;
+}
+
 .ops-btn-primary {
   min-width: 150px;
 }

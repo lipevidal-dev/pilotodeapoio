@@ -66,6 +66,7 @@ import {
 } from '../../utils/operational-audit.util';
 import { isAdminRole } from '../../models/auth.models';
 import type {
+  FairRateioReport,
   ManualEditResponse,
   ScheduleMonthResponse,
   ScheduleViolation,
@@ -186,6 +187,12 @@ export class ScheduleComponent implements OnInit, OnDestroy {
   private readonly collapsedSections = signal<Set<string>>(new Set());
 
   readonly generation = computed(() => this.workspace.lastGeneration());
+  /** Relatório de rateio justo (N, meta, saldo) da última geração nesta sessão. */
+  readonly fairRateioReport = computed((): FairRateioReport | null => {
+    const report = this.generation()?.summary?.fairRateioReport;
+    return report && typeof report === 'object' ? report : null;
+  });
+  readonly rateioPanelCollapsed = signal(false);
   /** Mês exibido na grade — prioriza o carregado em tela, não o id stale da última geração. */
   readonly activeScheduleMonthId = computed(
     () =>
@@ -492,11 +499,17 @@ export class ScheduleComponent implements OnInit, OnDestroy {
         loadingSig.set(false);
         this.generationBlocked.set(null);
         const gaps = result.summary?.['coverageGaps'] ?? result.summary?.['coverageMissingCount'];
+        const rateio = result.summary?.fairRateioReport;
+        const rateioLine =
+          rateio && typeof rateio.employeeCount === 'number'
+            ? ` Rateio: N=${rateio.employeeCount} · meta=${rateio.meta} · demanda=${rateio.demand} · resto=${rateio.remainderGaps}.`
+            : '';
         const detail =
           `${result.assignmentsCreated} turno(s), ${result.allocationsCreated} alocação(ões).` +
           (typeof gaps === 'number' && gaps > 0
             ? ` ${gaps} furo(s)${preferencesOnly ? ' para alocar manualmente.' : ' de cobertura.'}`
-            : '');
+            : '') +
+          rateioLine;
         this.messages.add({
           severity: result.success ? 'success' : 'warn',
           summary: preferencesOnly
@@ -505,7 +518,9 @@ export class ScheduleComponent implements OnInit, OnDestroy {
               ? 'Escala gerada'
               : 'Escala gerada com pendências',
           detail,
+          life: 8000,
         });
+        if (rateio) this.rateioPanelCollapsed.set(false);
         this.loadScheduleView();
       },
       error: (err: HttpErrorResponse) => {
@@ -1130,6 +1145,33 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     if (v === undefined || v === null) return '—';
     if (Array.isArray(v)) return v.join('; ');
     return v as string | number | boolean;
+  }
+
+  formatRateioSaldo(saldo: number): string {
+    if (saldo > 0) return `+${saldo}`;
+    return String(saldo);
+  }
+
+  formatRateioMonths(months: number[]): string {
+    if (!months?.length) return '—';
+    return months.join(', ');
+  }
+
+  formatRateioHeadcountHistory(report: FairRateioReport): string {
+    const entries = Object.entries(report.employeeCountByMonth ?? {})
+      .map(([m, n]) => ({ month: Number(m), n: Number(n) }))
+      .filter((e) => Number.isFinite(e.month) && e.month > 0)
+      .sort((a, b) => a.month - b.month);
+    if (entries.length === 0) return `N=${report.employeeCount} neste mês`;
+    return entries.map((e) => `${String(e.month).padStart(2, '0')}:${e.n}`).join(' · ');
+  }
+
+  toggleRateioPanel(): void {
+    this.rateioPanelCollapsed.update((v) => !v);
+  }
+
+  clearFairRateioPanel(): void {
+    this.workspace.lastGeneration.set(null);
   }
 
   formatDate(value: string | null | undefined): string {

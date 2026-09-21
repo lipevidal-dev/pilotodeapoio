@@ -145,6 +145,8 @@ export interface GenerationSummary {
   };
   unitCoverageTotal?: number;
   balanceReport?: unknown;
+  /** Rateio justo do mês + saldo anual (N oscilante). */
+  fairRateioReport?: unknown;
   motorVersion?: string;
   enginePath?: string;
   realEngineExecuted?: boolean;

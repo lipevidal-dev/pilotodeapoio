@@ -122,6 +122,54 @@ describe("contador anual / saldo", () => {
     expect(ws.yearRateioSaldo("uuid-low")).toBeLessThan(ws.yearRateioSaldo("uuid-high"));
   });
 
+  it("EXTRA_COBERTURA summary inclui fairRateioReport com N e saldos", () => {
+    const paos = [1, 2, 3, 4].map((i) => {
+      const e = emp(i, `P${i}`, i);
+      e.uuid = `uuid-${i}`;
+      return e;
+    });
+    const prior = new Map([
+      ["uuid-1", 10],
+      ["uuid-2", 50],
+      ["uuid-3", 50],
+      ["uuid-4", 50],
+    ]);
+    const result = generateCleanSchedule(
+      {
+        ...novInput(paos, prior),
+        preferredShifts: new Map(paos.map((p) => [p.domainId, new Set(["T6"])])),
+      },
+      nextOpts({
+        scopeEmployeeUuids: paos.map((p) => p.uuid),
+        coverageShiftCodes: ["T6"],
+        enabledRules: {
+          preferred_shifts: true,
+          pao_meta_turnos: true,
+          pao_espacamento_turnos: false,
+          pao_meta_dias_trabalhados: false,
+          coverage_t6: true,
+          coverage_t7: false,
+          coverage_t8: false,
+          t8_t8_nd: false,
+          max_6_consecutive: true,
+        },
+        motorParams: {
+          [paoShiftParamId("agrupamento_turnos", "T6")]: 1,
+          [paoShiftParamId("max_consecutivos", "T6")]: 6,
+        },
+      }),
+    );
+    const report = result.summary.fairRateioReport as {
+      employeeCount: number;
+      meta: number;
+      employees: Array<{ uuid: string; saldo: number }>;
+    };
+    expect(report.employeeCount).toBe(4);
+    expect(report.meta).toBe(7);
+    expect(report.employees.length).toBe(4);
+    expect(report.employees[0]!.saldo).toBeLessThanOrEqual(report.employees[3]!.saldo);
+  });
+
   it("MAX overshoot mensal é 2", () => {
     expect(MAX_MONTHLY_RATEIO_OVERSHOOT).toBe(2);
   });

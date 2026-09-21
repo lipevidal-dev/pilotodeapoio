@@ -178,3 +178,88 @@ export function yearRateioSaldo(
 ): number {
   return priorYearCount + currentMonthCount - expectedYearToDate;
 }
+
+/** Linha do relatório de rateio justo (para UI / toast pós-geração). */
+export type FairRateioEmployeeRow = {
+  uuid: string;
+  name: string;
+  prior: number;
+  monthCount: number;
+  accumulated: number;
+  expected: number;
+  saldo: number;
+  activeMonths: number[];
+};
+
+export type FairRateioReport = {
+  year: number;
+  month: number;
+  daysInMonth: number;
+  employeeCount: number;
+  demand: number;
+  meta: number;
+  remainderGaps: number;
+  coverageShiftCodes: string[];
+  /** N(m) conhecido no ano até o mês corrente (oscilação de quadro). */
+  employeeCountByMonth: Record<string, number>;
+  employees: FairRateioEmployeeRow[];
+};
+
+export function buildFairRateioReport(params: {
+  year: number;
+  month: number;
+  daysInMonth: number;
+  coverageShiftCodes: string[];
+  employeeCount: number;
+  employeeCountByMonth: ReadonlyMap<number, number>;
+  employees: Array<{
+    uuid: string;
+    name: string;
+    prior: number;
+    monthCount: number;
+    expected: number;
+    activeMonths: ReadonlySet<number> | number[];
+  }>;
+}): FairRateioReport {
+  const codes =
+    params.coverageShiftCodes.length > 0 ? params.coverageShiftCodes : ["T6", "T7", "T8"];
+  const demand = calculateCoverageDemand(params.daysInMonth, codes);
+  const meta = fairRateioTargetPerEmployee(params.daysInMonth, codes, params.employeeCount);
+  const remainderGaps = fairRateioRemainderGaps(params.daysInMonth, codes, params.employeeCount);
+
+  const employeeCountByMonth: Record<string, number> = {};
+  for (const [m, n] of params.employeeCountByMonth) {
+    employeeCountByMonth[String(m)] = n;
+  }
+
+  const employees: FairRateioEmployeeRow[] = params.employees.map((e) => {
+    const accumulated = e.prior + e.monthCount;
+    const activeMonths = Array.isArray(e.activeMonths)
+      ? [...e.activeMonths].sort((a, b) => a - b)
+      : [...e.activeMonths].sort((a, b) => a - b);
+    return {
+      uuid: e.uuid,
+      name: e.name,
+      prior: e.prior,
+      monthCount: e.monthCount,
+      accumulated,
+      expected: e.expected,
+      saldo: yearRateioSaldo(e.prior, e.monthCount, e.expected),
+      activeMonths,
+    };
+  });
+  employees.sort((a, b) => a.saldo - b.saldo || a.name.localeCompare(b.name, "pt-BR"));
+
+  return {
+    year: params.year,
+    month: params.month,
+    daysInMonth: params.daysInMonth,
+    employeeCount: params.employeeCount,
+    demand,
+    meta,
+    remainderGaps,
+    coverageShiftCodes: codes,
+    employeeCountByMonth,
+    employees,
+  };
+}

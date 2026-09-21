@@ -422,6 +422,65 @@
 
 
 
+  @if (fairRateioReport(); as rateio) {
+    @if (!isExecutedView()) {
+    <div class="rateio-report-panel escala-alert">
+      <div class="rateio-report-panel__header">
+        <button type="button" class="rateio-report-panel__toggle" (click)="toggleRateioPanel()">
+          <i class="pi" [class.pi-chevron-down]="!rateioPanelCollapsed()" [class.pi-chevron-right]="rateioPanelCollapsed()"></i>
+          <span>
+            Rateio justo — N={{ rateio.employeeCount }} · meta={{ rateio.meta }} ·
+            demanda={{ rateio.demand }} · resto={{ rateio.remainderGaps }}
+          </span>
+        </button>
+        <p-button
+          icon="pi pi-times"
+          severity="secondary"
+          [text]="true"
+          size="small"
+          (onClick)="clearFairRateioPanel()"
+          title="Fechar"
+        />
+      </div>
+      @if (!rateioPanelCollapsed()) {
+        <p class="rateio-report-panel__hint">
+          Quadro no ano (mês:N): {{ formatRateioHeadcountHistory(rateio) }}.
+          Saldo = acumulado − esperado (só meses ativos). Negativo = prioridade nos extras.
+        </p>
+        <p-table
+          [value]="rateio.employees"
+          styleClass="rateio-report-table"
+          [tableStyle]="{ 'min-width': '100%' }"
+        >
+          <ng-template pTemplate="header">
+            <tr>
+              <th>PAO</th>
+              <th>Mês</th>
+              <th>Acum.</th>
+              <th>Esperado</th>
+              <th>Saldo</th>
+              <th>Meses ativos</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-row>
+            <tr>
+              <td>{{ row.name }}</td>
+              <td>{{ row.monthCount }}</td>
+              <td>{{ row.accumulated }}</td>
+              <td>{{ row.expected }}</td>
+              <td
+                [class.rateio-saldo--neg]="row.saldo < 0"
+                [class.rateio-saldo--pos]="row.saldo > 0"
+              >{{ formatRateioSaldo(row.saldo) }}</td>
+              <td>{{ formatRateioMonths(row.activeMonths) }}</td>
+            </tr>
+          </ng-template>
+        </p-table>
+      }
+    </div>
+    }
+  }
+
   @if (loadingView()) {
 
     <span class="loading-text">Carregando grade operacional...</span>

@@ -20,6 +20,7 @@ import {
   finalizeCrossMonthContinuations,
 } from "./clean-cross-month-continuity.js";
 import { applyBirthdayFolgas, applyPostFaniRestDays } from "./clean-fani.js";
+import { buildFairRateioReport } from "./clean-fair-rateio.js";
 
 function ruleEnabled(options: CleanEngineOptions, ruleId: string): boolean {
   return motorRuleEnabled(options, ruleId);
@@ -73,6 +74,24 @@ function buildSummary(
     (v) => v.severity === "CRÍTICA" || v.level === "CRITICAL",
   ).length;
 
+  const fairRateioReport = buildFairRateioReport({
+    year: ws.input.year,
+    month: ws.input.month,
+    daysInMonth: ws.days.length,
+    coverageShiftCodes: ws.coverageShiftCodes,
+    employeeCount: ws.paoEmployees.length,
+    employeeCountByMonth: ws.yearRateioCountByMonth,
+    employees: ws.paoEmployees.map((p) => ({
+      uuid: p.uuid,
+      name: p.employee.name,
+      prior: ws.priorYearRateioTurns(p.uuid),
+      monthCount: ws.countRateioTurns(p.uuid),
+      expected: ws.expectedYearRateioToDate(p.uuid),
+      activeMonths:
+        ws.yearRateioActiveMonthsByUuid.get(p.uuid) ?? new Set([ws.input.month]),
+    })),
+  });
+
   return {
     totalAssignments: assignments.length,
     totalAllocations: allocations.length,
@@ -94,6 +113,7 @@ function buildSummary(
     motorVersion: options.motorVersion ?? MOTOR_VERSION_CLEAN,
     enginePath: ENGINE_PATH_CLEAN,
     realEngineExecuted: true,
+    fairRateioReport,
     realMotorReport: {
       auditEntries: ws.audit.all().length,
       coverageFailures: ws.audit.coverageFailures().length,

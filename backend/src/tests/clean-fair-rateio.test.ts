@@ -6,6 +6,7 @@ import {
   fairRateioRemainderGaps,
   fairRateioTargetPerEmployee,
   buildYearRateioExpectedContext,
+  buildFairRateioReport,
 } from "../domain/schedule/clean-engine/clean-fair-rateio.js";
 import {
   MIN_RATEIO_BLOCK_SIZE,
@@ -100,6 +101,39 @@ describe("fair rateio — expected YTD com N(m) oscilante", () => {
     expect(ctx.activeMonthsByUuid.get("a")).toEqual(new Set([1, 2, 3, 4]));
     expect(ctx.activeMonthsByUuid.get("c")).toEqual(new Set([3, 4]));
     expect(ctx.activeMonthsByUuid.get("x")).toEqual(new Set([2]));
+  });
+
+  it("buildFairRateioReport ordena por saldo (mais negativo primeiro)", () => {
+    const report = buildFairRateioReport({
+      year: 2026,
+      month: 11,
+      daysInMonth: 30,
+      coverageShiftCodes: codes,
+      employeeCount: 12,
+      employeeCountByMonth: new Map([[11, 12]]),
+      employees: [
+        {
+          uuid: "b",
+          name: "B",
+          prior: 70,
+          monthCount: 7,
+          expected: 70,
+          activeMonths: [11],
+        },
+        {
+          uuid: "a",
+          name: "A",
+          prior: 40,
+          monthCount: 7,
+          expected: 70,
+          activeMonths: [11],
+        },
+      ],
+    });
+    expect(report.meta).toBe(7);
+    expect(report.employeeCount).toBe(12);
+    expect(report.employees[0]!.name).toBe("A");
+    expect(report.employees[0]!.saldo).toBeLessThan(report.employees[1]!.saldo);
   });
 });
 
