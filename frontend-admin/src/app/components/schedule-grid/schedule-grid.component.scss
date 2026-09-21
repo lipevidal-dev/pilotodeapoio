@@ -1,6 +1,7 @@
 $col-employee-w: 7.5rem;
 $col-day-w: 2.35rem;
-$sum-narrow-w: 2.1rem;
+/* Largura justa por métrica — bloco único na direita (sem colspan inflando). */
+$sum-narrow-w: 1.85rem;
 $summary-block-w: calc(8 * #{$sum-narrow-w});
 
 $summary-peach-border: #f0c4b4;
@@ -250,12 +251,16 @@ $crosshair-focus-bg: #fce1d7;
   .summary-head-stack {
     display: flex;
     flex-direction: column;
-    width: 100%;
+    width: var(--col-summary-w);
+    min-width: var(--col-summary-w);
+    max-width: var(--col-summary-w);
+    margin-left: auto; /* cola o bloco na direita se a célula sobrar */
     min-height: 100%;
     background: $summary-head-bg;
     border: 1px solid $summary-peach-border;
     border-radius: 4px 4px 0 0;
     overflow: hidden;
+    box-sizing: border-box;
   }
 
   .summary-head-title {
@@ -293,19 +298,21 @@ $crosshair-focus-bg: #fce1d7;
     background: var(--gol-white);
   }
 
-  // Bloco único de resumo — evita sanfonar colunas ao rolar.
+  // Bloco único de resumo — largura justa, colado à direita (não estica pra esquerda).
   .sticky-summary-block {
     position: sticky;
     right: 0;
     z-index: 2;
-    width: var(--col-summary-w);
-    min-width: var(--col-summary-w);
-    max-width: var(--col-summary-w);
+    width: var(--col-summary-w) !important;
+    min-width: var(--col-summary-w) !important;
+    max-width: var(--col-summary-w) !important;
     padding: 0 !important;
     background: var(--gol-white);
     box-shadow: -2px 0 4px rgba(0, 0, 0, 0.06);
     overflow: hidden;
     isolation: isolate;
+    box-sizing: border-box;
+    vertical-align: top;
   }
 
   thead .sticky-summary-block {
@@ -321,9 +328,12 @@ $crosshair-focus-bg: #fce1d7;
   .summary-block-inner {
     display: flex;
     align-items: stretch;
+    justify-content: flex-end;
     width: var(--col-summary-w);
     min-width: var(--col-summary-w);
     max-width: var(--col-summary-w);
+    margin-left: auto;
+    box-sizing: border-box;
   }
 
   .summary-block-head {

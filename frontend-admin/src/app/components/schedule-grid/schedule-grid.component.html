@@ -99,7 +99,6 @@
           @if (summaryVisible()) {
             <th
               class="col-summary-head sticky-summary-block"
-              [attr.colspan]="summaryColCount"
             >
               <div class="summary-head-stack">
                 <div class="summary-head-title">Resumo operacional</div>
@@ -131,7 +130,7 @@
               ></td>
             }
             @if (summaryVisible()) {
-              <td class="group-filler sticky-summary-block" [attr.colspan]="summaryColCount"></td>
+              <td class="group-filler sticky-summary-block"></td>
             }
           </tr>
           @for (row of group.rows; track row.employeeId) {
@@ -182,7 +181,6 @@
                   class="sticky-summary-block"
                   [class.col-crosshair]="isRowHovered(row.employeeId)"
                   [class.col-crosshair-focus]="isSummaryCrosshairFocus(row.employeeId)"
-                  [attr.colspan]="summaryColCount"
                   (mouseenter)="onRowMouseEnter(row.employeeId)"
                 >
                   <div class="summary-block-inner">
