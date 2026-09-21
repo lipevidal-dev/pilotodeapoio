@@ -21,7 +21,15 @@ import { MOTOR_VERSION_NEXT } from "../engine-metadata.js";
 import { CleanAuditLog } from "./clean-audit.js";
 import { motorRuleEnabled, motorShiftMaxConsecutivos, motorShiftMetaTurnos, motorShiftRuleEnabled } from "./clean-motor-rules.js";
 import { motorShiftParamValue } from "../next-motor/next-motor-shift-params.js";
-import { fairRateioExpectedYearToDate, fairRateioTargetPerEmployee, yearRateioSaldo, MAX_MONTHLY_RATEIO_OVERSHOOT } from "./clean-fair-rateio.js";
+import {
+  buildYearRateioExpectedContext,
+  fairRateioExpectedForEmployee,
+  fairRateioExpectedYearToDate,
+  fairRateioTargetPerEmployee,
+  yearRateioSaldo,
+  MAX_MONTHLY_RATEIO_OVERSHOOT,
+  type YearRateioMonthSnapshot,
+} from "./clean-fair-rateio.js";
 import {
   allowsIsolatedCoverageDay,
   employeePrefersShift,
@@ -77,6 +85,10 @@ export class CleanWorkspace {
   readonly instructionByUuid = new Map<string, boolean>();
   /** Contador acumulado jan..(mês−1) — uuid → turnos rateio. */
   readonly yearRateioPriorByUuid = new Map<string, number>();
+  /** N(m) por mês (histórico + mês corrente) para expected com quadro oscilante. */
+  readonly yearRateioCountByMonth = new Map<number, number>();
+  /** Meses do ano civil em que cada uuid entrou no pool de rateio. */
+  readonly yearRateioActiveMonthsByUuid = new Map<string, Set<number>>();
   /**
    * Folga acima da meta mensal justa (0 na geração normal; 1..2 na EXTRA_COBERTURA).
    * Afeta teto de checkCanWork / fillCoverageGaps.
@@ -115,6 +127,7 @@ export class CleanWorkspace {
     this.loadCrossMonthHistory();
     this.loadCrossMonthPreAllocationsFromInput();
     this.loadYearRateioPriorCounts();
+    this.loadYearRateioExpectedContext();
     this.indexVacationFortnights();
   }
 
@@ -125,6 +138,33 @@ export class CleanWorkspace {
       if (typeof count === "number" && Number.isFinite(count) && count > 0) {
         this.yearRateioPriorByUuid.set(uuid, Math.floor(count));
       }
+    }
+  }
+
+  /**
+   * Monta N(m) oscilante + meses ativos por pessoa.
+   * Meta do mês corrente sempre usa paoEmployees.length (pode ser ≠12).
+   */
+  private loadYearRateioExpectedContext(): void {
+    const priorMonths: YearRateioMonthSnapshot[] = (this.input.yearRateioPriorMonths ?? []).map(
+      (m) => ({
+        month: m.month,
+        employeeCount: m.employeeCount,
+        employeeUuids: m.employeeUuids,
+      }),
+    );
+    const ctx = buildYearRateioExpectedContext({
+      year: this.input.year,
+      currentMonth: this.input.month,
+      currentEmployeeCount: this.paoEmployees.length,
+      currentEmployeeUuids: this.paoEmployees.map((e) => e.uuid),
+      priorMonths,
+    });
+    for (const [month, n] of ctx.employeeCountByMonth) {
+      this.yearRateioCountByMonth.set(month, n);
+    }
+    for (const [uuid, months] of ctx.activeMonthsByUuid) {
+      this.yearRateioActiveMonthsByUuid.set(uuid, months);
     }
   }
 
@@ -421,13 +461,25 @@ export class CleanWorkspace {
     return this.priorYearRateioTurns(uuid) + this.countRateioTurns(uuid);
   }
 
-  /** Esperado YTD (jan..mês corrente) com a mesma meta justa por mês. */
-  expectedYearRateioToDate(): number {
+  /** Esperado YTD (jan..mês corrente) com N(m) oscilante e janela ativa da pessoa. */
+  expectedYearRateioToDate(uuid?: string): number {
+    if (uuid) {
+      const active =
+        this.yearRateioActiveMonthsByUuid.get(uuid) ??
+        new Set<number>(this.paoEmployees.some((e) => e.uuid === uuid) ? [this.input.month] : []);
+      return fairRateioExpectedForEmployee(
+        this.input.year,
+        this.input.month,
+        this.coverageShiftCodes,
+        this.yearRateioCountByMonth,
+        active,
+      );
+    }
     return fairRateioExpectedYearToDate(
       this.input.year,
       this.input.month,
       this.coverageShiftCodes,
-      this.paoEmployees.length,
+      this.yearRateioCountByMonth,
     );
   }
 
@@ -436,7 +488,7 @@ export class CleanWorkspace {
     return yearRateioSaldo(
       this.priorYearRateioTurns(uuid),
       this.countRateioTurns(uuid),
-      this.expectedYearRateioToDate(),
+      this.expectedYearRateioToDate(uuid),
     );
   }
 

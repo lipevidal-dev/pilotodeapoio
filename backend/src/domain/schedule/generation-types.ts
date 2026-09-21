@@ -39,6 +39,15 @@ export interface GenerationInput {
    * Usado na fase EXTRA_COBERTURA (+1/+2 acima da meta mensal).
    */
   yearRateioPriorCounts?: Map<string, number>;
+  /**
+   * Snapshots de N(m) e quem estava no pool de rateio em cada mês
+   * jan..(mês−1). O mês corrente usa o scope atual (oscilação de quadro).
+   */
+  yearRateioPriorMonths?: Array<{
+    month: number;
+    employeeCount: number;
+    employeeUuids: string[];
+  }>;
   /** employeeId (domínio) → turnos bloqueados no mês */
   shiftRestrictions?: Map<number, Set<string>>;
   /** employeeId (domínio) → turnos preferidos (alocação específica) */

@@ -97,7 +97,9 @@ export class GenerateScheduleUseCase {
     const vacationDays = await this.calendarRepo.listVacationDaysForMonth(year, month);
     const vacationReturnDays = await this.calendarRepo.listVacationReturnDaysForMonth(year, month);
     const crossMonthHistory = await this.scheduleRepo.loadCrossMonthHistory(year, month);
-    const yearRateioPriorCounts = await this.scheduleRepo.loadYearRateioPriorCounts(year, month);
+    const yearRateioHistory = await this.scheduleRepo.loadYearRateioHistory(year, month);
+    const yearRateioPriorCounts = yearRateioHistory.priorCounts;
+    const yearRateioPriorMonths = yearRateioHistory.priorMonths;
     const shiftRestrictionRows = await this.scheduleRepo.listShiftRestrictionsForMonth(year, month);
     const preferredShiftRows = await this.scheduleRepo.listPreferredShiftsForMonth(year, month);
     const noFlightDates = await this.scheduleRepo.listNoFlightDatesForMonth(year, month);
@@ -155,6 +157,7 @@ export class GenerateScheduleUseCase {
       vacationReturnDays,
       crossMonthHistory,
       yearRateioPriorCounts,
+      yearRateioPriorMonths,
       shiftRestrictionRows: shiftPrefs.shiftRestrictionRows,
       preferredShiftRows: shiftPrefs.preferredShiftRows,
       noFlightDates,

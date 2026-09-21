@@ -58,6 +58,12 @@ export function buildGenerationInput(params: {
   crossMonthHistory?: import("../../domain/schedule/cross-month-history.js").CrossMonthHistory;
   /** Contador acumulado jan..(mês−1) de turnos rateio por employee uuid. */
   yearRateioPriorCounts?: Map<string, number>;
+  /** N(m) + uuids ativos por mês jan..(mês−1) — quadro oscilante. */
+  yearRateioPriorMonths?: Array<{
+    month: number;
+    employeeCount: number;
+    employeeUuids: string[];
+  }>;
   shiftRestrictionRows?: ShiftRestrictionRow[];
   preferredShiftRows?: PreferredShiftRow[];
   specificShiftDayPreferences?: SpecificShiftDayPreferenceRow[];
@@ -95,6 +101,7 @@ export function buildGenerationInput(params: {
     flightDays: params.flightDays,
     crossMonthHistory: params.crossMonthHistory,
     yearRateioPriorCounts: params.yearRateioPriorCounts,
+    yearRateioPriorMonths: params.yearRateioPriorMonths,
     shiftRestrictions: buildShiftRestrictionMap(genEmployees, params.shiftRestrictionRows ?? []),
     preferredShifts: buildPreferredShiftMap(genEmployees, params.preferredShiftRows ?? []),
     noFlightDates: params.noFlightDates ?? [],

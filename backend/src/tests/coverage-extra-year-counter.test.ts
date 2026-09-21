@@ -82,6 +82,46 @@ describe("contador anual / saldo", () => {
     expect(yearRateioSaldo(60, 7, ytd)).toBe(60 + 7 - ytd);
   });
 
+  it("workspace: saldo usa N(m) oscilante e só meses ativos da pessoa", () => {
+    const low = emp(1, "Abaixo", 1);
+    const high = emp(2, "Acima", 2);
+    const mid = emp(3, "Novo", 3);
+    low.uuid = "uuid-low";
+    high.uuid = "uuid-high";
+    mid.uuid = "uuid-new";
+    const prior = new Map([
+      ["uuid-low", 40],
+      ["uuid-high", 70],
+      ["uuid-new", 0],
+    ]);
+    const ws = new CleanWorkspace(
+      {
+        ...novInput([low, high, mid], prior),
+        yearRateioPriorMonths: [
+          { month: 1, employeeCount: 10, employeeUuids: ["uuid-low", "uuid-high"] },
+          { month: 2, employeeCount: 14, employeeUuids: ["uuid-low", "uuid-high"] },
+          // uuid-new só entra no mês corrente (nov)
+        ],
+      },
+      nextOpts({
+        scopeEmployeeUuids: ["uuid-low", "uuid-high", "uuid-new"],
+        coverageShiftCodes: ["T6", "T7", "T8"],
+      }),
+    );
+
+    expect(ws.yearRateioCountByMonth.get(1)).toBe(10);
+    expect(ws.yearRateioCountByMonth.get(2)).toBe(14);
+    expect(ws.yearRateioCountByMonth.get(11)).toBe(3);
+    // Novo: expected só nov com N=3
+    expect(ws.expectedYearRateioToDate("uuid-new")).toBe(
+      fairRateioTargetPerEmployee(30, ["T6", "T7", "T8"], 3),
+    );
+    // Veterano: jan(N10)+fev(N14)+nov(N3)
+    const veteranExpected = ws.expectedYearRateioToDate("uuid-low");
+    expect(veteranExpected).toBeGreaterThan(ws.expectedYearRateioToDate("uuid-new"));
+    expect(ws.yearRateioSaldo("uuid-low")).toBeLessThan(ws.yearRateioSaldo("uuid-high"));
+  });
+
   it("MAX overshoot mensal é 2", () => {
     expect(MAX_MONTHLY_RATEIO_OVERSHOOT).toBe(2);
   });
