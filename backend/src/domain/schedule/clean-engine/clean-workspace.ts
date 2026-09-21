@@ -941,6 +941,7 @@ export class CleanWorkspace {
   /**
    * Fase EXTRA_COBERTURA: libera até +1 e depois +2 acima da meta mensal justa,
    * priorizando quem está abaixo no contador acumulado do ano.
+   * T6/T7 só em bloco do agrupamento — não usa mono turno para fechar resto.
    * `afterRound` roda com o overshoot ainda ativo (ex.: cobertura T8).
    */
   fillCoverageGapsExtra(afterRound?: () => void): void {
@@ -1020,16 +1021,12 @@ export class CleanWorkspace {
 
         let assigned = false;
         const nextMotor = this.usesNextMotorRules();
-        // T6/T7 no NEXT: bloco do agrupamento. Na EXTRA, permite isolado para fechar o resto.
+        // T6/T7 no NEXT (inclui EXTRA): só bloco do agrupamento — sem mono turno para fechar gap.
+        // T8/T9 (unitários) e motor legado podem fechar furo em 1 dia.
         const allowIsolate =
-          !nextMotor ||
-          allowsIsolatedCoverageDay(normalized) ||
-          phase === "EXTRA_COBERTURA";
+          !nextMotor || allowsIsolatedCoverageDay(normalized);
 
         if (nextMotor && !allowIsolate) {
-          assigned = tryFillCoverageBlock(this, date, shiftCode, phase, candidates);
-        } else if (nextMotor && phase === "EXTRA_COBERTURA") {
-          // Tenta bloco completo primeiro; se não couber, dia isolado.
           assigned = tryFillCoverageBlock(this, date, shiftCode, phase, candidates);
         }
 

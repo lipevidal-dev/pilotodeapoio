@@ -61,10 +61,13 @@ function resolveCountForMonth(
     return employeeCountOrByMonth;
   }
   if (Array.isArray(employeeCountOrByMonth)) {
-    // Aceita índice 0-based (mês-1) ou esparso via Map.
+    // Aceita índice 0-based (mês-1).
     return employeeCountOrByMonth[month - 1] ?? 0;
   }
-  return employeeCountOrByMonth.get(month) ?? 0;
+  if (employeeCountOrByMonth instanceof Map || typeof (employeeCountOrByMonth as ReadonlyMap<number, number>).get === "function") {
+    return (employeeCountOrByMonth as ReadonlyMap<number, number>).get(month) ?? 0;
+  }
+  return 0;
 }
 
 /**
