@@ -30,10 +30,12 @@
     }
     <div class="sidebar-footer">
       <span class="sidebar-footer-label">Ambiente local</span>
-      <button type="button" class="logout-btn" (click)="logout()">
-        <i class="pi pi-sign-out"></i>
-        Sair
-      </button>
+      @if (authRequired) {
+        <button type="button" class="logout-btn" (click)="logout()">
+          <i class="pi pi-sign-out"></i>
+          Sair
+        </button>
+      }
     </div>
   </aside>
 
@@ -103,10 +105,12 @@
         </div>
       }
 
-      <button type="button" class="mobile-drawer__logout" (click)="logout(); closeMobileNav()">
-        <i class="pi pi-sign-out"></i>
-        Sair
-      </button>
+      @if (authRequired) {
+        <button type="button" class="mobile-drawer__logout" (click)="logout(); closeMobileNav()">
+          <i class="pi pi-sign-out"></i>
+          Sair
+        </button>
+      }
     </aside>
     <button type="button" class="mobile-nav-backdrop" aria-label="Fechar menu" (click)="closeMobileNav()"></button>
   }

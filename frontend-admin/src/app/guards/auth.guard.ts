@@ -1,11 +1,15 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
+import { environment } from '../../environments/environment';
 import { AuthService } from '../services/auth.service';
 import { isAdminRole, isEmployeeRole } from '../models/auth.models';
 
 export const guestGuard: CanActivateFn = () => {
-  const auth = inject(AuthService);
   const router = inject(Router);
+  if (!environment.authRequired) {
+    return router.createUrlTree(['/dashboard']);
+  }
+  const auth = inject(AuthService);
   const user = auth.user();
   if (!auth.isAuthenticated() || !user) {
     return true;
@@ -16,6 +20,10 @@ export const guestGuard: CanActivateFn = () => {
 export const adminGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   const router = inject(Router);
+  if (!environment.authRequired) {
+    auth.ensureOpenAccessSession();
+    return true;
+  }
   const user = auth.user();
   if (!auth.isAuthenticated() || !user) {
     return router.createUrlTree(['/login']);
@@ -29,6 +37,10 @@ export const adminGuard: CanActivateFn = () => {
 export const employeeGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   const router = inject(Router);
+  if (!environment.authRequired) {
+    // Sem login, o acesso padrão é o painel admin.
+    return router.createUrlTree(['/dashboard']);
+  }
   const user = auth.user();
   if (!auth.isAuthenticated() || !user) {
     return router.createUrlTree(['/login']);
@@ -42,6 +54,10 @@ export const employeeGuard: CanActivateFn = () => {
 export const authBootstrapGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   const router = inject(Router);
+  if (!environment.authRequired) {
+    auth.ensureOpenAccessSession();
+    return router.createUrlTree(['/dashboard']);
+  }
   const user = auth.user();
   if (!auth.isAuthenticated() || !user) {
     return router.createUrlTree(['/login']);

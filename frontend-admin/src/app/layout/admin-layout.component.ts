@@ -26,6 +26,7 @@ export class AdminLayoutComponent {
 
   readonly systemName = 'Escala Piloto de Apoio v2';
   readonly appVersion = environment.appVersion;
+  readonly authRequired = environment.authRequired;
   readonly userName = () => this.auth.user()?.name ?? 'Administrador';
 
   readonly navSections: NavSection[] = [

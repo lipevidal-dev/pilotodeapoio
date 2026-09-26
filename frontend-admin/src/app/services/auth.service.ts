@@ -20,6 +20,15 @@ export interface MfaChallengeResponse {
 
 export type LoginResult = LoginResponse | MfaChallengeResponse;
 
+const OPEN_ACCESS_USER: AuthUser = {
+  id: 'open-access',
+  name: 'Administrador',
+  email: 'admin@local',
+  role: 'ADMIN',
+};
+
+const OPEN_ACCESS_TOKEN = 'open-access-token';
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
@@ -32,9 +41,23 @@ export class AuthService {
   readonly user = this.userSignal.asReadonly();
   readonly token = this.tokenSignal.asReadonly();
   readonly isAuthenticated = computed(() => !!this.tokenSignal() && !!this.userSignal());
+  readonly authRequired = environment.authRequired;
+
+  constructor() {
+    if (!environment.authRequired) {
+      this.ensureOpenAccessSession();
+    }
+  }
 
   getToken(): string | null {
     return this.tokenSignal();
+  }
+
+  /** Sessão local para uso sem login (authRequired=false). */
+  ensureOpenAccessSession(): void {
+    if (environment.authRequired) return;
+    if (this.tokenSignal() && this.userSignal()) return;
+    this.persistSession(OPEN_ACCESS_TOKEN, OPEN_ACCESS_USER);
   }
 
   /** Produção espera campo `login` (não `email`). */
@@ -100,10 +123,20 @@ export class AuthService {
 
   logout(): void {
     this.clearSession();
+    if (!environment.authRequired) {
+      this.ensureOpenAccessSession();
+      void this.router.navigate(['/dashboard']);
+      return;
+    }
     void this.router.navigate(['/login']);
   }
 
   navigateHome(): void {
+    if (!environment.authRequired) {
+      this.ensureOpenAccessSession();
+      void this.router.navigate(['/dashboard']);
+      return;
+    }
     const user = this.userSignal();
     if (!user) {
       void this.router.navigate(['/login']);

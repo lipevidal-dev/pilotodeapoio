@@ -25,7 +25,10 @@ describe('AuthService', () => {
 
   it('login persiste token e usuário', () => {
     service.login('admin@escala.local', 'changeme').subscribe((res) => {
-      expect(res.user.role).toBe('ADMIN');
+      expect('token' in res && res.token).toBeTruthy();
+      if ('user' in res) {
+        expect(res.user.role).toBe('ADMIN');
+      }
       expect(service.isAuthenticated()).toBeTrue();
     });
 
@@ -43,7 +46,13 @@ describe('AuthService', () => {
       'escala_auth_user',
       JSON.stringify({ id: '1', name: 'Admin', email: 'a@b.c', role: 'ADMIN' }),
     );
+    // Re-cria o serviço com a sessão já gravada (authRequired=false reseeds open-access).
     service.logout();
-    expect(sessionStorage.getItem('escala_auth_token')).toBeNull();
+    if (environment.authRequired) {
+      expect(sessionStorage.getItem('escala_auth_token')).toBeNull();
+    } else {
+      expect(service.isAuthenticated()).toBeTrue();
+      expect(service.user()?.role).toBe('ADMIN');
+    }
   });
 });

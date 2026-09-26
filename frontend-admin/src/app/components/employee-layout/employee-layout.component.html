@@ -29,10 +29,12 @@
     </nav>
 
     <div class="sidebar-footer">
-      <button type="button" class="logout-btn" (click)="logout()">
-        <i class="pi pi-sign-out"></i>
-        Sair
-      </button>
+      @if (authRequired) {
+        <button type="button" class="logout-btn" (click)="logout()">
+          <i class="pi pi-sign-out"></i>
+          Sair
+        </button>
+      }
     </div>
   </aside>
 
@@ -92,9 +94,11 @@
       <i class="pi pi-sun"></i>
       <span>Férias</span>
     </a>
-    <button type="button" class="mobile-tab mobile-tab--logout" (click)="logout()">
-      <i class="pi pi-sign-out"></i>
-      <span>Sair</span>
-    </button>
+    @if (authRequired) {
+      <button type="button" class="mobile-tab mobile-tab--logout" (click)="logout()">
+        <i class="pi pi-sign-out"></i>
+        <span>Sair</span>
+      </button>
+    }
   </nav>
 </div>

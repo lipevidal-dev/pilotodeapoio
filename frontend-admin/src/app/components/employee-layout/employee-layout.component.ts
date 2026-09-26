@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
+import { environment } from '../../../environments/environment';
 
 interface NavItem {
   label: string;
@@ -18,6 +19,7 @@ interface NavItem {
 export class EmployeeLayoutComponent {
   private readonly auth = inject(AuthService);
 
+  readonly authRequired = environment.authRequired;
   readonly userName = () => this.auth.user()?.name ?? 'Colaborador';
 
   readonly navItems: NavItem[] = [
