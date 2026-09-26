@@ -68,15 +68,12 @@ export class LoginComponent implements OnInit {
 
     req$.subscribe({
       next: (res) => {
+        // MFA desativado no backend — se ainda vier desafio, trata como erro.
         if ('mfaRequired' in res || 'mfaSetupRequired' in res) {
           this.loading.set(false);
-          this.mfaChallengeToken = res.challengeToken;
-          this.awaitingMfa.set(true);
-          if ('mfaSetupRequired' in res) {
-            this.mfaSetupQrCode.set(res.qrCodeDataUrl ?? null);
-            this.mfaManualKey.set(res.manualKey ?? null);
-          }
-          this.password = '';
+          this.errorMessage.set(
+            'Autenticação em dois fatores está desativada. Contate o administrador.',
+          );
           return;
         }
         if (!('token' in res) || !res.user) {
