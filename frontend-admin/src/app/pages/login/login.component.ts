@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -9,7 +9,10 @@ import { ButtonModule } from 'primeng/button';
 import { MessageModule } from 'primeng/message';
 import { AuthService } from '../../services/auth.service';
 import { homeRouteForRole } from '../../models/auth.models';
-import { LoginTransitionComponent } from '../../components/login-transition/login-transition.component';
+import {
+  LOGIN_TRANSITION_TOTAL_MS,
+  LoginTransitionComponent,
+} from '../../components/login-transition/login-transition.component';
 import { preloadTransitionAssets } from '../../components/login-transition/transition-assets.preload';
 import { BRAND_LOGO_ALT, BRAND_LOGO_SRC } from '../../core/brand';
 
@@ -29,7 +32,7 @@ import { BRAND_LOGO_ALT, BRAND_LOGO_SRC } from '../../core/brand';
   templateUrl: './login.component.html',
   styleUrl: './login.component.scss',
 })
-export class LoginComponent implements OnInit {
+export class LoginComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
 
@@ -48,9 +51,15 @@ export class LoginComponent implements OnInit {
   readonly mfaSetupQrCode = signal<string | null>(null);
   readonly mfaManualKey = signal<string | null>(null);
   private pendingRoute = '/dashboard';
+  private transitionNavTimer?: ReturnType<typeof setTimeout>;
+  private didNavigateAfterLogin = false;
 
   ngOnInit(): void {
     preloadTransitionAssets();
+  }
+
+  ngOnDestroy(): void {
+    if (this.transitionNavTimer) clearTimeout(this.transitionNavTimer);
   }
 
   sanitizeLogin(): void {
@@ -83,7 +92,14 @@ export class LoginComponent implements OnInit {
         }
         this.loading.set(false);
         this.pendingRoute = homeRouteForRole(res.user.role);
+        this.didNavigateAfterLogin = false;
         this.showTransition.set(true);
+        // Navegação garantida no pai (não depende só do output do filho).
+        if (this.transitionNavTimer) clearTimeout(this.transitionNavTimer);
+        this.transitionNavTimer = setTimeout(
+          () => this.finishLoginNavigation(),
+          LOGIN_TRANSITION_TOTAL_MS,
+        );
       },
       error: (err: { error?: { error?: string } }) => {
         this.loading.set(false);
@@ -95,6 +111,23 @@ export class LoginComponent implements OnInit {
   }
 
   onTransitionComplete(): void {
-    void this.router.navigateByUrl(this.pendingRoute);
+    this.finishLoginNavigation();
+  }
+
+  private finishLoginNavigation(): void {
+    if (this.didNavigateAfterLogin) return;
+    this.didNavigateAfterLogin = true;
+    if (this.transitionNavTimer) {
+      clearTimeout(this.transitionNavTimer);
+      this.transitionNavTimer = undefined;
+    }
+    const target = this.pendingRoute || '/dashboard';
+    void this.router.navigateByUrl(target, { replaceUrl: true }).then((ok) => {
+      if (!ok) {
+        window.location.assign(target);
+      }
+    }).catch(() => {
+      window.location.assign(target);
+    });
   }
 }

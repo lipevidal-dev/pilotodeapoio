@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, signal, output } from '@angular/core';
+import { Component, NgZone, OnDestroy, OnInit, inject, output, signal } from '@angular/core';
 
 /** Duração total — sequência visível até glow; sem fade-out (navega com overlay opaco). */
 export const LOGIN_TRANSITION_TOTAL_MS = 2800;
@@ -15,6 +15,8 @@ const LOADING_MESSAGES = [
   styleUrl: './login-transition.component.scss',
 })
 export class LoginTransitionComponent implements OnInit, OnDestroy {
+  private readonly zone = inject(NgZone);
+
   readonly completed = output<void>();
   readonly loadingMessage = signal<string>(LOADING_MESSAGES[0]);
 
@@ -28,7 +30,9 @@ export class LoginTransitionComponent implements OnInit, OnDestroy {
       this.loadingMessage.set(LOADING_MESSAGES[this.messageIndex]);
     }, 1200);
 
-    this.completeTimer = setTimeout(() => this.completed.emit(), LOGIN_TRANSITION_TOTAL_MS);
+    this.completeTimer = setTimeout(() => {
+      this.zone.run(() => this.completed.emit());
+    }, LOGIN_TRANSITION_TOTAL_MS);
   }
 
   ngOnDestroy(): void {
