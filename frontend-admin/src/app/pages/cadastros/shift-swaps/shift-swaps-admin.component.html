@@ -1,0 +1,158 @@
+<h1 class="page-title">Troca de Turno</h1>
+<p class="page-subtitle">
+  Trocas APAO aguardam aprovação do admin após o aceite do colaborador (ou realocação na própria escala).
+  Trocas PAO são aplicadas automaticamente ao aceitar.
+</p>
+
+<p-toast />
+
+<p-card header="Pendentes de aprovação (APAO)" styleClass="gol-card-accent">
+  <div class="toolbar-row" style="margin-bottom: 0.75rem">
+    <span class="toolbar-hint">
+      <i class="pi pi-clock"></i>
+      {{ pending().length }} troca(s) aguardando
+    </span>
+    <div class="toolbar-actions">
+      <p-button
+        label="Atualizar"
+        icon="pi pi-refresh"
+        severity="secondary"
+        (onClick)="reload()"
+        [loading]="loading()"
+      />
+    </div>
+  </div>
+
+  @if (pending().length === 0 && !loading()) {
+    <p class="toolbar-hint">Nenhuma troca APAO aguardando aprovação.</p>
+  } @else {
+    <p-table
+      [value]="pending()"
+      [loading]="loading()"
+      [paginator]="pending().length > 20"
+      [rows]="20"
+      [tableStyle]="{ 'min-width': '56rem' }"
+    >
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Tipo</th>
+          <th>Período</th>
+          <th>Mês</th>
+          <th>Solicitante</th>
+          <th>Destino</th>
+          <th>Troca</th>
+          <th>Ações</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-row>
+        <tr>
+          <td>
+            <p-tag
+              [value]="row.kind === 'SELF' ? 'Própria escala' : 'Entre colaboradores'"
+              [severity]="row.kind === 'SELF' ? 'warn' : 'info'"
+            />
+          </td>
+          <td>{{ dateRangeLabel(row) }}</td>
+          <td>{{ row.month }}/{{ row.year }}</td>
+          <td>{{ row.requesterName }} (solicitante)</td>
+          <td>
+            @if (row.kind === 'SELF') {
+              própria escala
+            } @else {
+              {{ row.targetName }}
+            }
+          </td>
+          <td>
+            {{ cellLabel(row.requesterShiftCode) }} ↔ {{ cellLabel(row.targetShiftCode) }}
+          </td>
+          <td>
+            <div class="toolbar-actions" style="gap: 0.35rem">
+              <p-button
+                label="Aprovar"
+                icon="pi pi-check"
+                size="small"
+                [loading]="actingId() === row.id"
+                (onClick)="approve(row)"
+              />
+              <p-button
+                label="Rejeitar"
+                icon="pi pi-times"
+                severity="danger"
+                [outlined]="true"
+                size="small"
+                [loading]="actingId() === row.id"
+                (onClick)="reject(row)"
+              />
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  }
+</p-card>
+
+<p-card header="Histórico — trocas aceitas" styleClass="gol-card-accent" [style]="{ 'margin-top': '1.25rem' }">
+  <div class="toolbar-row" style="margin-bottom: 0.75rem">
+    <span class="toolbar-hint">
+      <i class="pi pi-history"></i>
+      {{ accepted().length }} troca(s) aceita(s)
+    </span>
+  </div>
+
+  @if (accepted().length === 0 && !loading()) {
+    <p class="toolbar-hint">Nenhuma troca aceita ainda.</p>
+  } @else {
+    <p-table
+      [value]="accepted()"
+      [loading]="loading()"
+      [paginator]="accepted().length > 20"
+      [rows]="20"
+      [tableStyle]="{ 'min-width': '56rem' }"
+    >
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Aceita em</th>
+          <th>Tipo</th>
+          <th>Período</th>
+          <th>Mês</th>
+          <th>Solicitante</th>
+          <th>Destino</th>
+          <th>Troca</th>
+          <th>Status</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-row>
+        <tr>
+          <td>{{ formatResolvedAt(row.resolvedAt) }}</td>
+          <td>
+            <div style="display:flex;flex-direction:column;gap:0.25rem;align-items:flex-start">
+              <p-tag
+                [value]="row.kind === 'SELF' ? 'Própria escala' : 'Entre colaboradores'"
+                [severity]="row.kind === 'SELF' ? 'warn' : 'info'"
+              />
+              @if (isAdminAudit(row)) {
+                <p-tag value="Admin — escala realizada" severity="danger" />
+              }
+            </div>
+          </td>
+          <td>{{ dateRangeLabel(row) }}</td>
+          <td>{{ row.month }}/{{ row.year }}</td>
+          <td>{{ row.requesterName }} (solicitante)</td>
+          <td>
+            @if (row.kind === 'SELF') {
+              própria escala
+            } @else {
+              {{ row.targetName }}
+            }
+          </td>
+          <td>
+            {{ cellLabel(row.requesterShiftCode) }} ↔ {{ cellLabel(row.targetShiftCode) }}
+          </td>
+          <td>
+            <p-tag [value]="isAdminAudit(row) ? 'Alteração admin' : 'Troca aceita'" [severity]="isAdminAudit(row) ? 'warn' : 'success'" />
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  }
+</p-card>

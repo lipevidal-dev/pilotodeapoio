@@ -1,0 +1,137 @@
+<div class="profile-page">
+  <header class="page-header">
+    <div>
+      <h1 class="page-title">Meu perfil</h1>
+      <p class="page-subtitle">Altere a senha de acesso e o e-mail de notificações do painel administrativo.</p>
+    </div>
+  </header>
+
+  <p-card styleClass="profile-card gol-card-accent">
+    <div class="profile-summary">
+      <div class="profile-avatar">
+        <i class="pi pi-user"></i>
+      </div>
+      <div>
+        <div class="profile-name">{{ userName() }}</div>
+        <div class="profile-login">Login: <strong>{{ userLogin() }}</strong></div>
+      </div>
+    </div>
+
+    @if (successMessage(); as msg) {
+      <p-message severity="success" [text]="msg" styleClass="profile-message" />
+    }
+    @if (errorMessage(); as msg) {
+      <p-message severity="error" [text]="msg" styleClass="profile-message" />
+    }
+
+    <form class="profile-form" (ngSubmit)="saveNotificationEmail()">
+      <div class="field">
+        <label for="notificationEmail">E-mail para notificações</label>
+        <input
+          pInputText
+          id="notificationEmail"
+          name="notificationEmail"
+          type="email"
+          [(ngModel)]="notificationEmail"
+          class="w-full"
+          placeholder="opcional — ex.: Thays_pgoncalves@hotmail.com"
+          autocomplete="email"
+        />
+        <small class="field-hint">Opcional. Usado para avisos como alteração na escala APAO.</small>
+      </div>
+      <div class="form-actions">
+        <p-button
+          type="submit"
+          label="Salvar e-mail"
+          icon="pi pi-envelope"
+          styleClass="btn-gol-primary"
+          [loading]="savingEmail()"
+        />
+      </div>
+    </form>
+  </p-card>
+
+  <p-card styleClass="profile-card gol-card-accent">
+    <form class="profile-form" (ngSubmit)="submit()">
+      <div class="field">
+        <label for="currentPassword">Senha atual</label>
+        <p-password
+          inputId="currentPassword"
+          name="currentPassword"
+          [(ngModel)]="currentPassword"
+          [feedback]="false"
+          [toggleMask]="true"
+          autocomplete="current-password"
+          styleClass="w-full"
+          inputStyleClass="w-full"
+          required
+          [maxlength]="20"
+        />
+      </div>
+
+      <div class="field">
+        <label for="newPassword">Nova senha</label>
+        <p-password
+          inputId="newPassword"
+          name="newPassword"
+          [(ngModel)]="newPassword"
+          [toggleMask]="true"
+          autocomplete="new-password"
+          styleClass="w-full"
+          inputStyleClass="w-full"
+          required
+          [maxlength]="20"
+        />
+        <small class="field-hint">Entre 6 e 20 caracteres.</small>
+      </div>
+
+      <div class="field">
+        <label for="confirmPassword">Confirmar nova senha</label>
+        <p-password
+          inputId="confirmPassword"
+          name="confirmPassword"
+          [(ngModel)]="confirmPassword"
+          [feedback]="false"
+          [toggleMask]="true"
+          autocomplete="new-password"
+          styleClass="w-full"
+          inputStyleClass="w-full"
+          required
+          [maxlength]="20"
+        />
+      </div>
+
+      <div class="form-actions">
+        <p-button
+          type="submit"
+          label="Salvar nova senha"
+          icon="pi pi-lock"
+          styleClass="btn-gol-primary"
+          [loading]="saving()"
+        />
+      </div>
+    </form>
+  </p-card>
+
+  <p-card styleClass="profile-card gol-card-accent">
+    <h2>Microsoft Authenticator</h2>
+    @if (mfaEnabled()) {
+      <p>A autenticação em duas etapas está ativa.</p>
+      <div class="field"><label for="disableMfaCode">Código atual</label>
+        <input pInputText id="disableMfaCode" [(ngModel)]="mfaCode" inputmode="numeric" maxlength="6" class="w-full" />
+      </div>
+      <p-button label="Desativar autenticação em duas etapas" severity="danger" [loading]="mfaLoading()" (onClick)="disableMfa()" />
+    } @else if (mfaQrCode()) {
+      <p>Leia o QR Code no Microsoft Authenticator e confirme o código gerado.</p>
+      <img [src]="mfaQrCode()" alt="QR Code para Microsoft Authenticator" width="240" height="240" />
+      <p>Chave manual: <code>{{ mfaManualKey() }}</code></p>
+      <div class="field"><label for="enableMfaCode">Código de confirmação</label>
+        <input pInputText id="enableMfaCode" [(ngModel)]="mfaCode" inputmode="numeric" maxlength="6" class="w-full" />
+      </div>
+      <p-button label="Confirmar e ativar" [loading]="mfaLoading()" (onClick)="confirmMfa()" />
+    } @else {
+      <p>Proteja sua conta com um código temporário no aplicativo Microsoft Authenticator.</p>
+      <p-button label="Configurar autenticador" icon="pi pi-shield" [loading]="mfaLoading()" (onClick)="beginMfaSetup()" />
+    }
+  </p-card>
+</div>

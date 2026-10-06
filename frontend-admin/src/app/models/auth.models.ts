@@ -5,6 +5,8 @@ export interface AuthUser {
   name: string;
   email: string;
   role: UserRole;
+  employeeId?: string | null;
+  notificationEmail?: string | null;
 }
 
 export interface LoginResponse {
@@ -14,6 +16,18 @@ export interface LoginResponse {
 
 export interface MeResponse {
   user: AuthUser;
+}
+
+export interface MfaChallengeResponse {
+  mfaRequired: true;
+  challengeToken: string;
+}
+
+export interface MfaSetupChallengeResponse {
+  mfaSetupRequired: true;
+  challengeToken: string;
+  qrCodeDataUrl: string;
+  manualKey: string;
 }
 
 /** Roles de colaborador (portal /portal) — OPERATOR e PILOT mapeiam para EMPLOYEE na spec. */

@@ -3,31 +3,17 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, tap, catchError, of, map } from 'rxjs';
 import { environment } from '../../environments/environment';
-import type { AuthUser, LoginResponse, MeResponse } from '../models/auth.models';
+import type {
+  AuthUser,
+  LoginResponse,
+  MeResponse,
+  MfaChallengeResponse,
+  MfaSetupChallengeResponse,
+} from '../models/auth.models';
 import { homeRouteForRole } from '../models/auth.models';
 
 const STORAGE_TOKEN = 'escala_auth_token';
 const STORAGE_USER = 'escala_auth_user';
-
-/** Resposta de login com desafio MFA (produção). */
-export interface MfaChallengeResponse {
-  mfaRequired?: true;
-  mfaSetupRequired?: true;
-  challengeToken: string;
-  qrCodeDataUrl?: string;
-  manualKey?: string;
-}
-
-export type LoginResult = LoginResponse | MfaChallengeResponse;
-
-const OPEN_ACCESS_USER: AuthUser = {
-  id: 'open-access',
-  name: 'Administrador',
-  email: 'admin@local',
-  role: 'ADMIN',
-};
-
-const OPEN_ACCESS_TOKEN = 'open-access-token';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -41,66 +27,22 @@ export class AuthService {
   readonly user = this.userSignal.asReadonly();
   readonly token = this.tokenSignal.asReadonly();
   readonly isAuthenticated = computed(() => !!this.tokenSignal() && !!this.userSignal());
-  readonly authRequired = environment.authRequired;
-
-  constructor() {
-    if (!environment.authRequired) {
-      this.ensureOpenAccessSession();
-    }
-  }
 
   getToken(): string | null {
     return this.tokenSignal();
   }
 
-  /** Sessão local para uso sem login (authRequired=false). */
-  ensureOpenAccessSession(): void {
-    if (environment.authRequired) return;
-    if (this.tokenSignal() && this.userSignal()) return;
-    this.persistSession(OPEN_ACCESS_TOKEN, OPEN_ACCESS_USER);
-  }
-
-  /** Produção espera campo `login` (não `email`). */
-  login(login: string, password: string): Observable<LoginResult> {
-    return this.http.post<LoginResult>(`${this.base}/auth/login`, { login, password }).pipe(
-      tap((res) => {
-        if (res && 'token' in res && res.token) {
-          this.persistSession(res.token, res.user);
-        }
-      }),
-    );
+  /** Aceita login (produção) — o campo visual pode se chamar e-mail/usuário. */
+  login(login: string, password: string): Observable<LoginResponse> {
+    return this.http
+      .post<LoginResponse>(`${this.base}/auth/login`, { login, password })
+      .pipe(tap((res) => this.persistSession(res.token, res.user)));
   }
 
   completeMfaLogin(challengeToken: string, code: string): Observable<LoginResponse> {
     return this.http
-      .post<LoginResponse>(`${this.base}/auth/login/mfa`, { challengeToken, code })
+      .post<LoginResponse>(`${this.base}/auth/mfa/login`, { challengeToken, code })
       .pipe(tap((res) => this.persistSession(res.token, res.user)));
-  }
-
-  mfaStatus() {
-    return this.http.get<{ enabled: boolean }>(`${this.base}/auth/mfa/status`);
-  }
-
-  setupMfa() {
-    return this.http.post<{ qrCodeDataUrl: string; manualKey: string }>(
-      `${this.base}/auth/mfa/setup`,
-      {},
-    );
-  }
-
-  enableMfa(code: string) {
-    return this.http.post<void>(`${this.base}/auth/mfa/enable`, { code });
-  }
-
-  disableMfa(code: string) {
-    return this.http.post<void>(`${this.base}/auth/mfa/disable`, { code });
-  }
-
-  changePassword(currentPassword: string, newPassword: string) {
-    return this.http.post<void>(`${this.base}/auth/change-password`, {
-      currentPassword,
-      newPassword,
-    });
   }
 
   restoreSession(): Observable<AuthUser | null> {
@@ -121,22 +63,52 @@ export class AuthService {
     );
   }
 
+  changePassword(currentPassword: string, newPassword: string): Observable<{ ok: true }> {
+    return this.http.post<{ ok: true }>(`${this.base}/auth/change-password`, {
+      currentPassword,
+      newPassword,
+    });
+  }
+
+  updateNotificationEmail(notificationEmail: string | null): Observable<AuthUser> {
+    return this.http
+      .put<MeResponse>(`${this.base}/auth/notification-email`, {
+        notificationEmail: notificationEmail ?? '',
+      })
+      .pipe(
+        map((res) => res.user),
+        tap((user) => {
+          this.userSignal.set(user);
+          sessionStorage.setItem(STORAGE_USER, JSON.stringify(user));
+        }),
+      );
+  }
+
+  mfaStatus(): Observable<{ enabled: boolean }> {
+    return this.http.get<{ enabled: boolean }>(`${this.base}/auth/mfa/status`);
+  }
+
+  setupMfa(): Observable<{ qrCodeDataUrl: string; manualKey: string }> {
+    return this.http.post<{ qrCodeDataUrl: string; manualKey: string }>(
+      `${this.base}/auth/mfa/setup`,
+      {},
+    );
+  }
+
+  enableMfa(code: string): Observable<{ ok: true }> {
+    return this.http.post<{ ok: true }>(`${this.base}/auth/mfa/enable`, { code });
+  }
+
+  disableMfa(code: string): Observable<{ ok: true }> {
+    return this.http.post<{ ok: true }>(`${this.base}/auth/mfa/disable`, { code });
+  }
+
   logout(): void {
     this.clearSession();
-    if (!environment.authRequired) {
-      this.ensureOpenAccessSession();
-      void this.router.navigate(['/dashboard']);
-      return;
-    }
     void this.router.navigate(['/login']);
   }
 
   navigateHome(): void {
-    if (!environment.authRequired) {
-      this.ensureOpenAccessSession();
-      void this.router.navigate(['/dashboard']);
-      return;
-    }
     const user = this.userSignal();
     if (!user) {
       void this.router.navigate(['/login']);

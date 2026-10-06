@@ -116,6 +116,7 @@ async function main() {
       email: "admin@escala.local",
       passwordHash: hashPassword("changeme"),
       role: UserRole.ADMIN,
+      notificationEmail: "Thays_pgoncalves@hotmail.com",
     },
     update: {},
   });
