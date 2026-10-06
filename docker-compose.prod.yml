@@ -40,6 +40,12 @@ services:
       CORS_ORIGINS: https://pcoordenador.com.br,https://www.pcoordenador.com.br
       JWT_SECRET: ${JWT_SECRET}
       SCHEDULE_ENGINE_VERSION: CLEAN
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_SECURE: ${SMTP_SECURE:-true}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     restart: unless-stopped
 
   admin:
