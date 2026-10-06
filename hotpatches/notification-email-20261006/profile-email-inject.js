@@ -28,7 +28,7 @@
       '<p style="margin:0 0 .75rem;color:#6b7280;font-size:.9rem">Opcional. Usado para avisos como alteração na escala APAO.</p>' +
       '<div class="field" style="margin-bottom:.75rem">' +
       '<label for="hot-notification-email">E-mail</label>' +
-      '<input id="hot-notification-email" type="email" class="p-inputtext p-component w-full" placeholder="opcional — ex.: Thays_pgoncalves@hotmail.com" style="width:100%"/>' +
+      '<input id="hot-notification-email" type="email" class="p-inputtext p-component w-full" style="width:100%"/>' +
       "</div>" +
       '<div style="display:flex;gap:.5rem;align-items:center">' +
       '<button id="hot-notification-save" type="button" class="p-button p-component btn-gol-primary">Salvar e-mail</button>' +
