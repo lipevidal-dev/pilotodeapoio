@@ -32,10 +32,10 @@ export class AuthService {
     return this.tokenSignal();
   }
 
-  /** Aceita login (produção) — o campo visual pode se chamar e-mail/usuário. */
+  /** Produção usa `login`; branch local ainda pode exigir `email` — envia ambos. */
   login(login: string, password: string): Observable<LoginResponse> {
     return this.http
-      .post<LoginResponse>(`${this.base}/auth/login`, { login, password })
+      .post<LoginResponse>(`${this.base}/auth/login`, { login, email: login, password })
       .pipe(tap((res) => this.persistSession(res.token, res.user)));
   }
 
