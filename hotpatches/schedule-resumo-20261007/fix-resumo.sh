@@ -31,6 +31,8 @@ body .content-inner:has(.schedule-grid-wrap){
   width:100% !important;
   min-width:0 !important;
   overflow-x:auto !important;
+  --col-day-w: 1.85rem;
+  --col-employee-w: 6.25rem;
 }
 .schedule-grid-wrap .schedule-grid-scroller,
 .schedule-grid-wrap .schedule-grid,
@@ -39,6 +41,11 @@ body .content-inner:has(.schedule-grid-wrap){
   width:max-content !important;
   min-width:100% !important;
   max-width:none !important;
+}
+.schedule-grid-wrap.has-summary .col-day{
+  width:1.85rem !important;
+  min-width:1.85rem !important;
+  max-width:1.85rem !important;
 }
 .schedule-grid-wrap .sticky-summary-block,
 .schedule-grid-wrap.has-summary .sticky-summary-block{
