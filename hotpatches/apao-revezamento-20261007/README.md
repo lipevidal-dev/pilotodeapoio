@@ -12,3 +12,6 @@ Source permanente: `frontend-admin/src/app/utils/schedule-apao-revezamento-expor
 
 O JS do admin fica em cache por 7 dias. `cache-bust.sh` publica nomes novos
 (`main-APAOREV08.js`) para o navegador baixar o layout Escala de Revezamento.
+
+`apply-legend.sh` acrescenta o bloco LEGENDA AEROVIÁRIO e as cores da legenda
+(`main-APAOREV09.js`).

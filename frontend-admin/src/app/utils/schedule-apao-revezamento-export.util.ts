@@ -10,9 +10,45 @@ type Rgb = [number, number, number];
 const GOL_ORANGE: Rgb = [241, 90, 34];
 const FR_BG: Rgb = [255, 0, 0];
 const FA_BG: Rgb = [198, 224, 180];
+const FS_BG: Rgb = [255, 255, 0];
+const FC_BG: Rgb = [237, 125, 49];
+const V_BG: Rgb = [166, 166, 166];
+const DM_BG: Rgb = [189, 215, 238];
+const L_BG: Rgb = [0, 176, 240];
+const FB_BG: Rgb = [31, 78, 121];
+const ND_BG: Rgb = [229, 231, 235];
+const FP_BG: Rgb = [233, 213, 255];
+const RA_BG: Rgb = [255, 230, 153];
+const SIM_BG: Rgb = [89, 89, 89];
 const WEEKEND_HEADER_BG: Rgb = [255, 199, 206];
 const BLACK: Rgb = [0, 0, 0];
 const WHITE: Rgb = [255, 255, 255];
+
+/** Bloco fixo da planilha da empresa, abaixo da grade. */
+const LEGEND_LEFT: Array<[string, string]> = [
+  ['FR', 'FOLGA REGULAMENTAR'],
+  ['FA', 'FOLGA AGRUPADA'],
+  ['FS', 'FOLGA SOCIAL'],
+  ['K', 'CURSO'],
+  ['FC', 'FOLGA COMPENSA'],
+  ['V', 'VOO'],
+];
+
+const LEGEND_RIGHT: Array<[string, string] | null> = [
+  ['FF', 'FOLGA FERIADO'],
+  ['DM', 'DISPENSA MÉDICA'],
+  ['L', 'FÉRIAS'],
+  ['FB', 'FOLGA ANIVERSÁRIO'],
+  ['EP', 'EXAME PERIÓDICO'],
+  null,
+];
+
+const TURNOS: Array<[string, string]> = [
+  ['Turno 1', '00:00 - 06:00'],
+  ['Turno 2', '06:00 - 12:00'],
+  ['Turno 3', '12:00 - 18:00'],
+  ['Turno 4', '18:00 - 00:00'],
+];
 
 const MONTH_SHORT_PT = [
   'jan',
@@ -64,9 +100,39 @@ function isWeekendLabel(label: string): boolean {
   return short === 'sáb' || short === 'dom';
 }
 
-/** Converte célula interna (T4, F, FA…) para o código do layout GOL. */
+function normCode(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+function painted(text: string, bg: Rgb, fg: Rgb = BLACK): ApaoRevezamentoCell {
+  return { text, bg, fg };
+}
+
+const LEGEND_PAINT: Record<string, ApaoRevezamentoCell> = {
+  FR: painted('FR', FR_BG),
+  FA: painted('FA', FA_BG),
+  FS: painted('FS', FS_BG),
+  K: painted('K', FS_BG),
+  FC: painted('FC', FC_BG),
+  V: painted('V', V_BG),
+  FF: painted('FF', WHITE),
+  DM: painted('DM', DM_BG),
+  L: painted('L', L_BG),
+  FB: painted('FB', FB_BG, WHITE),
+  EP: painted('EP', FS_BG),
+  ND: painted('ND', ND_BG),
+  FP: painted('FP', FP_BG),
+  RA: painted('RA', RA_BG),
+  SIM: painted('SIM', SIM_BG, WHITE),
+};
+
+/** Converte célula interna (T4, F, FER, VOO…) para o código e a cor da legenda GOL. */
 export function mapApaoRevezamentoCell(cell: ScheduleCellData | undefined | null): ApaoRevezamentoCell {
-  const display = (cell?.display ?? '').trim().toUpperCase();
+  const display = normCode(cell?.display ?? '');
   const kind = cell?.kind ?? 'empty';
 
   if (!display || kind === 'empty') {
@@ -78,6 +144,25 @@ export function mapApaoRevezamentoCell(cell: ScheduleCellData | undefined | null
     return { text: shiftMatch[1]!, bg: WHITE, fg: BLACK };
   }
 
+  if (kind === 'ferias' || display === 'FER' || display === 'FERIAS' || display === 'L') {
+    return LEGEND_PAINT['L']!;
+  }
+  if (kind === 'fani' || display === 'FANI' || display === 'FB') return LEGEND_PAINT['FB']!;
+  if (kind === 'fa' || display === 'FA') return LEGEND_PAINT['FA']!;
+  if (kind === 'fs' || display === 'FS') return LEGEND_PAINT['FS']!;
+  if (kind === 'voo' || display === 'VOO' || display === 'V') return LEGEND_PAINT['V']!;
+  if (kind === 'curso' || display === 'CRS' || display === 'CURSO' || display === 'K') {
+    return LEGEND_PAINT['K']!;
+  }
+  if (kind === 'cma' || display === 'CMA' || display === 'EP') return LEGEND_PAINT['EP']!;
+  if (display === 'DM' || display.includes('DISPENSA')) return LEGEND_PAINT['DM']!;
+  if (display === 'FC') return LEGEND_PAINT['FC']!;
+  if (display === 'FF') return LEGEND_PAINT['FF']!;
+  if (kind === 'fp' || kind === 'fp-weekend' || display === 'FP') return LEGEND_PAINT['FP']!;
+  if (kind === 'nd' || display === 'ND') return LEGEND_PAINT['ND']!;
+  if (kind === 'simulador' || display === 'SIM' || display === 'S') return LEGEND_PAINT['SIM']!;
+  if (display === 'RA') return LEGEND_PAINT['RA']!;
+
   if (
     kind === 'folga' ||
     kind === 'folga-weekend' ||
@@ -85,18 +170,9 @@ export function mapApaoRevezamentoCell(cell: ScheduleCellData | undefined | null
     display === 'FR' ||
     display === 'FOLGA'
   ) {
-    return { text: 'FR', bg: FR_BG, fg: BLACK };
+    return LEGEND_PAINT['FR']!;
   }
 
-  if (kind === 'fa' || display === 'FA') {
-    return { text: 'FA', bg: FA_BG, fg: BLACK };
-  }
-
-  if (kind === 'fs' || display === 'FS') {
-    return { text: 'FS', bg: FA_BG, fg: BLACK };
-  }
-
-  // Demais códigos operacionais: mantém texto, fundo branco (layout da empresa).
   return { text: display, bg: WHITE, fg: BLACK };
 }
 
@@ -120,13 +196,115 @@ function triggerXlsxDownload(buffer: ArrayBuffer, fileName: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-async function loadGolLogoBuffer(): Promise<ArrayBuffer | null> {
-  try {
-    const res = await fetch('assets/brand/logo-gol-export.png');
-    if (!res.ok) return null;
-    return await res.arrayBuffer();
-  } catch {
-    return null;
+const THIN_BORDER = {
+  top: { style: 'thin' as const, color: { argb: 'FF000000' } },
+  left: { style: 'thin' as const, color: { argb: 'FF000000' } },
+  bottom: { style: 'thin' as const, color: { argb: 'FF000000' } },
+  right: { style: 'thin' as const, color: { argb: 'FF000000' } },
+};
+
+interface LegendLayout {
+  code1: number;
+  label1: [number, number];
+  code2: number;
+  label2: [number, number];
+  turnoCol: number;
+  turnoEnd: number;
+  horarioCol: number;
+  horarioEnd: number;
+}
+
+function legendLayout(lastCol: number): LegendLayout {
+  const start = 3;
+  const end = Math.max(lastCol, start + 20);
+  const horarioW = 5;
+  const turnoW = 4;
+  const horarioCol = end - horarioW + 1;
+  const turnoCol = horarioCol - turnoW;
+  const leftEnd = turnoCol - 2;
+  const leftSpan = leftEnd - start + 1;
+  const code2 = start + Math.floor(leftSpan / 2);
+  return {
+    code1: start,
+    label1: [start + 1, code2 - 1],
+    code2,
+    label2: [code2 + 1, leftEnd],
+    turnoCol,
+    turnoEnd: turnoCol + turnoW - 1,
+    horarioCol,
+    horarioEnd: end,
+  };
+}
+
+function paintExcel(
+  sheet: import('exceljs').Worksheet,
+  row: number,
+  col: number,
+  value: string | number,
+  opts: { bg?: Rgb; fg?: Rgb; bold?: boolean; size?: number; align?: 'left' | 'center' },
+): void {
+  const cell = sheet.getCell(row, col);
+  cell.value = value;
+  cell.font = {
+    bold: opts.bold ?? true,
+    size: opts.size ?? 9,
+    color: { argb: toArgb(opts.fg ?? BLACK) },
+    name: 'Calibri',
+  };
+  cell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: toArgb(opts.bg ?? WHITE) },
+  };
+  cell.alignment = { vertical: 'middle', horizontal: opts.align ?? 'center' };
+  cell.border = THIN_BORDER;
+}
+
+function writeExcelLegend(sheet: import('exceljs').Worksheet, startRow: number, lastCol: number): void {
+  const layout = legendLayout(lastCol);
+  const headerRow = startRow;
+  sheet.mergeCells(headerRow, 1, headerRow, layout.turnoCol - 2);
+  paintExcel(sheet, headerRow, 1, 'LEGENDA AEROVIÁRIO', {
+    bg: GOL_ORANGE,
+    fg: WHITE,
+    size: 11,
+    align: 'left',
+  });
+  sheet.mergeCells(headerRow, layout.turnoCol, headerRow, layout.turnoEnd);
+  paintExcel(sheet, headerRow, layout.turnoCol, 'TURNOS', { bg: GOL_ORANGE, fg: WHITE, size: 11 });
+  sheet.mergeCells(headerRow, layout.horarioCol, headerRow, layout.horarioEnd);
+  paintExcel(sheet, headerRow, layout.horarioCol, 'HORÁRIOS', { bg: GOL_ORANGE, fg: WHITE, size: 11 });
+  sheet.getRow(headerRow).height = 18;
+
+  for (let i = 0; i < LEGEND_LEFT.length; i += 1) {
+    const row = headerRow + 1 + i;
+    const left = LEGEND_LEFT[i]!;
+    const right = LEGEND_RIGHT[i];
+    const turno = TURNOS[i];
+    const leftPaint = LEGEND_PAINT[left[0]]!;
+    sheet.mergeCells(row, layout.label1[0], row, layout.label1[1]);
+    paintExcel(sheet, row, layout.code1, leftPaint.text, { bg: leftPaint.bg, fg: leftPaint.fg, size: 8 });
+    paintExcel(sheet, row, layout.label1[0], left[1], { align: 'left', size: 9 });
+
+    sheet.mergeCells(row, layout.label2[0], row, layout.label2[1]);
+    if (right) {
+      const rightPaint = LEGEND_PAINT[right[0]]!;
+      paintExcel(sheet, row, layout.code2, rightPaint.text, {
+        bg: rightPaint.bg,
+        fg: rightPaint.fg,
+        size: 8,
+      });
+      paintExcel(sheet, row, layout.label2[0], right[1], { align: 'left', size: 9 });
+    } else {
+      paintExcel(sheet, row, layout.code2, '', { bg: WHITE });
+      paintExcel(sheet, row, layout.label2[0], '', { align: 'left' });
+    }
+
+    sheet.mergeCells(row, layout.turnoCol, row, layout.turnoEnd);
+    sheet.mergeCells(row, layout.horarioCol, row, layout.horarioEnd);
+    paintExcel(sheet, row, layout.turnoCol, turno?.[0] ?? '', { align: 'center', size: 9 });
+    paintExcel(sheet, row, layout.horarioCol, turno?.[1] ?? '', { align: 'center', size: 9 });
+    sheet.getRow(row).height = 16;
   }
 }
 
@@ -161,24 +339,11 @@ export async function buildApaoRevezamentoExcelWorkbook(grid: ScheduleGridData):
   sheet.getRow(1).height = 22;
   sheet.getRow(2).height = 22;
 
-  const logoBuffer = await loadGolLogoBuffer();
-  if (logoBuffer) {
-    const imageId = workbook.addImage({
-      buffer: new Uint8Array(logoBuffer),
-      extension: 'png',
-    });
-    sheet.addImage(imageId, {
-      tl: { col: 0, row: 0 },
-      ext: { width: 120, height: 32 },
-      editAs: 'oneCell',
-    });
-  } else {
-    sheet.mergeCells(1, 1, 2, 2);
-    const logoCell = sheet.getCell(1, 1);
-    logoCell.value = 'GOL';
-    logoCell.font = { bold: true, size: 18, color: { argb: toArgb(GOL_ORANGE) } };
-    logoCell.alignment = { vertical: 'middle', horizontal: 'center' };
-  }
+  sheet.mergeCells(1, 1, 2, 2);
+  const logoCell = sheet.getCell(1, 1);
+  logoCell.value = 'GOL';
+  logoCell.font = { bold: true, size: 22, color: { argb: toArgb(GOL_ORANGE) }, name: 'Calibri' };
+  logoCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
   // Faixa do mês
   sheet.mergeCells(3, 1, 3, lastCol);
@@ -283,6 +448,7 @@ export async function buildApaoRevezamentoExcelWorkbook(grid: ScheduleGridData):
     excelRow += 1;
   }
 
+  writeExcelLegend(sheet, excelRow + 1, lastCol);
   return workbook;
 }
 
@@ -306,19 +472,10 @@ export async function downloadApaoRevezamentoPdf(grid: ScheduleGridData): Promis
   const margin = 6;
   let cursorY = margin;
 
-  const logoBuffer = await loadGolLogoBuffer();
-  if (logoBuffer) {
-    const bytes = new Uint8Array(logoBuffer);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!);
-    const dataUrl = `data:image/png;base64,${btoa(binary)}`;
-    doc.addImage(dataUrl, 'PNG', margin, cursorY, 28, 8);
-  } else {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.setTextColor(...GOL_ORANGE);
-    doc.text('GOL', margin, cursorY + 6);
-  }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.setTextColor(...GOL_ORANGE);
+  doc.text('GOL', margin, cursorY + 6);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
@@ -404,6 +561,60 @@ export async function downloadApaoRevezamentoPdf(grid: ScheduleGridData): Promis
     },
     pageBreak: 'auto',
     showHead: 'everyPage',
+  });
+
+  const afterTable = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? cursorY;
+  const legendBody = LEGEND_LEFT.map((left, index) => {
+    const right = LEGEND_RIGHT[index];
+    const turno = TURNOS[index];
+    return [left[0], left[1], right?.[0] ?? '', right?.[1] ?? '', turno?.[0] ?? '', turno?.[1] ?? ''];
+  });
+  autoTable(doc, {
+    startY: afterTable + 3,
+    head: [['LEGENDA AEROVIÁRIO', '', '', '', 'TURNOS', 'HORÁRIOS']],
+    body: legendBody,
+    theme: 'grid',
+    tableWidth: pageW - margin * 2,
+    margin: { left: margin, right: margin },
+    styles: {
+      fontSize: 7,
+      cellPadding: 0.8,
+      valign: 'middle',
+      lineColor: [0, 0, 0],
+      lineWidth: 0.15,
+      textColor: [0, 0, 0],
+      fontStyle: 'bold',
+      minCellHeight: 5,
+    },
+    headStyles: {
+      fillColor: GOL_ORANGE,
+      textColor: WHITE,
+      fontStyle: 'bold',
+      halign: 'left',
+    },
+    columnStyles: {
+      0: { cellWidth: 12, halign: 'center' },
+      1: { cellWidth: 48, halign: 'left' },
+      2: { cellWidth: 12, halign: 'center' },
+      3: { cellWidth: 48, halign: 'left' },
+      4: { cellWidth: 28, halign: 'center' },
+      5: { cellWidth: 36, halign: 'center' },
+    },
+    didParseCell: (data) => {
+      if (data.section === 'head') {
+        data.cell.styles.fillColor = GOL_ORANGE;
+        data.cell.styles.textColor = WHITE;
+        if (data.column.index >= 4) data.cell.styles.halign = 'center';
+        return;
+      }
+      if (data.column.index !== 0 && data.column.index !== 2) return;
+      const code = String(data.cell.raw ?? '');
+      const paint = LEGEND_PAINT[code];
+      if (!paint) return;
+      data.cell.styles.fillColor = paint.bg;
+      data.cell.styles.textColor = paint.fg;
+      data.cell.styles.halign = 'center';
+    },
   });
 
   const monthLabel = String(grid.month).padStart(2, '0');
