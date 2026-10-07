@@ -9,3 +9,6 @@ Somente o escopo **Exportar APAOs** (Excel/PDF) usa este layout.
 
 Source permanente: `frontend-admin/src/app/utils/schedule-apao-revezamento-export.util.ts`
 + `ScheduleExportService` (branch `apao`).
+
+O JS do admin fica em cache por 7 dias. `cache-bust.sh` publica nomes novos
+(`main-APAOREV08.js`) para o navegador baixar o layout Escala de Revezamento.
