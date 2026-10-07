@@ -9,7 +9,8 @@ export async function loginController(req: FastifyRequest, reply: FastifyReply) 
     return reply.status(400).send({ error: "Payload inválido", details: parsed.error.flatten() });
   }
   try {
-    const result = await authUseCase.login(parsed.data.email, parsed.data.password);
+    const identifier = (parsed.data.login ?? parsed.data.email ?? "").trim();
+    const result = await authUseCase.login(identifier, parsed.data.password);
     return reply.send(result);
   } catch (err) {
     if (err instanceof InvalidCredentialsError) {

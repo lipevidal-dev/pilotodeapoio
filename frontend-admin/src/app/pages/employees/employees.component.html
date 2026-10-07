@@ -250,7 +250,7 @@
 
       <label class="field-label">Login do portal</label>
 
-      <input pInputText class="w-full" [(ngModel)]="formPortalLogin" maxlength="20" />
+      <input pInputText class="w-full" [(ngModel)]="formPortalLogin" maxlength="20" autocomplete="off" />
 
     </div>
 
@@ -263,8 +263,12 @@
         type="password"
         class="w-full"
         [(ngModel)]="formPortalPassword"
+        maxlength="120"
+        autocomplete="new-password"
         placeholder="Preencher só para definir/alterar"
       />
+
+      <small class="field-hint">Em branco mantém a senha atual. Mínimo 6 caracteres, até 120.</small>
 
     </div>
 

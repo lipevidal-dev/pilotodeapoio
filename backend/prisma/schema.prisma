@@ -88,6 +88,8 @@ model User {
   id           String   @id @default(uuid())
   name         String
   email        String   @unique
+  /** Login do portal (ex.: lfpcoordenador). E-mail continua válido para admins. */
+  login        String?  @unique
   passwordHash String   @map("password_hash")
   role         UserRole @default(OPERATOR)
   employeeId   String?  @map("employee_id")

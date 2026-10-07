@@ -5,6 +5,8 @@ import {
   EmployeeDuplicatePreferredShiftError,
   EmployeeFcfConfigInvalidError,
   EmployeeFcfShiftNotFoundError,
+  EmployeePortalLoginInUseError,
+  EmployeePortalPasswordRequiredError,
   EmployeePreferredShiftNotFoundError,
   EmployeeShiftPreferenceConflictError,
 } from "../../../application/errors/employee.errors.js";
@@ -49,7 +51,9 @@ export async function createEmployeeController(req: FastifyRequest, reply: Fasti
       err instanceof EmployeePreferredShiftNotFoundError ||
       err instanceof EmployeeDuplicatePreferredShiftError ||
       err instanceof EmployeeFcfConfigInvalidError ||
-      err instanceof EmployeeFcfShiftNotFoundError
+      err instanceof EmployeeFcfShiftNotFoundError ||
+      err instanceof EmployeePortalLoginInUseError ||
+      err instanceof EmployeePortalPasswordRequiredError
     ) {
       return reply.status(400).send({ error: err.message, code: err.code });
     }
@@ -83,7 +87,9 @@ export async function updateEmployeeController(
       err instanceof EmployeePreferredShiftNotFoundError ||
       err instanceof EmployeeDuplicatePreferredShiftError ||
       err instanceof EmployeeFcfConfigInvalidError ||
-      err instanceof EmployeeFcfShiftNotFoundError
+      err instanceof EmployeeFcfShiftNotFoundError ||
+      err instanceof EmployeePortalLoginInUseError ||
+      err instanceof EmployeePortalPasswordRequiredError
     ) {
       return reply.status(400).send({ error: err.message, code: err.code });
     }

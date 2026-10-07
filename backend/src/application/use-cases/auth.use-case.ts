@@ -26,8 +26,8 @@ function toAuthUser(row: { id: string; name: string; email: string; role: UserRo
 }
 
 export class AuthUseCase {
-  async login(email: string, password: string): Promise<LoginResultDto> {
-    const user = await userRepository.findByEmail(email);
+  async login(loginOrEmail: string, password: string): Promise<LoginResultDto> {
+    const user = await userRepository.findByLogin(loginOrEmail);
     if (!user || !verifyPassword(password, user.passwordHash)) {
       throw new InvalidCredentialsError();
     }
