@@ -14,10 +14,23 @@ import {
 } from "../../domain/schedule/operational-labels.js";
 import { prisma } from "../database/prisma-client.js";
 
-const employeeInclude = { role: true } as const;
+const portalUsersInclude = {
+  users: {
+    select: {
+      id: true,
+      email: true,
+      login: true,
+      role: true,
+      employeeId: true,
+    },
+  },
+} as const;
+
+const employeeInclude = { role: true, ...portalUsersInclude } as const;
 
 const employeeDetailInclude = {
   role: true,
+  ...portalUsersInclude,
   flightRestrictions: { orderBy: { date: "asc" as const } },
   shiftRestrictions: {
     include: { shift: true },

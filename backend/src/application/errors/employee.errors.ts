@@ -34,6 +34,24 @@ export class EmployeeFcfConfigInvalidError extends Error {
   }
 }
 
+export class EmployeePortalLoginInUseError extends Error {
+  readonly code = "EMPLOYEE_PORTAL_LOGIN_IN_USE";
+
+  constructor() {
+    super("Este login já está em uso por outro usuário.");
+    this.name = "EmployeePortalLoginInUseError";
+  }
+}
+
+export class EmployeePortalPasswordRequiredError extends Error {
+  readonly code = "EMPLOYEE_PORTAL_PASSWORD_REQUIRED";
+
+  constructor() {
+    super("Informe a senha para criar o acesso ao portal colaborador.");
+    this.name = "EmployeePortalPasswordRequiredError";
+  }
+}
+
 export class EmployeeFcfShiftNotFoundError extends Error {
   readonly code = "EMPLOYEE_FCF_SHIFT_NOT_FOUND";
 

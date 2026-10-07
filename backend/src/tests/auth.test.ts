@@ -26,7 +26,7 @@ describe("AuthUseCase", () => {
   });
 
   it("login retorna token e usuário com credenciais válidas", async () => {
-    vi.spyOn(userRepoModule.userRepository, "findByEmail").mockResolvedValue(adminUser);
+    vi.spyOn(userRepoModule.userRepository, "findByLogin").mockResolvedValue(adminUser);
     const uc = new AuthUseCase();
     const result = await uc.login("admin@test.local", "secret123");
     expect(result.user.role).toBe("ADMIN");
@@ -35,9 +35,25 @@ describe("AuthUseCase", () => {
   });
 
   it("login falha com senha incorreta", async () => {
-    vi.spyOn(userRepoModule.userRepository, "findByEmail").mockResolvedValue(adminUser);
+    vi.spyOn(userRepoModule.userRepository, "findByLogin").mockResolvedValue(adminUser);
     const uc = new AuthUseCase();
     await expect(uc.login("admin@test.local", "wrong")).rejects.toBeInstanceOf(InvalidCredentialsError);
+  });
+
+  it("login aceita usuário do portal com a senha gravada", async () => {
+    const portalUser = {
+      ...adminUser,
+      id: "user-portal",
+      name: "Luccas",
+      email: "lfpcoordenador",
+      role: UserRole.OPERATOR,
+      passwordHash: hashPassword("lfpcoordenadort6t7t8"),
+    };
+    vi.spyOn(userRepoModule.userRepository, "findByLogin").mockResolvedValue(portalUser);
+    const uc = new AuthUseCase();
+    const result = await uc.login("lfpcoordenador", "lfpcoordenadort6t7t8");
+    expect(result.user.email).toBe("lfpcoordenador");
+    expect(result.user.role).toBe("OPERATOR");
   });
 
   it("me retorna usuário com token válido", async () => {

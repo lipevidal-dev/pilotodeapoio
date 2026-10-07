@@ -538,6 +538,8 @@ export class EmployeesComponent implements OnInit {
 
         this.formInInstruction = detail.inInstruction ?? false;
 
+        this.formPortalLogin = detail.portalLogin ?? this.formPortalLogin;
+
         this.loadingDetail.set(false);
 
       },
@@ -736,6 +738,16 @@ export class EmployeesComponent implements OnInit {
 
     }
 
+    const portalError = this.portalAccessError();
+
+    if (portalError) {
+
+      this.messages.add({ severity: 'warn', summary: 'Validação', detail: portalError });
+
+      return;
+
+    }
+
     const isFcf = this.formIsFcf;
 
     const inInstruction = this.formInInstruction;
@@ -776,9 +788,7 @@ export class EmployeesComponent implements OnInit {
           ? dateToIso(this.formInstructionEndDate)
           : null,
 
-        portalLogin: this.formPortalLogin.trim() || null,
-
-        portalPassword: this.formPortalPassword || null,
+        ...this.portalAccessPayload(),
 
         isCmte: this.formIsCmte,
 
@@ -830,9 +840,7 @@ export class EmployeesComponent implements OnInit {
           ? dateToIso(this.formInstructionEndDate)
           : null,
 
-        portalLogin: this.formPortalLogin.trim() || null,
-
-        portalPassword: this.formPortalPassword || undefined,
+        ...this.portalAccessPayload(),
 
         isCmte: this.formIsCmte,
 
@@ -851,6 +859,26 @@ export class EmployeesComponent implements OnInit {
   }
 
 
+
+  private portalAccessPayload(): { portalLogin: string | null; portalPassword: string | null } {
+    return {
+      portalLogin: this.formPortalLogin.trim().toLowerCase() || null,
+      portalPassword: this.formPortalPassword.trim() || null,
+    };
+  }
+
+  private portalAccessError(): string | null {
+    const login = this.formPortalLogin.trim();
+    const password = this.formPortalPassword.trim();
+    if (login.length > 0 && login.length < 3) return 'Login deve ter ao menos 3 caracteres.';
+    if (login && !/^[a-zA-Z0-9._@-]+$/.test(login)) return 'Login contém caracteres inválidos.';
+    if (this.dialogMode === 'create' && login && password.length < 6) {
+      return 'Informe a senha para criar o acesso ao portal colaborador.';
+    }
+    if (password && password.length < 6) return 'Senha deve ter ao menos 6 caracteres.';
+    if (password.length > 120) return 'Senha deve ter no máximo 120 caracteres.';
+    return null;
+  }
 
   private onSaveSuccess(detail: string): void {
 

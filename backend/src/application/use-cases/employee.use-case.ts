@@ -34,6 +34,8 @@ import {
 import { normalizeFcfSchedule, parseFcfScheduleJson, validateFcfConfig, type FcfScheduleEntry } from "../../domain/employee/fcf-config.js";
 
 import { ShiftRepository } from "../../infrastructure/repositories/shift.repository.js";
+import { syncPortalAccess } from "../services/portal-access.service.js";
+import { prisma } from "../../infrastructure/database/prisma-client.js";
 
 
 
@@ -72,6 +74,10 @@ type RestrictionFields = {
   fcfSchedule?: Parameters<typeof normalizeFcfSchedule>[0];
 
   inInstruction?: boolean;
+
+  portalLogin?: string | null;
+
+  portalPassword?: string | null;
 
 };
 
@@ -339,7 +345,20 @@ export class EmployeeUseCase {
 
     });
 
-    return employeeToApi(row);
+    try {
+      await syncPortalAccess({
+        employeeId: row.id,
+        employeeName: row.name,
+        portalLogin: data.portalLogin,
+        portalPassword: data.portalPassword,
+      });
+    } catch (err) {
+      await prisma.employee.delete({ where: { id: row.id } }).catch(() => undefined);
+      throw err;
+    }
+
+    const fresh = await this.repo.findById(row.id);
+    return employeeToApi(fresh ?? row);
 
   }
 
@@ -437,9 +456,17 @@ export class EmployeeUseCase {
 
 
 
+    await syncPortalAccess({
+      employeeId: id,
+      employeeName: data.name ?? current.name,
+      portalLogin: data.portalLogin,
+      portalPassword: data.portalPassword,
+    });
+
     const row = await this.repo.update(id, patch);
 
-    return employeeToApi(row);
+    const fresh = await this.repo.findById(row.id);
+    return employeeToApi(fresh ?? row);
 
   }
 

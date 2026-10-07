@@ -3,6 +3,7 @@ import type { Employee, EmployeeFlightRestriction, EmployeePreferredShift, Emplo
 import { formatSeniorityLabel } from "../../domain/employee/seniority.js";
 import { parseFcfScheduleJson } from "../../domain/employee/fcf-config.js";
 
+import { displayPortalLogin } from "../../domain/auth/portal-login.js";
 import { isoDateKey } from "../../domain/rules/date-keys.js";
 
 
@@ -86,6 +87,8 @@ export interface EmployeeApiRecord {
 
   inInstruction: boolean;
 
+  portalLogin: string | null;
+
   createdAt: string;
 
   updatedAt: string;
@@ -107,6 +110,8 @@ type SpecificShiftRequestWithShift = import("@prisma/client").EmployeeSpecificSh
 type EmployeeWithRole = Employee & {
 
   role?: Role | null;
+
+  users?: Array<{ login?: string | null; email: string; role: string }>;
 
   flightRestrictions?: EmployeeFlightRestriction[];
 
@@ -206,6 +211,8 @@ export function employeeToApi(row: EmployeeWithRole, shiftById?: Map<string, Shi
     })),
 
     inInstruction: row.inInstruction ?? false,
+
+    portalLogin: displayPortalLogin(row.users),
 
     createdAt: row.createdAt.toISOString(),
 

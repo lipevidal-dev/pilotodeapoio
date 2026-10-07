@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PORTAL_LOGIN_MAX, PORTAL_PASSWORD_MAX, PORTAL_PASSWORD_MIN } from "../../../domain/auth/portal-login.js";
 
 
 
@@ -58,6 +59,35 @@ const fcfScheduleEntrySchema = z.object({
 });
 
 const fcfScheduleArray = z.array(fcfScheduleEntrySchema).optional().default([]);
+
+const portalLoginField = z
+  .string()
+  .trim()
+  .max(PORTAL_LOGIN_MAX, "Login deve ter no máximo 20 caracteres")
+  .nullable()
+  .optional()
+  .superRefine((value, ctx) => {
+    if (value == null || value === "") return;
+    if (value.length < 3) {
+      ctx.addIssue({ code: "custom", message: "Login deve ter ao menos 3 caracteres" });
+    }
+    if (!/^[a-zA-Z0-9._@-]+$/.test(value)) {
+      ctx.addIssue({ code: "custom", message: "Login contém caracteres inválidos" });
+    }
+  });
+
+const portalPasswordField = z
+  .string()
+  .trim()
+  .max(PORTAL_PASSWORD_MAX, "Senha deve ter no máximo 120 caracteres")
+  .nullable()
+  .optional()
+  .superRefine((value, ctx) => {
+    if (value == null || value === "") return;
+    if (value.length < PORTAL_PASSWORD_MIN) {
+      ctx.addIssue({ code: "custom", message: "Senha deve ter ao menos 6 caracteres" });
+    }
+  });
 
 function refineFcfSchedule(
   data: { isFcf?: boolean; fcfSchedule?: Array<{ shiftId: string; weekday: number }> },
@@ -131,6 +161,10 @@ export const createEmployeeSchema = z
 
     inInstruction: z.boolean().optional().default(false),
 
+    portalLogin: portalLoginField,
+
+    portalPassword: portalPasswordField,
+
   })
 
   .refine((d) => Boolean(d.roleId || d.type), {
@@ -159,7 +193,19 @@ export const createEmployeeSchema = z
 
   .refine((d) => rejectRestrictedPreferredOverlap(d.restrictedShiftIds, d.preferredShiftIds))
 
-  .superRefine((d, ctx) => refineFcfSchedule(d, ctx));
+  .superRefine((d, ctx) => refineFcfSchedule(d, ctx))
+
+  .superRefine((d, ctx) => {
+    const login = d.portalLogin?.trim();
+    const password = d.portalPassword?.trim();
+    if (login && !password) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Informe a senha para criar o acesso ao portal colaborador.",
+        path: ["portalPassword"],
+      });
+    }
+  });
 
 
 
@@ -194,6 +240,10 @@ export const updateEmployeeSchema = z
     fcfSchedule: fcfScheduleArray.optional(),
 
     inInstruction: z.boolean().optional(),
+
+    portalLogin: portalLoginField,
+
+    portalPassword: portalPasswordField,
 
   })
 
