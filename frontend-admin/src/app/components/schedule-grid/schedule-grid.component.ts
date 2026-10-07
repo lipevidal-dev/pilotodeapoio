@@ -1,6 +1,7 @@
 import {
   Component,
   HostListener,
+  computed,
   input,
   output,
   signal,
@@ -98,12 +99,15 @@ export class ScheduleGridComponent {
   /** Oculta a barra interna “Mostrar resumo” (controle externo no painel admin). */
   readonly hideSummaryToolbar = input(false);
   readonly summaryVisible = input(false);
+  /** Portal/admin: estado externo opcional; o grid também mantém cmteExpanded local. */
+  readonly showCmte = input(false);
 
   readonly selectionCompleted = output<GridSelectionComplete>();
   readonly summaryVisibleChange = output<boolean>();
   readonly deletionSelectionCompleted = output<GridDeletionSelectionComplete>();
   readonly moveRequested = output<GridMoveRequest>();
   readonly cellClicked = output<GridCellClickEvent>();
+  readonly cmteVisibilityChange = output<boolean>();
 
   private dragAnchor: GridCellCoordinate | null = null;
   private isSelecting = false;
@@ -143,6 +147,9 @@ export class ScheduleGridComponent {
 
   /** Espelho do mês anterior comprimido (só UI — dados do lead continuam no grid). */
   readonly leadCollapsed = signal(false);
+  /** CMTE inicia sempre recolhido (chevron-right); clique expande. */
+  readonly cmteExpanded = signal(false);
+  readonly hasCmteGroup = computed(() => this.grid().groups.some((g) => g.type === 'CMTE'));
 
   /** Colunas exibidas (lead-in + mês); fallback para dayNumbers em grids antigos. */
   displayColumns(): ScheduleDayColumn[] {
@@ -173,6 +180,12 @@ export class ScheduleGridComponent {
 
   hasLeadColumns(): boolean {
     return (this.grid().leadDayCount ?? 0) > 0 || this.displayColumns().some((c) => c.isLead);
+  }
+
+  toggleCmteVisibility(): void {
+    const next = !this.cmteExpanded();
+    this.cmteExpanded.set(next);
+    this.cmteVisibilityChange.emit(next);
   }
 
   toggleLeadCollapsed(event: Event): void {

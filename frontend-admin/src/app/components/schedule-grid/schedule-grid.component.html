@@ -120,7 +120,24 @@
       <tbody>
         @for (group of grid().groups; track group.type) {
           <tr class="group-row">
-            <td class="group-label sticky-col">{{ group.label }}</td>
+            <td class="group-label sticky-col">
+              @if (group.type === 'CMTE') {
+                <button
+                  type="button"
+                  class="group-toggle"
+                  (click)="toggleCmteVisibility()"
+                  [title]="cmteExpanded() ? 'Recolher comandantes' : 'Mostrar comandantes'"
+                  [attr.aria-expanded]="cmteExpanded()"
+                >
+                  <i
+                    class="pi"
+                    [class.pi-chevron-down]="cmteExpanded()"
+                    [class.pi-chevron-right]="!cmteExpanded()"
+                  ></i>
+                </button>
+              }
+              {{ group.label }}
+            </td>
             @for (col of visibleColumns(); track col.isoDate) {
               <td
                 class="group-filler col-day"
@@ -133,7 +150,7 @@
               <td class="group-filler sticky-summary-block"></td>
             }
           </tr>
-          @for (row of group.rows; track row.employeeId) {
+          @for (row of (group.type === 'CMTE' && !cmteExpanded() ? [] : group.rows); track row.employeeId) {
             <tr class="data-row" [class.row-own]="isOwnRow(row.employeeId)">
               <td
                 class="col-employee sticky-col"

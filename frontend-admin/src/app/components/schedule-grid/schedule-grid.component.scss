@@ -750,3 +750,20 @@ $gol-pointer-cursor: url('/assets/cursors/gol-pointer.png') 3 2, pointer;
   outline: 2px solid var(--gol-orange);
   outline-offset: -2px;
 }
+
+.group-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.35rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.1rem;
+  vertical-align: middle;
+
+  .pi {
+    font-size: 0.85rem;
+  }
+}

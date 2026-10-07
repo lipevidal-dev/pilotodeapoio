@@ -150,6 +150,9 @@ export class PortalScheduleComponent implements OnInit {
   /** Período em que a aba Realizada já foi aplicada como padrão (ano-mês). */
   private executedDefaultPeriodKey: string | null = null;
 
+  /** CMTE inicia recolhido no portal (chevron-right). */
+  readonly showCmte = signal(false);
+
   readonly isPublished = computed(() => this.scheduleData()?.isPublished ?? false);
 
   readonly periodLabel = computed(() => {
@@ -185,7 +188,16 @@ export class PortalScheduleComponent implements OnInit {
     if (scope) {
       grid = filterGridByPdfScope(grid, scope, this.employeeId());
     }
-    return this.applySwapSourceHighlight(grid);
+    grid = this.applySwapSourceHighlight(grid);
+    if (!this.showCmte()) {
+      grid = {
+        ...grid,
+        groups: grid.groups.map((group) =>
+          group.type === 'CMTE' ? { ...group, rows: [] } : group,
+        ),
+      };
+    }
+    return grid;
   });
 
   readonly employeeRow = computed((): EmployeeRowData | null => {
@@ -1373,7 +1385,10 @@ export class PortalScheduleComponent implements OnInit {
   }
 
   hasVisibleRows(grid: ScheduleGridData): boolean {
-    return grid.groups.some((g) => g.rows.length > 0);
+    return (
+      grid.groups.some((g) => g.rows.length > 0) ||
+      grid.groups.some((g) => g.type === 'CMTE')
+    );
   }
 
   isToday(day: number): boolean {

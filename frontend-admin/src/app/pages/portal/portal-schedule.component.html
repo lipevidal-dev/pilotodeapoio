@@ -226,6 +226,8 @@
               [highlightEmployeeId]="employeeId()"
               [showCoverageGaps]="false"
               [showLegend]="true"
+              [showCmte]="showCmte()"
+              (cmteVisibilityChange)="showCmte.set($event)"
               (cellClicked)="onCellClicked($event)"
               (selectionCompleted)="onSelectionCompleted($event)"
             />
@@ -350,6 +352,10 @@
             [showCoverageGaps]="false"
 
             [showLegend]="true"
+
+            [showCmte]="showCmte()"
+
+            (cmteVisibilityChange)="showCmte.set($event)"
 
             (cellClicked)="onCellClicked($event)"
 
