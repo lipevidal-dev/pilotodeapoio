@@ -16,6 +16,16 @@ describe('schedule-apao-revezamento-export.util', () => {
     expect(mapApaoRevezamentoCell({ display: 'FA', kind: 'fa' })).toEqual(
       jasmine.objectContaining({ text: 'FA', bg: [198, 224, 180] }),
     );
+    expect(mapApaoRevezamentoCell({ display: 'FS', kind: 'fs' })).toEqual(
+      jasmine.objectContaining({ text: 'FS', bg: [255, 255, 0] }),
+    );
+    expect(mapApaoRevezamentoCell({ display: 'FER', kind: 'ferias' })).toEqual(
+      jasmine.objectContaining({ text: 'L', bg: [0, 176, 240] }),
+    );
+    expect(mapApaoRevezamentoCell({ display: 'FANI', kind: 'fani' }).text).toBe('FB');
+    expect(mapApaoRevezamentoCell({ display: 'VOO', kind: 'voo' }).text).toBe('V');
+    expect(mapApaoRevezamentoCell({ display: 'CRS', kind: 'curso' }).text).toBe('K');
+    expect(mapApaoRevezamentoCell({ display: 'ND', kind: 'nd' }).bg).toEqual([229, 231, 235]);
     expect(mapApaoRevezamentoCell({ display: '', kind: 'empty' }).text).toBe('');
   });
 
@@ -84,5 +94,20 @@ describe('schedule-apao-revezamento-export.util', () => {
     );
     // PAO não entra na planilha de revezamento
     expect(sheet.getCell('A7').value).toBeNull();
+
+    const texts: string[] = [];
+    sheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        if (typeof cell.value === 'string') texts.push(cell.value);
+      });
+    });
+    expect(texts).toContain('LEGENDA AEROVIÁRIO');
+    expect(texts).toContain('FOLGA REGULAMENTAR');
+    expect(texts).toContain('FÉRIAS');
+    expect(texts).toContain('TURNOS');
+    expect(texts).toContain('HORÁRIOS');
+    expect(texts).toContain('Turno 1');
+    expect(texts).toContain('00:00 - 06:00');
+    expect(texts).not.toContain('PAO IGNORADO');
   });
 });
