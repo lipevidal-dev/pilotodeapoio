@@ -1,17 +1,22 @@
-const GOL_ORANGE = [241, 90, 34];
+const BAR_ORANGE = [255, 102, 0];
+const GOL_ORANGE = BAR_ORANGE;
 const FR_BG = [255, 0, 0];
-const FA_BG = [198, 224, 180];
+const FA_BG = [146, 208, 80];
 const YELLOW = [255, 255, 0];
-const FC_BG = [237, 125, 49];
-const V_BG = [166, 166, 166];
-const DM_BG = [189, 215, 238];
+const FC_BG = [255, 192, 0];
+const V_BG = [247, 150, 70];
+const FF_BG = [179, 162, 199];
+const DM_BG = [217, 217, 217];
 const L_BG = [0, 176, 240];
-const FB_BG = [31, 78, 121];
+const FB_BG = [0, 112, 192];
+const LEGEND_PEACH = [252, 213, 180];
+const LEGEND_BROWN = [151, 71, 6];
+const GRAY_BAR = [166, 166, 166];
 const ND_BG = [229, 231, 235];
 const FP_BG = [233, 213, 255];
 const RA_BG = [255, 230, 153];
 const SIM_BG = [89, 89, 89];
-const WEEKEND_HEADER_BG = [255, 199, 206];
+const WEEKEND_HEADER_BG = [255, 124, 128];
 const WHITE = [255, 255, 255];
 const BLACK = [0, 0, 0];
 const LEGEND_LEFT = [["FR","FOLGA REGULAMENTAR"],["FA","FOLGA AGRUPADA"],["FS","FOLGA SOCIAL"],["K","CURSO"],["FC","FOLGA COMPENSA"],["V","VOO"]];
@@ -26,8 +31,8 @@ function weekdayShort(l){return WEEKDAY_SHORT[l]??String(l).toLowerCase()}
 function isWeekendLabel(l){const s=weekdayShort(l);return s==="sáb"||s==="dom"}
 function paint(text,bg,fg){return {text,bg,fg:fg||BLACK}}
 const STYLES={
-  FR:paint("FR",FR_BG), FA:paint("FA",FA_BG), FS:paint("FS",YELLOW), K:paint("K",YELLOW),
-  FC:paint("FC",FC_BG), V:paint("V",V_BG), FF:paint("FF",WHITE), DM:paint("DM",DM_BG),
+  FR:paint("FR",FR_BG), FA:paint("FA",FA_BG), FS:paint("FS",FA_BG), K:paint("K",YELLOW),
+  FC:paint("FC",FC_BG), V:paint("V",V_BG), FF:paint("FF",FF_BG), DM:paint("DM",DM_BG),
   L:paint("L",L_BG), FB:paint("FB",FB_BG,WHITE), EP:paint("EP",YELLOW),
   ND:paint("ND",ND_BG), FP:paint("FP",FP_BG), RA:paint("RA",RA_BG), SIM:paint("SIM",SIM_BG,WHITE),
 };
@@ -54,44 +59,57 @@ function mapCell(cell){
   if(kind==="folga"||kind==="folga-weekend"||display==="F"||display==="FR"||display==="FOLGA") return STYLES.FR;
   return {text:display,bg:WHITE,fg:BLACK};
 }
-function legendLayout(lastCol){
-  const start=3; const end=Math.max(lastCol, start+20);
-  const horarioCol=end-5+1; const turnoCol=horarioCol-4; const leftEnd=turnoCol-2;
-  const code2=start+Math.floor((leftEnd-start+1)/2);
-  return {code1:start, label1:[start+1, code2-1], code2, label2:[code2+1, leftEnd], turnoCol, turnoEnd:turnoCol+3, horarioCol, horarioEnd:end};
-}
 function paintExcel(sheet,row,col,value,opts={}){
   const cell=sheet.getCell(row,col);
   cell.value=value;
-  cell.font={bold:true,size:opts.size??9,color:{argb:toArgb(opts.fg||BLACK)},name:"Calibri"};
+  cell.font={bold:opts.bold!==false,size:opts.size??9,color:{argb:toArgb(opts.fg||BLACK)},name:opts.font||"Calibri"};
   cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:toArgb(opts.bg||WHITE)}};
   cell.alignment={vertical:"middle",horizontal:opts.align||"center"};
-  cell.border={top:{style:"thin"},left:{style:"thin"},bottom:{style:"thin"},right:{style:"thin"}};
+  cell.border=opts.border||{top:{style:"thin"},left:{style:"thin"},bottom:{style:"thin"},right:{style:"thin"}};
 }
-function writeExcelLegend(sheet,startRow,lastCol){
-  const L=legendLayout(lastCol); const header=startRow;
-  sheet.mergeCells(header,1,header,L.turnoCol-2);
-  paintExcel(sheet,header,1,"LEGENDA AEROVIÁRIO",{bg:GOL_ORANGE,fg:WHITE,size:11,align:"left"});
-  sheet.mergeCells(header,L.turnoCol,header,L.turnoEnd);
-  paintExcel(sheet,header,L.turnoCol,"TURNOS",{bg:GOL_ORANGE,fg:WHITE,size:11});
-  sheet.mergeCells(header,L.horarioCol,header,L.horarioEnd);
-  paintExcel(sheet,header,L.horarioCol,"HORÁRIOS",{bg:GOL_ORANGE,fg:WHITE,size:11});
-  sheet.getRow(header).height=18;
+function writeExcelLegend(sheet,startRow,lastDayCol){
+  const titleEnd=17, turnoStart=18, turnoEnd=25, horaStart=26, horaEnd=Math.max(lastDayCol,33);
+  for(let col=lastDayCol+1; col<=horaEnd; col++) sheet.getColumn(col).width=4;
+  const header=startRow;
+  sheet.mergeCells(header,1,header,titleEnd);
+  paintExcel(sheet,header,1,"LEGENDA AEROVIÁRIO",{bg:LEGEND_PEACH,fg:LEGEND_BROWN,size:10});
+  sheet.mergeCells(header,turnoStart,header+1,turnoEnd);
+  paintExcel(sheet,header,turnoStart,"TURNOS",{bg:BAR_ORANGE,fg:WHITE,size:12,font:"Arial"});
+  sheet.mergeCells(header,horaStart,header+1,horaEnd);
+  paintExcel(sheet,header,horaStart,"HORÁRIOS",{bg:BAR_ORANGE,fg:WHITE,size:12,font:"Arial"});
+  sheet.getRow(header).height=18.95;
   LEGEND_LEFT.forEach((left,i)=>{
-    const row=header+1+i; const right=LEGEND_RIGHT[i]; const turno=TURNOS[i];
+    const row=header+1+i; const right=LEGEND_RIGHT[i]; const turno=i===0?null:TURNOS[i-1];
+    sheet.getRow(row).height=i===LEGEND_LEFT.length-1?21.75:19.5;
+    if(left[0]==="V"){
+      sheet.mergeCells(row,1,row,3); paintExcel(sheet,row,1,"V",{bg:V_BG,fg:BLACK,size:10,bold:false,font:"Arial"});
+      sheet.mergeCells(row,4,row,12); paintExcel(sheet,row,4,"VOO",{bg:WHITE,size:10,font:"Arial"});
+      sheet.mergeCells(row,13,row,horaEnd); paintExcel(sheet,row,13,"",{bg:GRAY_BAR,size:10,font:"Arial"});
+      return;
+    }
     const lp=STYLES[left[0]];
-    sheet.mergeCells(row,L.label1[0],row,L.label1[1]);
-    paintExcel(sheet,row,L.code1,lp.text,{bg:lp.bg,fg:lp.fg,size:8});
-    paintExcel(sheet,row,L.label1[0],left[1],{align:"left",size:9});
-    sheet.mergeCells(row,L.label2[0],row,L.label2[1]);
-    if(right){ const rp=STYLES[right[0]]; paintExcel(sheet,row,L.code2,rp.text,{bg:rp.bg,fg:rp.fg,size:8}); paintExcel(sheet,row,L.label2[0],right[1],{align:"left",size:9}); }
-    else { paintExcel(sheet,row,L.code2,"",{bg:WHITE}); paintExcel(sheet,row,L.label2[0],"",{align:"left"}); }
-    sheet.mergeCells(row,L.turnoCol,row,L.turnoEnd);
-    sheet.mergeCells(row,L.horarioCol,row,L.horarioEnd);
-    paintExcel(sheet,row,L.turnoCol,turno?.[0]??"",{align:"center",size:9});
-    paintExcel(sheet,row,L.horarioCol,turno?.[1]??"",{align:"center",size:9});
-    sheet.getRow(row).height=16;
+    paintExcel(sheet,row,1,lp.text,{bg:lp.bg,fg:lp.fg,size:9});
+    sheet.mergeCells(row,2,row,3); paintExcel(sheet,row,2,left[1],{bg:WHITE,size:9});
+    sheet.mergeCells(row,4,row,12);
+    if(right){ const rp=STYLES[right[0]]; paintExcel(sheet,row,4,rp.text,{bg:rp.bg,fg:rp.fg,size:9}); }
+    else paintExcel(sheet,row,4,"",{bg:WHITE});
+    sheet.mergeCells(row,13,row,titleEnd); paintExcel(sheet,row,13,right?.[1]??"",{bg:WHITE,size:9});
+    if(!turno) return;
+    sheet.mergeCells(row,turnoStart,row,turnoEnd);
+    sheet.mergeCells(row,horaStart,row,horaEnd);
+    paintExcel(sheet,row,turnoStart,turno[0],{bg:WHITE,size:12,font:"Arial"});
+    paintExcel(sheet,row,horaStart,turno[1],{bg:WHITE,size:12,font:"Arial"});
   });
+}
+async function loadLogo(){
+  try{
+    const r=await fetch("/assets/brand/logo-gol-wordmark.png");
+    if(!r.ok) return null;
+    const bytes=new Uint8Array(await r.arrayBuffer());
+    let binary="";
+    for(let i=0;i<bytes.length;i++) binary+=String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }catch{ return null; }
 }
 function apaoRows(grid){return (grid.groups||[]).filter(g=>g.type==="APAO").flatMap(g=>g.rows||[])}
 function triggerXlsx(buffer,fileName){
@@ -118,27 +136,29 @@ export async function downloadApaoRevezamentoExcel(grid){
   const mod=await import("./chunk-YQ6WVFQT.js");
   const ExcelJS=mod.default;
   const workbook=new ExcelJS.Workbook(); workbook.creator="Escala APAO — Revezamento";
-  const sheet=workbook.addWorksheet("Escala de Revezamento",{views:[{state:"frozen",xSplit:2,ySplit:5}],pageSetup:{orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:1,paperSize:9}});
-  const days=grid.dayNumbers; const lastCol=2+days.length;
-  sheet.mergeCells(1,3,2,lastCol);
-  const title=sheet.getCell(1,3); title.value="Escala de Revezamento"; title.font={bold:true,size:20,color:{argb:"FF111827"},name:"Calibri"}; title.alignment={vertical:"middle",horizontal:"left"};
-  sheet.getRow(1).height=22; sheet.getRow(2).height=22;
-  sheet.mergeCells(1,1,2,2); const c=sheet.getCell(1,1); c.value="GOL"; c.font={bold:true,size:22,color:{argb:toArgb(GOL_ORANGE)},name:"Calibri"}; c.alignment={vertical:"middle",horizontal:"center"};
-  sheet.mergeCells(3,1,3,lastCol);
-  const monthCell=sheet.getCell(3,1); monthCell.value=monthBanner(grid.year,grid.month); monthCell.font={bold:true,size:12,color:{argb:"FFFFFFFF"}}; monthCell.fill={type:"pattern",pattern:"solid",fgColor:{argb:toArgb(GOL_ORANGE)}}; monthCell.alignment={vertical:"middle",horizontal:"left"}; sheet.getRow(3).height=20;
-  sheet.mergeCells(4,1,5,1); sheet.mergeCells(4,2,5,2);
-  for(const [col,val] of [[1,"NOME"],[2,"CIF"]]){ const c=sheet.getCell(4,col); c.value=val; c.font={bold:true,size:10}; c.alignment={vertical:"middle",horizontal:"center"}; c.border={top:{style:"thin"},left:{style:"thin"},bottom:{style:"thin"},right:{style:"thin"}}; }
-  days.forEach((day,index)=>{ const col=index+3; const weekday=grid.weekdayLabels[index]??""; const weekend=isWeekendLabel(weekday); const dayCell=sheet.getCell(4,col); const wdCell=sheet.getCell(5,col); dayCell.value=day; wdCell.value=weekdayShort(weekday); for(const cell of [dayCell,wdCell]){ cell.font={bold:true,size:8}; cell.alignment={vertical:"middle",horizontal:"center",textRotation:cell===wdCell?90:0}; cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:toArgb(weekend?WEEKEND_HEADER_BG:WHITE)}}; cell.border={top:{style:"thin"},left:{style:"thin"},bottom:{style:"thin"},right:{style:"thin"}}; } });
-  sheet.getRow(4).height=16; sheet.getRow(5).height=36; sheet.getColumn(1).width=22; sheet.getColumn(2).width=8; for(let col=3;col<=lastCol;col++) sheet.getColumn(col).width=3.4;
-  let excelRow=6;
+  const sheet=workbook.addWorksheet("Escala de Revezamento",{views:[{state:"frozen",ySplit:4}],pageSetup:{orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:1,paperSize:9,scale:80}});
+  const days=grid.dayNumbers; const lastDayCol=3+days.length;
+  sheet.getColumn(1).width=35.14; sheet.getColumn(2).width=14.14; sheet.getColumn(3).width=9.14;
+  for(let col=4; col<=lastDayCol; col++) sheet.getColumn(col).width=4;
+  sheet.getRow(1).height=20.25; sheet.getRow(2).height=28.5; sheet.getRow(3).height=13.5; sheet.getRow(4).height=30.75;
+  const logo=await loadLogo();
+  if(logo){ const id=workbook.addImage({base64:logo,extension:"png"}); sheet.addImage(id,{tl:{col:0.2,row:0.12},ext:{width:143,height:58},editAs:"oneCell"}); }
+  const title=sheet.getCell(1,2); title.value="Escala de Revezamento"; title.font={name:"Arial",bold:true,size:15,color:{argb:"FF000000"}}; title.alignment={vertical:"middle",horizontal:"left"};
+  for(let col=2; col<=lastDayCol; col++){ const cell=sheet.getCell(2,col); cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:toArgb(BAR_ORANGE)}}; cell.font={name:"Arial",bold:true,size:12,color:{argb:"FFFFFFFF"}}; cell.alignment={vertical:"middle",horizontal:"left"}; }
+  sheet.getCell(2,2).value=monthBanner(grid.year,grid.month);
+  sheet.mergeCells(3,1,4,2); const nome=sheet.getCell(3,1); nome.value="NOME"; nome.font={name:"Arial",bold:true,size:9}; nome.alignment={vertical:"middle",horizontal:"center"}; nome.border={top:{style:"thin"},left:{style:"thin"},bottom:{style:"thin"},right:{style:"thin"}};
+  sheet.mergeCells(3,3,4,3); const cif=sheet.getCell(3,3); cif.value="CIF"; cif.font={name:"Arial",bold:true,size:9}; cif.alignment={vertical:"middle",horizontal:"center"}; cif.border={top:{style:"thin"},left:{style:"thin"},bottom:{style:"thin"},right:{style:"thin"}};
+  days.forEach((day,index)=>{ const col=index+4; const weekend=isWeekendLabel(grid.weekdayLabels[index]??""); const fill=toArgb(weekend?WEEKEND_HEADER_BG:WHITE); const dayCell=sheet.getCell(3,col); const wdCell=sheet.getCell(4,col); dayCell.value=day; dayCell.font={name:"Arial",bold:true,size:9}; dayCell.alignment={vertical:"middle",horizontal:"center"}; dayCell.fill={type:"pattern",pattern:"solid",fgColor:{argb:fill}}; dayCell.border={right:{style:"thin"},bottom:{style:"thin"}}; wdCell.value=weekdayShort(grid.weekdayLabels[index]??""); wdCell.font={name:"Arial",bold:true,size:8}; wdCell.alignment={vertical:"middle",horizontal:"center",textRotation:90}; wdCell.fill={type:"pattern",pattern:"solid",fgColor:{argb:fill}}; wdCell.border={right:{style:"thin"},bottom:{style:"medium"}}; });
+  let excelRow=5;
   for(const row of apaoRows(grid)){
-    const excel=sheet.getRow(excelRow);
-    excel.getCell(1).value=String(row.name||"").toUpperCase(); excel.getCell(2).value=String(row.cif||"").trim();
-    for(const col of [1,2]){ const c=excel.getCell(col); c.font={bold:true,size:9}; c.alignment={vertical:"middle",horizontal:col===1?"left":"center"}; c.border={top:{style:"dashed"},left:{style:"thin"},bottom:{style:"dashed"},right:{style:"thin"}}; }
-    days.forEach((day,index)=>{ const mapped=mapCell(row.cells?.[day-1]); const c=excel.getCell(index+3); c.value=mapped.text; c.font={bold:true,size:8,color:{argb:toArgb(mapped.fg)}}; c.fill={type:"pattern",pattern:"solid",fgColor:{argb:toArgb(mapped.bg)}}; c.alignment={vertical:"middle",horizontal:"center"}; c.border={top:{style:"thin"},left:{style:"thin"},bottom:{style:"thin"},right:{style:"thin"}}; });
-    excel.height=16; excelRow+=1;
+    const excel=sheet.getRow(excelRow); excel.height=19.35;
+    sheet.mergeCells(excelRow,1,excelRow,2);
+    const name=excel.getCell(1); name.value=String(row.name||"").toUpperCase(); name.font={name:"Arial",bold:true,size:10}; name.alignment={vertical:"middle",horizontal:"center"}; name.border={left:{style:"medium"},right:{style:"dotted"},bottom:{style:"dotted"}};
+    const cifCell=excel.getCell(3); cifCell.value=String(row.cif||"").trim(); cifCell.font={name:"Arial",bold:true,size:10}; cifCell.alignment={vertical:"middle",horizontal:"center"}; cifCell.border={left:{style:"dotted"},bottom:{style:"dotted"}};
+    days.forEach((day,index)=>{ const mapped=mapCell(row.cells?.[day-1]); const c=excel.getCell(index+4); c.value=mapped.text||null; c.font={name:"Arial",bold:true,size:10,color:{argb:toArgb(mapped.fg)}}; c.fill={type:"pattern",pattern:"solid",fgColor:{argb:toArgb(mapped.bg)}}; c.alignment={vertical:"middle",horizontal:"center"}; c.border={top:{style:"thin"},left:{style:"thin"},bottom:{style:"thin"},right:{style:"thin"}}; });
+    excelRow+=1;
   }
-  writeExcelLegend(sheet, excelRow+1, lastCol);
+  writeExcelLegend(sheet, excelRow, lastDayCol);
   const buffer=await workbook.xlsx.writeBuffer();
   triggerXlsx(buffer, `escala-revezamento-apao_${grid.year}_${String(grid.month).padStart(2,"0")}.xlsx`);
 }
@@ -151,8 +171,15 @@ export async function downloadApaoRevezamentoPdf(grid){
   const autoTable=autoMod.default;
   const doc=new jsPDF({orientation:"landscape",unit:"mm",format:"a4",compress:true});
   const pageW=doc.internal.pageSize.getWidth(); const margin=6; let y=margin;
-  doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.setTextColor(...GOL_ORANGE); doc.text("GOL",margin,y+6);
-  doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.setTextColor(17,24,39); doc.text("Escala de Revezamento",margin+34,y+6); y+=12;
+  const logo=await loadLogo();
+  doc.setFont("helvetica","bold");
+  if(logo){
+    doc.addImage("data:image/png;base64,"+logo,"PNG",margin,y,28,11);
+    doc.setFontSize(16); doc.setTextColor(17,24,39); doc.text("Escala de Revezamento",margin+32,y+8); y+=14;
+  }else{
+    doc.setFontSize(18); doc.setTextColor(...GOL_ORANGE); doc.text("GOL",margin,y+6);
+    doc.setFontSize(16); doc.setTextColor(17,24,39); doc.text("Escala de Revezamento",margin+34,y+6); y+=12;
+  }
   doc.setFillColor(...GOL_ORANGE); doc.rect(margin,y,pageW-margin*2,7,"F"); doc.setFontSize(11); doc.setTextColor(255,255,255); doc.text(monthBanner(grid.year,grid.month),margin+2,y+5); y+=9;
   const headTop=["NOME","CIF",...grid.dayNumbers.map(String)];
   const headWeek=["","",...grid.weekdayLabels.map(w=>weekdayShort(w))];
@@ -170,13 +197,13 @@ export async function downloadApaoRevezamentoPdf(grid){
       const meta=bodyMeta[data.row.index]?.[data.column.index-2]; if(!meta) return; data.cell.styles.fillColor=meta.bg; data.cell.styles.textColor=meta.fg;
     }
   });
-  const legendBody=LEGEND_LEFT.map((left,i)=>{ const right=LEGEND_RIGHT[i]; const turno=TURNOS[i]; return [left[0], left[1], right?.[0]??"", right?.[1]??"", turno?.[0]??"", turno?.[1]??""]; });
+  const legendBody=LEGEND_LEFT.map((left,i)=>{ const right=LEGEND_RIGHT[i]; const turno=i===0?null:TURNOS[i-1]; return [left[0], left[1], right?.[0]??"", right?.[1]??"", turno?.[0]??"", turno?.[1]??""]; });
   autoTable(doc,{ startY:(doc.lastAutoTable?.finalY??y)+3, head:[["LEGENDA AEROVIÁRIO","","","","TURNOS","HORÁRIOS"]], body:legendBody, theme:"grid", tableWidth:pageW-margin*2, margin:{left:margin,right:margin},
     styles:{fontSize:7,cellPadding:0.8,valign:"middle",lineColor:[0,0,0],lineWidth:0.15,textColor:[0,0,0],fontStyle:"bold",minCellHeight:5},
     headStyles:{fillColor:GOL_ORANGE,textColor:WHITE,fontStyle:"bold",halign:"left"},
     columnStyles:{0:{cellWidth:12,halign:"center"},1:{cellWidth:48,halign:"left"},2:{cellWidth:12,halign:"center"},3:{cellWidth:48,halign:"left"},4:{cellWidth:28,halign:"center"},5:{cellWidth:36,halign:"center"}},
     didParseCell:(data)=>{
-      if(data.section==="head"){ data.cell.styles.fillColor=GOL_ORANGE; data.cell.styles.textColor=WHITE; if(data.column.index>=4) data.cell.styles.halign="center"; return; }
+      if(data.section==="head"){ if(data.column.index>=4){ data.cell.styles.fillColor=GOL_ORANGE; data.cell.styles.textColor=WHITE; data.cell.styles.halign="center"; } else { data.cell.styles.fillColor=LEGEND_PEACH; data.cell.styles.textColor=LEGEND_BROWN; } return; }
       if(data.column.index!==0 && data.column.index!==2) return;
       const paint=STYLES[String(data.cell.raw??"")]; if(!paint) return;
       data.cell.styles.fillColor=paint.bg; data.cell.styles.textColor=paint.fg; data.cell.styles.halign="center";

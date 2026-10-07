@@ -7,20 +7,26 @@ import type { ScheduleCellData, ScheduleGridData } from '../models/schedule-grid
 
 type Rgb = [number, number, number];
 
-const GOL_ORANGE: Rgb = [241, 90, 34];
+/** Cores medidas na planilha da empresa (APAO setembro/outubro 2026). */
+const BAR_ORANGE: Rgb = [255, 102, 0];
+const GOL_ORANGE = BAR_ORANGE;
 const FR_BG: Rgb = [255, 0, 0];
-const FA_BG: Rgb = [198, 224, 180];
-const FS_BG: Rgb = [255, 255, 0];
-const FC_BG: Rgb = [237, 125, 49];
-const V_BG: Rgb = [166, 166, 166];
-const DM_BG: Rgb = [189, 215, 238];
+const FA_BG: Rgb = [146, 208, 80];
+const YELLOW: Rgb = [255, 255, 0];
+const FC_BG: Rgb = [255, 192, 0];
+const V_BG: Rgb = [247, 150, 70];
+const FF_BG: Rgb = [179, 162, 199];
+const DM_BG: Rgb = [217, 217, 217];
 const L_BG: Rgb = [0, 176, 240];
-const FB_BG: Rgb = [31, 78, 121];
+const FB_BG: Rgb = [0, 112, 192];
 const ND_BG: Rgb = [229, 231, 235];
 const FP_BG: Rgb = [233, 213, 255];
 const RA_BG: Rgb = [255, 230, 153];
 const SIM_BG: Rgb = [89, 89, 89];
-const WEEKEND_HEADER_BG: Rgb = [255, 199, 206];
+const WEEKEND_HEADER_BG: Rgb = [255, 124, 128];
+const LEGEND_PEACH: Rgb = [252, 213, 180];
+const LEGEND_BROWN: Rgb = [151, 71, 6];
+const GRAY_BAR: Rgb = [166, 166, 166];
 const BLACK: Rgb = [0, 0, 0];
 const WHITE: Rgb = [255, 255, 255];
 
@@ -115,15 +121,15 @@ function painted(text: string, bg: Rgb, fg: Rgb = BLACK): ApaoRevezamentoCell {
 const LEGEND_PAINT: Record<string, ApaoRevezamentoCell> = {
   FR: painted('FR', FR_BG),
   FA: painted('FA', FA_BG),
-  FS: painted('FS', FS_BG),
-  K: painted('K', FS_BG),
+  FS: painted('FS', FA_BG),
+  K: painted('K', YELLOW),
   FC: painted('FC', FC_BG),
   V: painted('V', V_BG),
-  FF: painted('FF', WHITE),
+  FF: painted('FF', FF_BG),
   DM: painted('DM', DM_BG),
   L: painted('L', L_BG),
   FB: painted('FB', FB_BG, WHITE),
-  EP: painted('EP', FS_BG),
+  EP: painted('EP', YELLOW),
   ND: painted('ND', ND_BG),
   FP: painted('FP', FP_BG),
   RA: painted('RA', RA_BG),
@@ -203,45 +209,20 @@ const THIN_BORDER = {
   right: { style: 'thin' as const, color: { argb: 'FF000000' } },
 };
 
-interface LegendLayout {
-  code1: number;
-  label1: [number, number];
-  code2: number;
-  label2: [number, number];
-  turnoCol: number;
-  turnoEnd: number;
-  horarioCol: number;
-  horarioEnd: number;
-}
-
-function legendLayout(lastCol: number): LegendLayout {
-  const start = 3;
-  const end = Math.max(lastCol, start + 20);
-  const horarioW = 5;
-  const turnoW = 4;
-  const horarioCol = end - horarioW + 1;
-  const turnoCol = horarioCol - turnoW;
-  const leftEnd = turnoCol - 2;
-  const leftSpan = leftEnd - start + 1;
-  const code2 = start + Math.floor(leftSpan / 2);
-  return {
-    code1: start,
-    label1: [start + 1, code2 - 1],
-    code2,
-    label2: [code2 + 1, leftEnd],
-    turnoCol,
-    turnoEnd: turnoCol + turnoW - 1,
-    horarioCol,
-    horarioEnd: end,
-  };
-}
-
 function paintExcel(
   sheet: import('exceljs').Worksheet,
   row: number,
   col: number,
   value: string | number,
-  opts: { bg?: Rgb; fg?: Rgb; bold?: boolean; size?: number; align?: 'left' | 'center' },
+  opts: {
+    bg?: Rgb;
+    fg?: Rgb;
+    bold?: boolean;
+    size?: number;
+    align?: 'left' | 'center';
+    font?: string;
+    border?: import('exceljs').Borders;
+  } = {},
 ): void {
   const cell = sheet.getCell(row, col);
   cell.value = value;
@@ -249,62 +230,113 @@ function paintExcel(
     bold: opts.bold ?? true,
     size: opts.size ?? 9,
     color: { argb: toArgb(opts.fg ?? BLACK) },
-    name: 'Calibri',
+    name: opts.font ?? 'Calibri',
   };
   cell.fill = {
     type: 'pattern',
     pattern: 'solid',
     fgColor: { argb: toArgb(opts.bg ?? WHITE) },
   };
-  cell.alignment = { vertical: 'middle', horizontal: opts.align ?? 'center' };
-  cell.border = THIN_BORDER;
+  cell.alignment = { vertical: 'middle', horizontal: opts.align ?? 'center', wrapText: false };
+  if (opts.border) cell.border = opts.border;
+  else cell.border = THIN_BORDER;
 }
 
-function writeExcelLegend(sheet: import('exceljs').Worksheet, startRow: number, lastCol: number): void {
-  const layout = legendLayout(lastCol);
-  const headerRow = startRow;
-  sheet.mergeCells(headerRow, 1, headerRow, layout.turnoCol - 2);
-  paintExcel(sheet, headerRow, 1, 'LEGENDA AEROVIÁRIO', {
-    bg: GOL_ORANGE,
-    fg: WHITE,
-    size: 11,
-    align: 'left',
+/** Legenda no mesmo eixo da grade: A–Q | R–Y turnos | Z–último dia horários. */
+function writeExcelLegend(sheet: import('exceljs').Worksheet, startRow: number, lastDayCol: number): void {
+  const titleEnd = 17;
+  const turnoStart = 18;
+  const turnoEnd = 25;
+  const horaStart = 26;
+  const horaEnd = Math.max(lastDayCol, 33);
+  for (let col = lastDayCol + 1; col <= horaEnd; col += 1) {
+    sheet.getColumn(col).width = 4;
+  }
+
+  const header = startRow;
+  sheet.mergeCells(header, 1, header, titleEnd);
+  paintExcel(sheet, header, 1, 'LEGENDA AEROVIÁRIO', {
+    bg: LEGEND_PEACH,
+    fg: LEGEND_BROWN,
+    size: 10,
+    font: 'Calibri',
   });
-  sheet.mergeCells(headerRow, layout.turnoCol, headerRow, layout.turnoEnd);
-  paintExcel(sheet, headerRow, layout.turnoCol, 'TURNOS', { bg: GOL_ORANGE, fg: WHITE, size: 11 });
-  sheet.mergeCells(headerRow, layout.horarioCol, headerRow, layout.horarioEnd);
-  paintExcel(sheet, headerRow, layout.horarioCol, 'HORÁRIOS', { bg: GOL_ORANGE, fg: WHITE, size: 11 });
-  sheet.getRow(headerRow).height = 18;
+  sheet.mergeCells(header, turnoStart, header + 1, turnoEnd);
+  paintExcel(sheet, header, turnoStart, 'TURNOS', {
+    bg: BAR_ORANGE,
+    fg: WHITE,
+    size: 12,
+    font: 'Arial',
+  });
+  sheet.mergeCells(header, horaStart, header + 1, horaEnd);
+  paintExcel(sheet, header, horaStart, 'HORÁRIOS', {
+    bg: BAR_ORANGE,
+    fg: WHITE,
+    size: 12,
+    font: 'Arial',
+  });
+  sheet.getRow(header).height = 18.95;
 
   for (let i = 0; i < LEGEND_LEFT.length; i += 1) {
-    const row = headerRow + 1 + i;
+    const row = header + 1 + i;
     const left = LEGEND_LEFT[i]!;
     const right = LEGEND_RIGHT[i];
-    const turno = TURNOS[i];
-    const leftPaint = LEGEND_PAINT[left[0]]!;
-    sheet.mergeCells(row, layout.label1[0], row, layout.label1[1]);
-    paintExcel(sheet, row, layout.code1, leftPaint.text, { bg: leftPaint.bg, fg: leftPaint.fg, size: 8 });
-    paintExcel(sheet, row, layout.label1[0], left[1], { align: 'left', size: 9 });
+    const turno = i === 0 ? undefined : TURNOS[i - 1];
+    sheet.getRow(row).height = i === LEGEND_LEFT.length - 1 ? 21.75 : 19.5;
 
-    sheet.mergeCells(row, layout.label2[0], row, layout.label2[1]);
-    if (right) {
-      const rightPaint = LEGEND_PAINT[right[0]]!;
-      paintExcel(sheet, row, layout.code2, rightPaint.text, {
-        bg: rightPaint.bg,
-        fg: rightPaint.fg,
-        size: 8,
-      });
-      paintExcel(sheet, row, layout.label2[0], right[1], { align: 'left', size: 9 });
-    } else {
-      paintExcel(sheet, row, layout.code2, '', { bg: WHITE });
-      paintExcel(sheet, row, layout.label2[0], '', { align: 'left' });
+    if (left[0] === 'V') {
+      sheet.mergeCells(row, 1, row, 3);
+      paintExcel(sheet, row, 1, 'V', { bg: V_BG, fg: BLACK, size: 10, bold: false, font: 'Arial' });
+      sheet.mergeCells(row, 4, row, 12);
+      paintExcel(sheet, row, 4, 'VOO', { bg: WHITE, fg: BLACK, size: 10, font: 'Arial' });
+      sheet.mergeCells(row, 13, row, horaEnd);
+      paintExcel(sheet, row, 13, '', { bg: GRAY_BAR, fg: BLACK, size: 10, font: 'Arial' });
+      continue;
     }
 
-    sheet.mergeCells(row, layout.turnoCol, row, layout.turnoEnd);
-    sheet.mergeCells(row, layout.horarioCol, row, layout.horarioEnd);
-    paintExcel(sheet, row, layout.turnoCol, turno?.[0] ?? '', { align: 'center', size: 9 });
-    paintExcel(sheet, row, layout.horarioCol, turno?.[1] ?? '', { align: 'center', size: 9 });
-    sheet.getRow(row).height = 16;
+    const leftPaint = LEGEND_PAINT[left[0]]!;
+    paintExcel(sheet, row, 1, leftPaint.text, {
+      bg: leftPaint.bg,
+      fg: leftPaint.fg,
+      size: 9,
+      font: 'Calibri',
+    });
+    sheet.mergeCells(row, 2, row, 3);
+    paintExcel(sheet, row, 2, left[1], { bg: WHITE, size: 9, font: 'Calibri' });
+
+    sheet.mergeCells(row, 4, row, 12);
+    if (right) {
+      const rightPaint = LEGEND_PAINT[right[0]]!;
+      paintExcel(sheet, row, 4, rightPaint.text, {
+        bg: rightPaint.bg,
+        fg: rightPaint.fg,
+        size: 9,
+        font: 'Calibri',
+      });
+    } else {
+      paintExcel(sheet, row, 4, '', { bg: WHITE });
+    }
+    sheet.mergeCells(row, 13, row, titleEnd);
+    paintExcel(sheet, row, 13, right?.[1] ?? '', { bg: WHITE, size: 9, font: 'Calibri' });
+
+    if (!turno) continue;
+    sheet.mergeCells(row, turnoStart, row, turnoEnd);
+    sheet.mergeCells(row, horaStart, row, horaEnd);
+    paintExcel(sheet, row, turnoStart, turno[0], { bg: WHITE, size: 12, font: 'Arial' });
+    paintExcel(sheet, row, horaStart, turno[1], { bg: WHITE, size: 12, font: 'Arial' });
+  }
+}
+
+async function loadGolWordmark(): Promise<string | null> {
+  try {
+    const res = await fetch('/assets/brand/logo-gol-wordmark.png');
+    if (!res.ok) return null;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!);
+    return btoa(binary);
+  } catch {
+    return null;
   }
 }
 
@@ -317,138 +349,121 @@ export async function buildApaoRevezamentoExcelWorkbook(grid: ScheduleGridData):
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet('Escala de Revezamento', {
-    views: [{ state: 'frozen', xSplit: 2, ySplit: 5 }],
+    views: [{ state: 'frozen', ySplit: 4 }],
     pageSetup: {
       orientation: 'landscape',
       fitToPage: true,
       fitToWidth: 1,
       fitToHeight: 1,
       paperSize: 9,
+      scale: 80,
     },
   });
 
   const days = grid.dayNumbers;
-  const lastCol = 2 + days.length; // NOME | CIF | dias
+  const lastDayCol = 3 + days.length;
 
-  // Título
-  sheet.mergeCells(1, 3, 2, lastCol);
-  const titleCell = sheet.getCell(1, 3);
-  titleCell.value = 'Escala de Revezamento';
-  titleCell.font = { bold: true, size: 20, color: { argb: 'FF111827' }, name: 'Calibri' };
-  titleCell.alignment = { vertical: 'middle', horizontal: 'left' };
-  sheet.getRow(1).height = 22;
-  sheet.getRow(2).height = 22;
+  sheet.getColumn(1).width = 35.14;
+  sheet.getColumn(2).width = 14.14;
+  sheet.getColumn(3).width = 9.14;
+  for (let col = 4; col <= lastDayCol; col += 1) sheet.getColumn(col).width = 4;
 
-  sheet.mergeCells(1, 1, 2, 2);
-  const logoCell = sheet.getCell(1, 1);
-  logoCell.value = 'GOL';
-  logoCell.font = { bold: true, size: 22, color: { argb: toArgb(GOL_ORANGE) }, name: 'Calibri' };
-  logoCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getRow(1).height = 20.25;
+  sheet.getRow(2).height = 28.5;
+  sheet.getRow(3).height = 13.5;
+  sheet.getRow(4).height = 30.75;
 
-  // Faixa do mês
-  sheet.mergeCells(3, 1, 3, lastCol);
-  const monthCell = sheet.getCell(3, 1);
-  monthCell.value = monthBanner(grid.year, grid.month);
-  monthCell.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
-  monthCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: toArgb(GOL_ORANGE) } };
-  monthCell.alignment = { vertical: 'middle', horizontal: 'left' };
-  sheet.getRow(3).height = 20;
-
-  // Cabeçalho NOME / CIF (merge 2 linhas)
-  sheet.mergeCells(4, 1, 5, 1);
-  sheet.mergeCells(4, 2, 5, 2);
-  const nomeHeader = sheet.getCell(4, 1);
-  nomeHeader.value = 'NOME';
-  const cifHeader = sheet.getCell(4, 2);
-  cifHeader.value = 'CIF';
-  for (const cell of [nomeHeader, cifHeader]) {
-    cell.font = { bold: true, size: 10, color: { argb: 'FF000000' } };
-    cell.alignment = { vertical: 'middle', horizontal: 'center' };
-    cell.border = {
-      top: { style: 'thin', color: { argb: 'FF000000' } },
-      left: { style: 'thin', color: { argb: 'FF000000' } },
-      bottom: { style: 'thin', color: { argb: 'FF000000' } },
-      right: { style: 'thin', color: { argb: 'FF000000' } },
-    };
+  const logo = await loadGolWordmark();
+  if (logo) {
+    const imageId = workbook.addImage({ base64: logo, extension: 'png' });
+    // Âncora medida no drawing da planilha: ~51px à direita, ~4px abaixo, 143×58 px.
+    sheet.addImage(imageId, {
+      tl: { col: 0.2, row: 0.12 },
+      ext: { width: 143, height: 58 },
+      editAs: 'oneCell',
+    });
   }
+
+  const title = sheet.getCell(1, 2);
+  title.value = 'Escala de Revezamento';
+  title.font = { name: 'Arial', bold: true, size: 15, color: { argb: 'FF000000' } };
+  title.alignment = { vertical: 'middle', horizontal: 'left' };
+
+  for (let col = 2; col <= lastDayCol; col += 1) {
+    const cell = sheet.getCell(2, col);
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: toArgb(BAR_ORANGE) } };
+    cell.font = { name: 'Arial', bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'left' };
+  }
+  sheet.getCell(2, 2).value = monthBanner(grid.year, grid.month);
+
+  sheet.mergeCells(3, 1, 4, 2);
+  const nomeHeader = sheet.getCell(3, 1);
+  nomeHeader.value = 'NOME';
+  nomeHeader.font = { name: 'Arial', bold: true, size: 9 };
+  nomeHeader.alignment = { vertical: 'middle', horizontal: 'center' };
+  nomeHeader.border = THIN_BORDER;
+
+  sheet.mergeCells(3, 3, 4, 3);
+  const cifHeader = sheet.getCell(3, 3);
+  cifHeader.value = 'CIF';
+  cifHeader.font = { name: 'Arial', bold: true, size: 9 };
+  cifHeader.alignment = { vertical: 'middle', horizontal: 'center' };
+  cifHeader.border = THIN_BORDER;
 
   days.forEach((day, index) => {
-    const col = index + 3;
+    const col = index + 4;
     const weekday = grid.weekdayLabels[index] ?? '';
     const weekend = isWeekendLabel(weekday);
-    const dayCell = sheet.getCell(4, col);
-    const wdCell = sheet.getCell(5, col);
+    const fill = weekend ? WEEKEND_HEADER_BG : WHITE;
+    const dayCell = sheet.getCell(3, col);
+    const wdCell = sheet.getCell(4, col);
     dayCell.value = day;
+    dayCell.font = { name: 'Arial', bold: true, size: 9 };
+    dayCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    dayCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: toArgb(fill) } };
+    dayCell.border = { right: { style: 'thin' }, bottom: { style: 'thin' } };
     wdCell.value = weekdayShort(weekday);
-    for (const cell of [dayCell, wdCell]) {
-      cell.font = { bold: true, size: 8, color: { argb: 'FF000000' } };
-      cell.alignment = {
-        vertical: 'middle',
-        horizontal: 'center',
-        textRotation: cell === wdCell ? 90 : 0,
-      };
-      cell.fill = weekend
-        ? { type: 'pattern', pattern: 'solid', fgColor: { argb: toArgb(WEEKEND_HEADER_BG) } }
-        : { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
-      cell.border = {
-        top: { style: 'thin', color: { argb: 'FF000000' } },
-        left: { style: 'thin', color: { argb: 'FF000000' } },
-        bottom: { style: 'thin', color: { argb: 'FF000000' } },
-        right: { style: 'thin', color: { argb: 'FF000000' } },
-      };
-    }
+    wdCell.font = { name: 'Arial', bold: true, size: 8 };
+    wdCell.alignment = { vertical: 'middle', horizontal: 'center', textRotation: 90 };
+    wdCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: toArgb(fill) } };
+    wdCell.border = { right: { style: 'thin' }, bottom: { style: 'medium' } };
   });
-  sheet.getRow(4).height = 16;
-  sheet.getRow(5).height = 36;
 
-  sheet.getColumn(1).width = 22;
-  sheet.getColumn(2).width = 8;
-  for (let col = 3; col <= lastCol; col += 1) {
-    sheet.getColumn(col).width = 3.4;
-  }
-
-  let excelRow = 6;
+  let excelRow = 5;
   for (const row of apaoRows(grid)) {
     const excel = sheet.getRow(excelRow);
+    excel.height = 19.35;
+    sheet.mergeCells(excelRow, 1, excelRow, 2);
     const nameCell = excel.getCell(1);
     nameCell.value = (row.name ?? '').toUpperCase();
-    nameCell.font = { bold: true, size: 9, color: { argb: 'FF000000' } };
-    nameCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    nameCell.font = { name: 'Arial', bold: true, size: 10, color: { argb: 'FF000000' } };
+    nameCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    nameCell.border = {
+      left: { style: 'medium' },
+      right: { style: 'dotted' },
+      bottom: { style: 'dotted' },
+    };
 
-    const cifCell = excel.getCell(2);
+    const cifCell = excel.getCell(3);
     cifCell.value = row.cif?.trim() || '';
-    cifCell.font = { bold: true, size: 9, color: { argb: 'FF000000' } };
+    cifCell.font = { name: 'Arial', bold: true, size: 10, color: { argb: 'FF000000' } };
     cifCell.alignment = { vertical: 'middle', horizontal: 'center' };
-
-    for (const cell of [nameCell, cifCell]) {
-      cell.border = {
-        top: { style: 'dashed', color: { argb: 'FF000000' } },
-        left: { style: 'thin', color: { argb: 'FF000000' } },
-        bottom: { style: 'dashed', color: { argb: 'FF000000' } },
-        right: { style: 'thin', color: { argb: 'FF000000' } },
-      };
-    }
+    cifCell.border = { left: { style: 'dotted' }, bottom: { style: 'dotted' } };
 
     days.forEach((day, index) => {
       const mapped = mapApaoRevezamentoCell(row.cells[day - 1]);
-      const cell = excel.getCell(index + 3);
-      cell.value = mapped.text;
-      cell.font = { bold: true, size: 8, color: { argb: toArgb(mapped.fg) } };
+      const cell = excel.getCell(index + 4);
+      cell.value = mapped.text || null;
+      cell.font = { name: 'Arial', bold: true, size: 10, color: { argb: toArgb(mapped.fg) } };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: toArgb(mapped.bg) } };
       cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      cell.border = {
-        top: { style: 'thin', color: { argb: 'FF000000' } },
-        left: { style: 'thin', color: { argb: 'FF000000' } },
-        bottom: { style: 'thin', color: { argb: 'FF000000' } },
-        right: { style: 'thin', color: { argb: 'FF000000' } },
-      };
+      cell.border = THIN_BORDER;
     });
-
-    excel.height = 16;
     excelRow += 1;
   }
 
-  writeExcelLegend(sheet, excelRow + 1, lastCol);
+  writeExcelLegend(sheet, excelRow, lastDayCol);
   return workbook;
 }
 
@@ -472,16 +487,23 @@ export async function downloadApaoRevezamentoPdf(grid: ScheduleGridData): Promis
   const margin = 6;
   let cursorY = margin;
 
+  const logo = await loadGolWordmark();
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(...GOL_ORANGE);
-  doc.text('GOL', margin, cursorY + 6);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.setTextColor(17, 24, 39);
-  doc.text('Escala de Revezamento', margin + 34, cursorY + 6);
-  cursorY += 12;
+  if (logo) {
+    doc.addImage(`data:image/png;base64,${logo}`, 'PNG', margin, cursorY, 28, 11);
+    doc.setFontSize(16);
+    doc.setTextColor(17, 24, 39);
+    doc.text('Escala de Revezamento', margin + 32, cursorY + 8);
+    cursorY += 14;
+  } else {
+    doc.setFontSize(18);
+    doc.setTextColor(...GOL_ORANGE);
+    doc.text('GOL', margin, cursorY + 6);
+    doc.setFontSize(16);
+    doc.setTextColor(17, 24, 39);
+    doc.text('Escala de Revezamento', margin + 34, cursorY + 6);
+    cursorY += 12;
+  }
 
   // Faixa do mês
   doc.setFillColor(...GOL_ORANGE);
@@ -566,7 +588,7 @@ export async function downloadApaoRevezamentoPdf(grid: ScheduleGridData): Promis
   const afterTable = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? cursorY;
   const legendBody = LEGEND_LEFT.map((left, index) => {
     const right = LEGEND_RIGHT[index];
-    const turno = TURNOS[index];
+    const turno = index === 0 ? undefined : TURNOS[index - 1];
     return [left[0], left[1], right?.[0] ?? '', right?.[1] ?? '', turno?.[0] ?? '', turno?.[1] ?? ''];
   });
   autoTable(doc, {
@@ -602,9 +624,14 @@ export async function downloadApaoRevezamentoPdf(grid: ScheduleGridData): Promis
     },
     didParseCell: (data) => {
       if (data.section === 'head') {
-        data.cell.styles.fillColor = GOL_ORANGE;
-        data.cell.styles.textColor = WHITE;
-        if (data.column.index >= 4) data.cell.styles.halign = 'center';
+        if (data.column.index >= 4) {
+          data.cell.styles.fillColor = GOL_ORANGE;
+          data.cell.styles.textColor = WHITE;
+          data.cell.styles.halign = 'center';
+        } else {
+          data.cell.styles.fillColor = LEGEND_PEACH;
+          data.cell.styles.textColor = LEGEND_BROWN;
+        }
         return;
       }
       if (data.column.index !== 0 && data.column.index !== 2) return;

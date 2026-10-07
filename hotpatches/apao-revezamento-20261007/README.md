@@ -15,3 +15,7 @@ O JS do admin fica em cache por 7 dias. `cache-bust.sh` publica nomes novos
 
 `apply-legend.sh` acrescenta o bloco LEGENDA AEROVIÁRIO e as cores da legenda
 (`main-APAOREV09.js`).
+
+`apply-espelho.sh` alinha o Excel ao arquivo da empresa: logo GOL
+(`logo-gol-wordmark.png`), NOME em A+B, CIF em C, dias a partir de D
+com largura 4, e a legenda no mesmo eixo (`main-APAOREV10.js`).
