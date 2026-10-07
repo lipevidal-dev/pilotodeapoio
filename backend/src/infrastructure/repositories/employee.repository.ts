@@ -58,6 +58,7 @@ export class EmployeeRepository {
     birthDate?: string | null;
     active?: boolean;
     seniorityNumber?: number | null;
+    cif?: string | null;
     noFlightDates?: string[];
     restrictedShiftIds?: string[];
     preferredShiftIds?: string[];
@@ -75,6 +76,7 @@ export class EmployeeRepository {
     const {
       birthDate,
       seniorityNumber,
+      cif,
       type,
       noFlightDates,
       restrictedShiftIds,
@@ -93,6 +95,7 @@ export class EmployeeRepository {
             ...rest,
             type,
             seniorityNumber: position,
+            cif: cif?.trim() ? cif.trim() : null,
             birthDate: birthDate ? toDbDate(birthDate) : null,
             isFcf: isFcf ?? false,
             fcfSchedule: isFcf ? (fcfSchedule ?? []) as unknown as Prisma.InputJsonValue : [],
@@ -125,6 +128,7 @@ export class EmployeeRepository {
       birthDate?: string | null;
       active?: boolean;
       seniorityNumber?: number | null;
+      cif?: string | null;
       noFlightDates?: string[];
       restrictedShiftIds?: string[];
       preferredShiftIds?: string[];
@@ -146,6 +150,7 @@ export class EmployeeRepository {
     const {
       birthDate,
       seniorityNumber,
+      cif,
       type,
       noFlightDates,
       restrictedShiftIds,
@@ -181,6 +186,9 @@ export class EmployeeRepository {
 
       const patch = { ...rest } as Parameters<typeof prisma.employee.update>[0]["data"];
       if (type !== undefined) patch.type = type;
+      if (cif !== undefined) {
+        patch.cif = cif?.trim() ? cif.trim() : null;
+      }
       if (birthDate !== undefined) {
         patch.birthDate = birthDate ? toDbDate(birthDate) : null;
       }

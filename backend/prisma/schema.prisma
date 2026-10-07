@@ -119,6 +119,8 @@ model Employee {
   type            EmployeeType
   roleId          String?      @map("role_id")
   seniorityNumber Int          @default(1) @map("seniority_number")
+  /** CIF operacional — usado no export Escala de Revezamento (APAOs). */
+  cif             String?      @map("cif")
   birthDate       DateTime?    @map("birth_date") @db.Date
   active          Boolean      @default(true)
   createdAt       DateTime     @default(now()) @map("created_at")

@@ -113,6 +113,8 @@ export const createEmployeeSchema = z
 
     seniorityNumber: z.number().int().positive().optional(),
 
+    cif: z.string().trim().max(32).optional().nullable(),
+
     active: z.boolean().optional().default(true),
 
     noFlightDates: isoDateArray,
@@ -174,6 +176,8 @@ export const updateEmployeeSchema = z
     birthDate: birthDateField,
 
     seniorityNumber: z.number().int().positive().optional().nullable(),
+
+    cif: z.string().trim().max(32).optional().nullable(),
 
     active: z.boolean().optional(),
 

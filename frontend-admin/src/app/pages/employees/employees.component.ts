@@ -149,6 +149,9 @@ export class EmployeesComponent implements OnInit {
 
   formSeniorityNumber: number | null = null;
 
+  /** CIF operacional (export Escala de Revezamento APAO). */
+  formCif = '';
+
   formActive = true;
 
   formNoFlightDates: Date[] = [];
@@ -161,6 +164,18 @@ export class EmployeesComponent implements OnInit {
   formIsFcf = false;
 
   formInInstruction = false;
+
+  formInstructionStartDate: Date | null = null;
+
+  formInstructionEndDate: Date | null = null;
+
+  formManualScheduleOnly = false;
+
+  formIsCmte = false;
+
+  formPortalLogin = '';
+
+  formPortalPassword = '';
 
   readonly weekdayOptions = [
     { label: 'Domingo', value: 0 },
@@ -423,6 +438,8 @@ export class EmployeesComponent implements OnInit {
 
     this.formSeniorityNumber = null;
 
+    this.formCif = '';
+
     this.formActive = true;
 
     this.formNoFlightDates = [];
@@ -434,6 +451,18 @@ export class EmployeesComponent implements OnInit {
     this.formIsFcf = false;
 
     this.formInInstruction = false;
+
+    this.formInstructionStartDate = null;
+
+    this.formInstructionEndDate = null;
+
+    this.formManualScheduleOnly = false;
+
+    this.formIsCmte = false;
+
+    this.formPortalLogin = '';
+
+    this.formPortalPassword = '';
 
     this.dialogVisible.set(true);
 
@@ -455,6 +484,8 @@ export class EmployeesComponent implements OnInit {
 
     this.formSeniorityNumber = emp.seniorityNumber ?? null;
 
+    this.formCif = emp.cif ?? '';
+
     this.formActive = emp.active;
 
     this.formNoFlightDates = [];
@@ -466,6 +497,22 @@ export class EmployeesComponent implements OnInit {
     this.formIsFcf = false;
 
     this.formInInstruction = false;
+
+    this.formInstructionStartDate = emp.instructionStartDate
+      ? new Date(`${emp.instructionStartDate}T12:00:00`)
+      : null;
+
+    this.formInstructionEndDate = emp.instructionEndDate
+      ? new Date(`${emp.instructionEndDate}T12:00:00`)
+      : null;
+
+    this.formManualScheduleOnly = emp.manualScheduleOnly ?? false;
+
+    this.formIsCmte = emp.isCmte ?? false;
+
+    this.formPortalLogin = emp.portalLogin ?? '';
+
+    this.formPortalPassword = '';
 
     this.dialogVisible.set(true);
 
@@ -711,6 +758,8 @@ export class EmployeesComponent implements OnInit {
 
         seniorityNumber: this.formSeniorityNumber ?? undefined,
 
+        cif: this.formCif.trim() || null,
+
         active: this.formActive,
 
         noFlightDates,
@@ -718,6 +767,22 @@ export class EmployeesComponent implements OnInit {
         isFcf,
 
         inInstruction,
+
+        instructionStartDate: this.formInstructionStartDate
+          ? dateToIso(this.formInstructionStartDate)
+          : null,
+
+        instructionEndDate: this.formInstructionEndDate
+          ? dateToIso(this.formInstructionEndDate)
+          : null,
+
+        portalLogin: this.formPortalLogin.trim() || null,
+
+        portalPassword: this.formPortalPassword || null,
+
+        isCmte: this.formIsCmte,
+
+        manualScheduleOnly: this.formManualScheduleOnly,
 
       };
 
@@ -747,6 +812,8 @@ export class EmployeesComponent implements OnInit {
 
         seniorityNumber: this.formSeniorityNumber,
 
+        cif: this.formCif.trim() || null,
+
         active: this.formActive,
 
         noFlightDates,
@@ -754,6 +821,22 @@ export class EmployeesComponent implements OnInit {
         isFcf,
 
         inInstruction,
+
+        instructionStartDate: this.formInstructionStartDate
+          ? dateToIso(this.formInstructionStartDate)
+          : null,
+
+        instructionEndDate: this.formInstructionEndDate
+          ? dateToIso(this.formInstructionEndDate)
+          : null,
+
+        portalLogin: this.formPortalLogin.trim() || null,
+
+        portalPassword: this.formPortalPassword || undefined,
+
+        isCmte: this.formIsCmte,
+
+        manualScheduleOnly: this.formManualScheduleOnly,
 
       })
 

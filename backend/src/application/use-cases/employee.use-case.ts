@@ -293,6 +293,8 @@ export class EmployeeUseCase {
 
       seniorityNumber?: number;
 
+      cif?: string | null;
+
       active?: boolean;
 
     } & RestrictionFields,
@@ -316,6 +318,8 @@ export class EmployeeUseCase {
       birthDate: data.birthDate ?? null,
 
       seniorityNumber: data.seniorityNumber,
+
+      cif: data.cif ?? null,
 
       active: data.active ?? true,
 
@@ -356,6 +360,8 @@ export class EmployeeUseCase {
       birthDate?: string | null;
 
       seniorityNumber?: number | null;
+
+      cif?: string | null;
 
       active?: boolean;
 
@@ -403,6 +409,8 @@ export class EmployeeUseCase {
     if (data.birthDate !== undefined) patch.birthDate = data.birthDate;
 
     if (data.seniorityNumber !== undefined) patch.seniorityNumber = data.seniorityNumber;
+
+    if (data.cif !== undefined) patch.cif = data.cif;
 
     if (data.noFlightDates !== undefined) patch.noFlightDates = data.noFlightDates;
 

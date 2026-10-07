@@ -751,17 +751,12 @@ function buildEmployeeRow(
 
 
   return {
-
     employeeId: employee.id,
-
     name: employee.name,
-
     type: employee.type,
-
+    cif: employee.cif ?? null,
     cells,
-
     summary,
-
   };
 
 }

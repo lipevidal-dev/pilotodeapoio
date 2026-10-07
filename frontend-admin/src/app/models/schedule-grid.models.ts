@@ -110,6 +110,8 @@ export interface EmployeeRowData {
   employeeId: string;
   name: string;
   type: EmployeeType;
+  /** CIF operacional (export Escala de Revezamento / APAOs). */
+  cif?: string | null;
   /** Células do mês corrente (índice = dia - 1). */
   cells: ScheduleCellData[];
   /**

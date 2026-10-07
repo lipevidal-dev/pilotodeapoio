@@ -27,6 +27,15 @@ export class ScheduleExportService {
     options?: { rootId?: string; scope?: SchedulePdfScope },
   ): Promise<boolean> {
     try {
+      // Exigência da empresa: EXPORTAR APAOS usa layout Escala de Revezamento.
+      if (options?.scope === 'apao') {
+        const { downloadApaoRevezamentoPdf } = await import(
+          '../utils/schedule-apao-revezamento-export.util'
+        );
+        await downloadApaoRevezamentoPdf(payload.grid);
+        return true;
+      }
+
       const { exportScheduleToPdfA4 } = await import('../utils/schedule-export-pdf.util');
       const scopeLabel = options?.scope ? schedulePdfScopeLabel(options.scope) : undefined;
       await exportScheduleToPdfA4({
@@ -49,6 +58,15 @@ export class ScheduleExportService {
   /** Gera uma planilha XLSX com a mesma grade e o mesmo escopo escolhidos no modal. */
   async exportExcel(payload: ScheduleExportPayload, scope?: SchedulePdfScope): Promise<boolean> {
     try {
+      // Exigência da empresa: EXPORTAR APAOS usa layout Escala de Revezamento.
+      if (scope === 'apao') {
+        const { downloadApaoRevezamentoExcel } = await import(
+          '../utils/schedule-apao-revezamento-export.util'
+        );
+        await downloadApaoRevezamentoExcel(payload.grid);
+        return true;
+      }
+
       const { downloadScheduleExcel } = await import('../utils/schedule-excel-download.util');
       const monthLabel = String(payload.month).padStart(2, '0');
       const title = `Escala ${monthLabel}/${payload.year} — ${schedulePdfScopeLabel(scope ?? 'all')}`;

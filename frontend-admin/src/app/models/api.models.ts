@@ -50,6 +50,8 @@ export interface Employee {
   cargoName: string;
   seniorityNumber?: number;
   seniorityLabel?: string;
+  /** Código CIF (export Escala de Revezamento APAO). */
+  cif?: string | null;
   active: boolean;
   birthDate?: string | null;
   noFlightDates?: string[];
@@ -88,6 +90,7 @@ export interface CreateEmployeePayload {
   roleId: string;
   birthDate?: string | null;
   seniorityNumber?: number;
+  cif?: string | null;
   active?: boolean;
   noFlightDates?: string[];
   restrictedShiftIds?: string[];
@@ -99,6 +102,8 @@ export interface CreateEmployeePayload {
   instructionEndDate?: string | null;
   portalLogin?: string | null;
   portalPassword?: string | null;
+  isCmte?: boolean;
+  manualScheduleOnly?: boolean;
 }
 
 export interface UpdateEmployeePayload {
@@ -106,6 +111,7 @@ export interface UpdateEmployeePayload {
   roleId?: string;
   birthDate?: string | null;
   seniorityNumber?: number | null;
+  cif?: string | null;
   active?: boolean;
   noFlightDates?: string[];
   restrictedShiftIds?: string[];
@@ -117,6 +123,8 @@ export interface UpdateEmployeePayload {
   instructionEndDate?: string | null;
   portalLogin?: string | null;
   portalPassword?: string | null;
+  isCmte?: boolean;
+  manualScheduleOnly?: boolean;
 }
 
 export interface JobRole {

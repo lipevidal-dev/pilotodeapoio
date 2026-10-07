@@ -232,6 +232,60 @@
 
     <div>
 
+      <label class="field-label">CIF</label>
+
+      <input
+        pInputText
+        class="w-full"
+        [(ngModel)]="formCif"
+        maxlength="32"
+        placeholder="Ex.: 44511 (export APAO)"
+      />
+
+      <small class="field-hint">Usado na Escala de Revezamento ao exportar APAOs.</small>
+
+    </div>
+
+    <div>
+
+      <label class="field-label">Login do portal</label>
+
+      <input pInputText class="w-full" [(ngModel)]="formPortalLogin" maxlength="20" />
+
+    </div>
+
+    <div>
+
+      <label class="field-label">Senha do portal</label>
+
+      <input
+        pInputText
+        type="password"
+        class="w-full"
+        [(ngModel)]="formPortalPassword"
+        placeholder="Preencher só para definir/alterar"
+      />
+
+    </div>
+
+    <div class="form-check-row">
+
+      <p-checkbox [(ngModel)]="formIsCmte" [binary]="true" inputId="formIsCmte" />
+
+      <label for="formIsCmte">Comandante (CMTE)</label>
+
+    </div>
+
+    <div class="form-check-row">
+
+      <p-checkbox [(ngModel)]="formManualScheduleOnly" [binary]="true" inputId="formManualScheduleOnly" />
+
+      <label for="formManualScheduleOnly">Somente escala manual</label>
+
+    </div>
+
+    <div>
+
       <label class="field-label">Cargo</label>
 
       <p-select
