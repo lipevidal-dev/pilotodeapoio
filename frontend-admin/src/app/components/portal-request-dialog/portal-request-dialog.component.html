@@ -1,0 +1,76 @@
+<p-dialog
+  [header]="dialogTitle()"
+  [visible]="visible()"
+  (visibleChange)="visibleChange.emit($event)"
+  [modal]="true"
+  [style]="dialogStyle()"
+  [position]="mobile() ? 'bottom' : 'center'"
+  [draggable]="false"
+  [styleClass]="mobile() ? 'portal-request-dialog portal-request-dialog--mobile' : 'portal-request-dialog'"
+  (onHide)="onHide()"
+>
+  @if (context(); as ctx) {
+    <p class="dialog-date">{{ dateLabel() }}</p>
+
+    @if (ctx.pendingRequest; as pending) {
+      <div class="pending-box">
+        <p class="pending-title"><i class="pi pi-exclamation-circle"></i> Solicitação pendente</p>
+        <p class="pending-type">{{ pending.label }}</p>
+        <p class="dialog-hint">
+          Esta solicitação ainda aguarda aprovação do administrador. Você pode excluí-la se tiver sido um engano.
+        </p>
+      </div>
+    } @else {
+      <p class="dialog-hint">
+        Escolha o tipo de solicitação. O admin verá na escala com destaque até aprovar.
+      </p>
+      <div class="option-grid">
+        @for (option of requestOptions(); track option.type) {
+          <button
+            type="button"
+            class="option-btn"
+            [class.option-btn--active]="selectedType() === option.type"
+            (click)="pick(option.type)"
+          >
+            <i [class]="option.icon"></i>
+            <span>{{ option.label }}</span>
+          </button>
+        }
+      </div>
+      <label class="notes-label" for="portalReqNotes">Observações (opcional)</label>
+      <textarea
+        pTextarea
+        id="portalReqNotes"
+        rows="2"
+        class="w-full"
+        placeholder="Detalhes para o administrador"
+        [ngModel]="notes()"
+        (ngModelChange)="notes.set($event)"
+      ></textarea>
+      @if (faHint(); as hint) {
+        <p class="dialog-hint fa-hint">{{ hint }}</p>
+      }
+    }
+  }
+
+  <ng-template pTemplate="footer">
+    <p-button label="Fechar" severity="secondary" [text]="true" (onClick)="onHide()" />
+    @if (isCancelMode()) {
+      <p-button
+        label="Excluir solicitação"
+        icon="pi pi-trash"
+        severity="danger"
+        [loading]="submitting()"
+        (onClick)="cancelPending()"
+      />
+    } @else {
+      <p-button
+        label="Enviar solicitação"
+        icon="pi pi-check"
+        [disabled]="!canConfirm()"
+        [loading]="submitting()"
+        (onClick)="confirm()"
+      />
+    }
+  </ng-template>
+</p-dialog>

@@ -1,0 +1,125 @@
+.dialog-date {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.dialog-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+  color: #4b5563;
+  line-height: 1.35;
+}
+
+.pending-box {
+  margin: 0 0 0.35rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  background: #fffbeb;
+}
+
+.pending-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #b45309;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.pending-type {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.option-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+  margin-bottom: 0.85rem;
+}
+
+.option-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.option-btn:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.option-btn:hover {
+  border-color: var(--gol-orange);
+  background: #fff7ed;
+}
+
+.option-btn--active {
+  border-color: var(--gol-orange);
+  background: #ffedd5;
+  font-weight: 600;
+}
+
+.notes-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.fa-hint {
+  color: var(--p-orange-600, #c2410c);
+  margin-top: 0.75rem;
+}
+
+:host ::ng-deep .portal-request-dialog--mobile.p-dialog {
+  margin: 0 0.75rem 0.75rem;
+  max-height: calc(100dvh - 5rem);
+}
+
+:host ::ng-deep .portal-request-dialog--mobile .p-dialog-content {
+  max-height: calc(100dvh - 12rem);
+  overflow: auto;
+}
+
+:host ::ng-deep .portal-request-dialog--mobile .p-dialog-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: stretch;
+  padding: 0.65rem 1rem calc(0.85rem + env(safe-area-inset-bottom, 0px));
+  position: relative;
+  z-index: 2;
+}
+
+:host ::ng-deep .portal-request-dialog--mobile .p-dialog-footer .p-button {
+  min-height: 2.65rem;
+  flex: 1 1 calc(50% - 0.25rem);
+}
+
+:host ::ng-deep .portal-request-dialog--mobile .p-dialog-footer .p-button-danger {
+  order: 2;
+}
+
+@media (max-width: 767px) {
+  .option-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .option-btn {
+    font-size: 0.85rem;
+    padding: 0.7rem 0.75rem;
+  }
+}
