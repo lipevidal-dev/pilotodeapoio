@@ -24,6 +24,11 @@ import { preAllocationUseCase } from "./pre-allocation.use-case.js";
 import { vacationUseCase } from "./vacation.use-case.js";
 import { VacationRepository } from "../../infrastructure/repositories/vacation.repository.js";
 import { MAX_REQUESTED_OFF_PER_MONTH } from "../../domain/rules/constants.js";
+import { emailService } from "../../infrastructure/email/email.service.js";
+import {
+  buildPortalRequestAdminMail,
+  collectAdminEmails,
+} from "./portal-request-notify.js";
 
 const requestedDayOffRepo = new RequestedDayOffRepository();
 const flightAssignmentRepo = new FlightAssignmentRepository();
@@ -75,7 +80,6 @@ export type PortalRequestType =
 
 const PAO_PORTAL_REQUEST_TYPES = new Set<PortalRequestType>([
   "FP",
-  "VOO",
   "OUTRO",
   "FERIAS",
 ]);
@@ -385,7 +389,7 @@ export class PortalRequestUseCase {
     }
 
     if (input.type === "FERIAS") {
-      return this.createPendingVacation({
+      const created = await this.createPendingVacation({
         employeeId,
         startDate: input.date,
         endDate: input.endDate ?? input.date,
@@ -393,6 +397,14 @@ export class PortalRequestUseCase {
         thirteenthAdvanceRequested: input.thirteenthAdvanceRequested,
         sellTenDaysRequested: input.sellTenDaysRequested,
       });
+      await this.notifyAdminsOfPortalRequest({
+        employeeId,
+        type: "FERIAS",
+        date: input.date,
+        endDate: input.endDate ?? input.date,
+        notes: input.notes,
+      });
+      return created;
     }
 
     if (input.type === "VOO") {
@@ -404,7 +416,7 @@ export class PortalRequestUseCase {
       });
     }
 
-    return this.createPendingPreAllocation({
+    const created = await this.createPendingPreAllocation({
       year: input.year,
       month: input.month,
       employeeId,
@@ -412,6 +424,50 @@ export class PortalRequestUseCase {
       type: input.type,
       notes: input.notes,
     });
+    if (input.type === "OUTRO") {
+      await this.notifyAdminsOfPortalRequest({
+        employeeId,
+        type: "OUTRO",
+        date: input.date,
+        notes: input.notes,
+      });
+    }
+    return created;
+  }
+
+  private async notifyAdminsOfPortalRequest(input: {
+    employeeId: string;
+    type: "FERIAS" | "OUTRO";
+    date: string;
+    endDate?: string;
+    notes?: string;
+  }): Promise<void> {
+    try {
+      const [employee, admins] = await Promise.all([
+        prisma.employee.findUnique({
+          where: { id: input.employeeId },
+          select: { name: true },
+        }),
+        prisma.user.findMany({
+          where: { role: "ADMIN" },
+          select: { email: true, notificationEmail: true },
+        }),
+      ]);
+      const mail = buildPortalRequestAdminMail({
+        employeeName: employee?.name?.trim() || "Funcionário",
+        type: input.type,
+        date: input.date,
+        endDate: input.endDate,
+        notes: input.notes,
+      });
+      await emailService.send({
+        to: collectAdminEmails(admins),
+        subject: mail.subject,
+        text: mail.text,
+      });
+    } catch (err) {
+      console.error("[email] falha ao avisar admin da solicitação do portal:", err);
+    }
   }
 
   async approveRequest(input: {
