@@ -97,7 +97,7 @@ export function getTurnSpacingDays(ws: CleanWorkspace, shiftCode: string): numbe
 }
 
 export function getTurnAgrupamentoDays(ws: CleanWorkspace, shiftCode: string): number {
-  if (!motorShiftRuleEnabled(ws.options, "pao_espacamento_turnos", shiftCode)) return 1;
+  if (!motorShiftRuleEnabled(ws.options, "pao_agrupamento_turnos", shiftCode)) return 1;
   return motorShiftAgrupamento(ws.options, shiftCode, 1);
 }
 

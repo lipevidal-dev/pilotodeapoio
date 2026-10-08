@@ -33,7 +33,7 @@ export const PAO_SHIFT_PARAM_DEFS: Record<
       code === "T8"
         ? "Padrão fixo T8/T8/ND — um bloco antes do espaçamento entre blocos."
         : `Turnos ${code} alocados em sequência antes do espaçamento entre grupos.`,
-    ruleId: "pao_espacamento_turnos",
+    ruleId: "pao_agrupamento_turnos",
     defaultValue: 1,
     min: 1,
     max: 6,
@@ -104,6 +104,7 @@ export const PAO_SHIFT_PARAM_KINDS = Object.keys(PAO_SHIFT_PARAM_DEFS) as PaoShi
 /** Regras PAO configuráveis por turno (toggle na UI de cada turno). */
 export const PAO_SHIFT_RULE_IDS = [
   "pao_meta_turnos",
+  "pao_agrupamento_turnos",
   "pao_espacamento_turnos",
   "pao_meta_dias_trabalhados",
   "pao_10_folgas",

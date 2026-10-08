@@ -36,6 +36,7 @@ describe("next-motor-rules-catalog", () => {
     const view = buildNextMotorRulesView(mergeNextMotorEnabled({}));
     expect(view.some((r) => r.id === "pao_meta_turnos")).toBe(true);
     expect(view.some((r) => r.id === "pao_meta_dias_trabalhados")).toBe(true);
+    expect(view.some((r) => r.id === "pao_agrupamento_turnos" && r.enabled && !r.locked)).toBe(true);
     expect(view.some((r) => r.id === "pao_espacamento_turnos")).toBe(true);
     expect(view.some((r) => r.id === "coverage_t9")).toBe(true);
     expect(view.some((r) => r.id === "parallel_t9")).toBe(false);
@@ -84,6 +85,29 @@ describe("next-motor-rules-catalog", () => {
       ["T8"],
     );
     expect(sanitized[paoShiftParamId("agrupamento_turnos", "T8")]).toBe(1);
+  });
+
+  it("separa agrupamento do espaçamento e herda o checkbox antigo", () => {
+    const herdado = mergeNextMotorEnabled({
+      pao_espacamento_turnos: false,
+      pao_shift_rule__pao_espacamento_turnos__T6: false,
+      pao_shift_rule__pao_espacamento_turnos__T7: true,
+    });
+    expect(herdado.pao_agrupamento_turnos).toBe(false);
+    expect(herdado.pao_shift_rule__pao_agrupamento_turnos__T6).toBe(false);
+    expect(herdado.pao_shift_rule__pao_agrupamento_turnos__T7).toBe(true);
+
+    const explicito = mergeNextMotorEnabled({
+      pao_espacamento_turnos: false,
+      pao_agrupamento_turnos: true,
+      pao_shift_rule__pao_espacamento_turnos__T6: false,
+      pao_shift_rule__pao_agrupamento_turnos__T6: true,
+    });
+    expect(explicito.pao_agrupamento_turnos).toBe(true);
+    expect(explicito.pao_shift_rule__pao_agrupamento_turnos__T6).toBe(true);
+    expect(sanitizeNextMotorPatch({ pao_agrupamento_turnos: false })).toEqual({
+      pao_agrupamento_turnos: false,
+    });
   });
 
   it("parseNextMotorStored preserva allowedShiftCodes até sanitizar com turnos ativos", () => {

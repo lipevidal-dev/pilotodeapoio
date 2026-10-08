@@ -200,6 +200,7 @@ export function generateCleanSchedule(
     if (
       ruleEnabled(options, "preferred_shifts") ||
       ruleEnabled(options, "pao_meta_turnos") ||
+      ruleEnabled(options, "pao_agrupamento_turnos") ||
       ruleEnabled(options, "pao_espacamento_turnos")
     ) {
       fillPreferredShifts(ws);

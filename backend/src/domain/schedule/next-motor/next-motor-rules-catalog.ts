@@ -141,6 +141,15 @@ export const NEXT_MOTOR_RULES_CATALOG: readonly NextMotorRuleDefinition[] = [
     locked: false,
   },
   {
+    id: "pao_agrupamento_turnos",
+    label: "PAO — agrupamento de turnos",
+    description:
+      "Aloca o turno em sequência do tamanho configurado. T8 permanece no bloco T8/T8/ND.",
+    category: "pao",
+    defaultEnabled: true,
+    locked: false,
+  },
+  {
     id: "pao_espacamento_turnos",
     label: "PAO — espaçamento entre turnos",
     description:
@@ -226,7 +235,29 @@ export function mergeNextMotorEnabled(
       merged[id] = enabled;
     }
   }
+  inheritAgrupamentoFromSpacing(stored, merged);
   return merged;
+}
+
+/** Config antiga ligava os dois números no mesmo checkbox. Sem chave própria, herda o espaçamento. */
+function inheritAgrupamentoFromSpacing(
+  stored: Record<string, boolean>,
+  merged: Record<string, boolean>,
+): void {
+  if (
+    typeof stored.pao_agrupamento_turnos !== "boolean" &&
+    typeof stored.pao_espacamento_turnos === "boolean"
+  ) {
+    merged.pao_agrupamento_turnos = stored.pao_espacamento_turnos;
+  }
+  const spacingPrefix = "pao_shift_rule__pao_espacamento_turnos__";
+  const agrupPrefix = "pao_shift_rule__pao_agrupamento_turnos__";
+  for (const [id, enabled] of Object.entries(stored)) {
+    if (!id.startsWith(spacingPrefix) || typeof enabled !== "boolean") continue;
+    const shiftCode = id.slice(spacingPrefix.length);
+    const agrupId = `${agrupPrefix}${shiftCode}`;
+    if (typeof stored[agrupId] !== "boolean") merged[agrupId] = enabled;
+  }
 }
 
 export function sanitizeNextMotorPatch(
