@@ -190,11 +190,16 @@ export class PortalScheduleComponent implements OnInit {
     }
     grid = this.applySwapSourceHighlight(grid);
     if (!this.showCmte()) {
+      const ownId = this.employeeId();
       grid = {
         ...grid,
-        groups: grid.groups.map((group) =>
-          group.type === 'CMTE' ? { ...group, rows: [] } : group,
-        ),
+        groups: grid.groups.map((group) => {
+          if (group.type !== 'CMTE') return group;
+          return {
+            ...group,
+            rows: ownId ? group.rows.filter((row) => row.employeeId === ownId) : [],
+          };
+        }),
       };
     }
     return grid;
