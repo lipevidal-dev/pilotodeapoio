@@ -3,6 +3,7 @@
 # Férias e Outro passam a avisar os admins por e-mail.
 # Renomeia o chunk do portal e o main para furar o cache de 7 dias.
 set -eu
+echo "portal-pedido: iniciando"
 
 patch_admin() {
   python3 - "$1" << 'PY'
@@ -48,10 +49,10 @@ rm -rf "$WORKDIR"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
-curl -fsSL "$BASE/patch_backend.py?v=3" -o patch_backend.py
-curl -fsSL "$BASE/portal-request-notify.js?v=3" -o portal-request-notify.js
+curl -fsSL "$BASE/patch_backend.py?v=4" -o patch_backend.py
+curl -fsSL "$BASE/portal-request-notify.js?v=4" -o portal-request-notify.js
 grep -q "collectAdminEmails" portal-request-notify.js
-grep -q "OLD_FERIAS" patch_backend.py
+grep -q "remove_voo_from_pao_set" patch_backend.py
 
 docker cp "$ADMIN:/usr/share/nginx/html/index.html" index.html
 MAIN=$(grep -o 'main-APAOREV1[12]\.js' index.html | head -n 1)

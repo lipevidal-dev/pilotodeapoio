@@ -5,7 +5,7 @@ O menu do dia no portal deixa de oferecer Voo e Reunião de assuntos. Férias e 
 No servidor, como root:
 
 ```sh
-curl -fsSL "https://raw.githubusercontent.com/lipevidal-dev/pilotodeapoio/cursor/portal-pedido-tres-opcoes-e58d/hotpatches/portal-pedido-20261008/apply-portal-pedido.sh?v=3" | sh
+curl -fsSL "https://raw.githubusercontent.com/lipevidal-dev/pilotodeapoio/cursor/portal-pedido-tres-opcoes-e58d/hotpatches/portal-pedido-20261008/apply-portal-pedido.sh?v=4" | sh
 ```
 
 Linha de sucesso: `portal-pedido ok: menu com folga, ferias e outro`.
