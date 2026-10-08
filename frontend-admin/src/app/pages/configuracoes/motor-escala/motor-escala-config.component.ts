@@ -75,6 +75,7 @@ import {
 /** Regras PAO exibidas na matriz por turno — não repetir no bloco global. */
 const PAO_RULES_IN_SHIFT_CARDS = new Set([
   'pao_meta_turnos',
+  'pao_agrupamento_turnos',
   'pao_espacamento_turnos',
   'pao_meta_dias_trabalhados',
   'pao_10_folgas',
@@ -85,6 +86,7 @@ const PAO_RULES_IN_SHIFT_CARDS = new Set([
 /** Linhas de toggle na matriz PAO (colunas = turnos). */
 const PAO_SHIFT_RULE_MATRIX: Array<{ id: string; label: string; shiftCodes?: RateioShiftCode[] }> = [
   { id: 'pao_meta_turnos', label: 'Meta de turnos' },
+  { id: 'pao_agrupamento_turnos', label: 'Agrupamento de turnos', shiftCodes: ['T6', 'T7', 'T9'] },
   { id: 'pao_espacamento_turnos', label: 'Espaçamento entre turnos' },
   { id: 'pao_meta_dias_trabalhados', label: 'Meta de dias trabalhados' },
   { id: 'pao_10_folgas', label: '10 folgas' },
@@ -1017,7 +1019,7 @@ export class MotorEscalaConfigComponent implements OnInit {
     const id = paoShiftParamId(kind, shiftCode);
     const code = shiftCode.toUpperCase();
     const defaults: Record<PaoShiftParamKind, { label: string; ruleId: string; min: number; max: number }> = {
-      agrupamento_turnos: { label: 'Agrupamento de turnos', ruleId: 'pao_espacamento_turnos', min: 1, max: 6 },
+      agrupamento_turnos: { label: 'Agrupamento de turnos', ruleId: 'pao_agrupamento_turnos', min: 1, max: 6 },
       meta_turnos: { label: 'Meta de turnos', ruleId: 'pao_meta_turnos', min: 0, max: 31 },
       espacamento: { label: 'Espaçamento entre turnos', ruleId: 'pao_espacamento_turnos', min: 0, max: 15 },
       meta_dias_trabalhados: { label: 'Meta de dias trabalhados', ruleId: 'pao_meta_dias_trabalhados', min: 0, max: 31 },
