@@ -1270,6 +1270,7 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
   const allEmployees = [...employeeById.values()].sort(compareEmployeesBySeniority);
 
   const paoRows: EmployeeRowData[] = [];
+  const cmteRows: EmployeeRowData[] = [];
   const apaoRows: EmployeeRowData[] = [];
 
   for (const emp of allEmployees) {
@@ -1296,20 +1297,27 @@ export function buildScheduleGrid(input: BuildGridInput): ScheduleGridData {
       row.leadCells = prevRow.cells.slice(leadStartDay - 1);
     }
 
-    if (emp.type === 'PAO') {
+    if (emp.isCmte || emp.isFcf) {
+      cmteRows.push(row);
+    } else if (emp.type === 'PAO') {
       paoRows.push(row);
     } else {
       apaoRows.push(row);
     }
   }
 
-  applyShiftSwapsToRows([...paoRows, ...apaoRows], year, month, shiftSwaps);
-  applyApprovedSwapMarksToRows([...paoRows, ...apaoRows], year, month, shiftSwaps);
+  const allRows = [...paoRows, ...cmteRows, ...apaoRows];
+  applyShiftSwapsToRows(allRows, year, month, shiftSwaps);
+  applyApprovedSwapMarksToRows(allRows, year, month, shiftSwaps);
 
   const groups: ScheduleGridGroup[] = [];
 
   if (paoRows.length) {
     groups.push({ type: 'PAO', label: 'PAO', rows: paoRows });
+  }
+
+  if (cmteRows.length) {
+    groups.push({ type: 'CMTE', label: 'CMTE / FCF', rows: cmteRows });
   }
 
   if (apaoRows.length) {

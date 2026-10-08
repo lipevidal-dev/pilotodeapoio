@@ -84,6 +84,43 @@ describe('schedule-cell.mapper — cores por turno', () => {
     expect(grid.groups[0].rows[0].summary.nd).toBe(1);
   });
 
+  it('coloca CMTE e cargo FCF na divisão CMTE / FCF', () => {
+    const base = {
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+      type: 'PAO' as const,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 10,
+      employees: [
+        { ...base, id: 'cmte-1', name: 'Dreher', isCmte: true, isFcf: true },
+        { ...base, id: 'fcf-1', name: 'Luccas Flavio', isFcf: true },
+        { ...base, id: 'fcf-2', name: 'Rafael Gossler', isFcf: true },
+        { ...base, id: 'pao-1', name: 'Pao Normal' },
+        { ...base, id: 'apao-1', name: 'Apao Normal', type: 'APAO' },
+      ],
+      assignments: [],
+      preAllocations: [],
+      operationalCadastros: [],
+    });
+
+    const cmte = grid.groups.find((g) => g.type === 'CMTE');
+    const pao = grid.groups.find((g) => g.type === 'PAO');
+    const apao = grid.groups.find((g) => g.type === 'APAO');
+    expect(cmte?.label).toBe('CMTE / FCF');
+    expect(cmte?.rows.map((r) => r.name).sort()).toEqual([
+      'Dreher',
+      'Luccas Flavio',
+      'Rafael Gossler',
+    ]);
+    expect(pao?.rows.map((r) => r.name)).toEqual(['Pao Normal']);
+    expect(apao?.rows.map((r) => r.name)).toEqual(['Apao Normal']);
+    expect(grid.groups.map((g) => g.type)).toEqual(['PAO', 'CMTE', 'APAO']);
+  });
+
   it('VOO gerado em preAllocations aparece na escala visual', () => {
     const emp: Employee = {
       id: 'pao-1',
