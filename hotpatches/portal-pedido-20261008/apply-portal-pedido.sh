@@ -48,8 +48,8 @@ rm -rf "$WORKDIR"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
-curl -fsSL "$BASE/patch_backend.py?v=1" -o patch_backend.py
-curl -fsSL "$BASE/portal-request-notify.js?v=1" -o portal-request-notify.js
+curl -fsSL "$BASE/patch_backend.py?v=3" -o patch_backend.py
+curl -fsSL "$BASE/portal-request-notify.js?v=3" -o portal-request-notify.js
 grep -q "collectAdminEmails" portal-request-notify.js
 grep -q "OLD_FERIAS" patch_backend.py
 
