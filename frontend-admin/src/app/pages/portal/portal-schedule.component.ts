@@ -825,7 +825,7 @@ export class PortalScheduleComponent implements OnInit {
         if (cell?.kind && cell.kind !== 'empty') {
           return cell.kind.replace(/-/g, ' ').toUpperCase();
         }
-        return '—';
+        return '';
       })
       .join('+');
   }

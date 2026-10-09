@@ -910,12 +910,17 @@ function applyShiftSwapsToRows(
     return parts[Math.min(index, parts.length - 1)] ?? '';
   };
 
+  const isBlankSwapDisplay = (value: string): boolean => {
+    const p = value.trim().toLowerCase();
+    return !p || p === 'em branco' || p === '-' || p === '—' || p === '–' || p === '−';
+  };
+
   const preferCode = (cellDisplay: string | undefined, stored: string): string => {
     const disp = (cellDisplay ?? '').trim();
-    if (disp && disp.toLowerCase() !== 'em branco') return disp;
+    if (!isBlankSwapDisplay(disp)) return disp;
     const s = (stored ?? '').trim();
-    if (s && s.toLowerCase() !== 'em branco') return s;
-    return disp || s || '';
+    if (!isBlankSwapDisplay(s)) return s;
+    return '';
   };
 
   for (const swap of shiftSwaps) {

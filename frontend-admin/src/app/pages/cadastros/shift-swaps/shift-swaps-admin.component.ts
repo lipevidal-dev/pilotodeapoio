@@ -32,15 +32,16 @@ export class ShiftSwapsAdminComponent implements OnInit {
 
   cellLabel(code: string | null | undefined): string {
     const raw = (code ?? '').trim();
-    if (!raw) return '—';
+    if (!raw || this.isBlankSwapPart(raw)) return '—';
     return raw
       .split('+')
-      .map((part) => {
-        const p = part.trim();
-        if (!p || p.toLowerCase() === 'em branco') return '—';
-        return p;
-      })
+      .map((part) => (this.isBlankSwapPart(part) ? '—' : part.trim()))
       .join('+');
+  }
+
+  private isBlankSwapPart(part: string): boolean {
+    const p = part.trim().toLowerCase();
+    return !p || p === 'em branco' || p === '-' || p === '—' || p === '–' || p === '−';
   }
 
   dateRangeLabel(row: ShiftSwapRequest): string {
