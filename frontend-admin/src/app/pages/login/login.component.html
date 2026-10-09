@@ -18,7 +18,7 @@
         <p-message severity="error" [text]="msg" styleClass="login-error" />
       }
 
-      <form class="login-form" (ngSubmit)="submit()">
+      <form class="login-form" autocomplete="off" (ngSubmit)="submit()" (keydown.enter)="$event.preventDefault()">
         @if (!awaitingMfa()) {
           <div class="field">
             <label for="login">Login</label>
@@ -81,11 +81,12 @@
         }
 
         <p-button
-          type="submit"
+          type="button"
           [label]="awaitingMfa() ? 'Confirmar código' : 'Entrar'"
           styleClass="btn-gol-primary login-submit w-full"
           [loading]="loading()"
           [disabled]="showTransition()"
+          (onClick)="submit()"
         />
       </form>
     </p-card>

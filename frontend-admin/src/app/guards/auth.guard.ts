@@ -46,7 +46,7 @@ export const employeeGuard: CanActivateFn = () => {
     return router.createUrlTree(['/login']);
   }
   if (!isEmployeeRole(user.role)) {
-    return router.createUrlTree(['/dashboard']);
+    return router.createUrlTree([isAdminRole(user.role) ? '/dashboard' : '/login']);
   }
   return true;
 };

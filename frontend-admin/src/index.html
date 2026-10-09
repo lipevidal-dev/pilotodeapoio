@@ -1,6 +1,126 @@
 <!doctype html>
 <html lang="pt-BR">
   <head>
+    <script id="block-admin-url">
+      (function () {
+        var stores = [];
+        try { stores.push(sessionStorage); } catch (e) {}
+        try { stores.push(localStorage); } catch (e) {}
+        stores.forEach(function (store) {
+          var token = null;
+          var raw = null;
+          try {
+            token = store.getItem('escala_auth_token');
+            raw = store.getItem('escala_auth_user');
+          } catch (e) {}
+          var id = '';
+          if (raw) {
+            try { id = String(JSON.parse(raw).id || ''); } catch (e) {}
+          }
+          if (token === 'open-access-token' || id === 'open-access') {
+            try {
+              store.removeItem('escala_auth_token');
+              store.removeItem('escala_auth_user');
+            } catch (e) {}
+          }
+        });
+        var path = location.pathname || '/';
+        if (path.length > 1 && path.charAt(path.length - 1) === '/') path = path.slice(0, -1);
+        if (path === '/login' || path === '/portal' || path.indexOf('/portal/') === 0) return;
+        var rawUser = null;
+        try {
+          rawUser = sessionStorage.getItem('escala_auth_user') || localStorage.getItem('escala_auth_user');
+        } catch (e) {}
+        var role = '';
+        if (rawUser) {
+          try { role = String(JSON.parse(rawUser).role || ''); } catch (e) {}
+        }
+        if (role === 'ADMIN') return;
+        location.replace(role === 'OPERATOR' || role === 'PILOT' ? '/portal/escala' : '/login');
+      })();
+    </script>
+    <script id="block-login-enter">
+      (function () {
+        var armedUntil = 0;
+        function arm() { armedUntil = Date.now() + 5000; }
+        function armed() { return Date.now() < armedUntil; }
+        function isLoginPost(url, method) {
+          var u = String(url || '');
+          var m = String(method || 'GET').toUpperCase();
+          return m === 'POST' && /\/auth\/(login|mfa\/login)(\/|$|\?)/.test(u);
+        }
+        function submitButton(node) {
+          if (!node || !node.closest) return null;
+          var btn = node.closest('button');
+          if (!btn || !btn.closest('form.login-form')) return null;
+          var type = (btn.getAttribute('type') || '').toLowerCase();
+          var cls = btn.classList;
+          if (type === 'submit' || (cls && cls.contains('login-submit'))) return btn;
+          return null;
+        }
+        document.addEventListener('pointerdown', function (e) {
+          var pt = e.pointerType;
+          if (pt !== 'mouse' && pt !== 'touch' && pt !== 'pen') return;
+          if (!submitButton(e.target)) return;
+          arm();
+        }, true);
+        document.addEventListener('keydown', function (e) {
+          if (e.key !== 'Enter' || e.repeat) return;
+          var t = e.target;
+          if (!t || !t.closest || !t.closest('form.login-form')) return;
+          if (submitButton(t)) { arm(); return; }
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }, true);
+        document.addEventListener('submit', function (e) {
+          var form = e.target;
+          if (!form || !form.classList || !form.classList.contains('login-form')) return;
+          if (armed()) return;
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }, true);
+        var origSubmit = HTMLFormElement.prototype.submit;
+        var origRequestSubmit = HTMLFormElement.prototype.requestSubmit;
+        HTMLFormElement.prototype.submit = function () {
+          if (this.classList && this.classList.contains('login-form') && !armed()) return;
+          return origSubmit.apply(this, arguments);
+        };
+        if (origRequestSubmit) {
+          HTMLFormElement.prototype.requestSubmit = function () {
+            if (this.classList && this.classList.contains('login-form') && !armed()) return;
+            return origRequestSubmit.apply(this, arguments);
+          };
+        }
+        var origOpen = XMLHttpRequest.prototype.open;
+        var origSend = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.open = function (method, url) {
+          this.__paoLoginUrl = url;
+          this.__paoLoginMethod = method;
+          return origOpen.apply(this, arguments);
+        };
+        XMLHttpRequest.prototype.send = function (body) {
+          if (isLoginPost(this.__paoLoginUrl, this.__paoLoginMethod) && !armed()) {
+            var xhr = this;
+            setTimeout(function () {
+              try { xhr.dispatchEvent(new ProgressEvent('error')); } catch (err) {}
+            }, 0);
+            return;
+          }
+          return origSend.call(this, body);
+        };
+        if (window.fetch) {
+          var origFetch = window.fetch;
+          window.fetch = function (input, init) {
+            var url = typeof input === 'string' ? input : (input && input.url) || '';
+            var method = (init && init.method) || (input && input.method) || 'GET';
+            if (isLoginPost(url, method) && !armed()) {
+              return Promise.reject(new TypeError('Failed to fetch'));
+            }
+            return origFetch.apply(this, arguments);
+          };
+        }
+      })();
+    </script>
     <meta charset="utf-8" />
     <title>Escala Piloto de Apoio v2 — Admin</title>
     <base href="/" />
