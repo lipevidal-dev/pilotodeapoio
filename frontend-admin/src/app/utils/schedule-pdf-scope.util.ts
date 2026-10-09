@@ -1,6 +1,6 @@
 import type { ScheduleGridData } from '../models/schedule-grid.models';
 
-export type SchedulePdfScope = 'all' | 'mine' | 'pao' | 'apao';
+export type SchedulePdfScope = 'all' | 'mine' | 'pao' | 'pao-cmte' | 'fcf' | 'apao';
 
 export const SCHEDULE_PDF_SCOPE_OPTIONS: Array<{
   value: SchedulePdfScope;
@@ -10,7 +10,7 @@ export const SCHEDULE_PDF_SCOPE_OPTIONS: Array<{
   {
     value: 'all',
     label: 'Exportar todo mundo',
-    description: 'Inclui PAOs e APAOs na escala.',
+    description: 'Inclui PAO, CMTE / FCF e APAO na escala.',
   },
   {
     value: 'mine',
@@ -21,6 +21,16 @@ export const SCHEDULE_PDF_SCOPE_OPTIONS: Array<{
     value: 'pao',
     label: 'Exportar PAOs',
     description: 'Somente o grupo PAO.',
+  },
+  {
+    value: 'pao-cmte',
+    label: 'Exportar PAO + CMTE/FCF',
+    description: 'Grupos PAO e CMTE / FCF, sem APAO.',
+  },
+  {
+    value: 'fcf',
+    label: 'Exportar escala FCF',
+    description: 'Somente colaboradores com cargo FCF.',
   },
   {
     value: 'apao',
@@ -35,6 +45,10 @@ export function schedulePdfScopeLabel(scope: SchedulePdfScope): string {
       return 'Meu usuário';
     case 'pao':
       return 'PAOs';
+    case 'pao-cmte':
+      return 'PAO + CMTE/FCF';
+    case 'fcf':
+      return 'FCF';
     case 'apao':
       return 'APAOs';
     default:
@@ -53,6 +67,26 @@ export function filterGridByPdfScope(
     return {
       ...grid,
       groups: grid.groups.filter((g) => g.type === 'PAO'),
+    };
+  }
+
+  if (scope === 'pao-cmte') {
+    return {
+      ...grid,
+      groups: grid.groups.filter((g) => g.type === 'PAO' || g.type === 'CMTE'),
+    };
+  }
+
+  if (scope === 'fcf') {
+    return {
+      ...grid,
+      groups: grid.groups
+        .map((g) => ({
+          ...g,
+          label: g.type === 'CMTE' ? 'FCF' : g.label,
+          rows: g.rows.filter((r) => r.isFcf),
+        }))
+        .filter((g) => g.rows.length > 0),
     };
   }
 

@@ -110,6 +110,10 @@ export interface EmployeeRowData {
   employeeId: string;
   name: string;
   type: EmployeeType;
+  /** Comandante — fica no grupo CMTE / FCF. */
+  isCmte?: boolean;
+  /** Cargo FCF — fica no grupo CMTE / FCF e tem exportação própria. */
+  isFcf?: boolean;
   /** CIF operacional (export Escala de Revezamento / APAOs). */
   cif?: string | null;
   /** Células do mês corrente (índice = dia - 1). */
