@@ -666,6 +666,63 @@ describe('operational-audit.util', () => {
     expect(totals.totalPaos).toBe(1);
   });
 
+  it('9a. turno manual de FCF no grupo CMTE fecha o furo daquele turno', () => {
+    const pao: Employee = {
+      id: 'p1',
+      name: 'PAO',
+      type: 'PAO',
+      roleId: 'r1',
+      cargoCode: 'PAO',
+      cargoName: 'PAO',
+      active: true,
+    };
+    const fcf: Employee = {
+      id: 'fcf-1',
+      name: 'Gabriel Castanho',
+      type: 'PAO',
+      roleId: 'r1',
+      cargoCode: 'PAO',
+      cargoName: 'PAO',
+      active: true,
+      isFcf: true,
+    };
+    const assignments = [
+      {
+        id: 't8-18',
+        scheduleMonthId: 'm',
+        employeeId: 'fcf-1',
+        date: '2026-07-18T00:00:00.000Z',
+        shiftCode: 'T8',
+        label: null,
+        source: 'MANUAL' as const,
+        employee: fcf,
+      },
+      {
+        id: 't8-19',
+        scheduleMonthId: 'm',
+        employeeId: 'fcf-1',
+        date: '2026-07-19T00:00:00.000Z',
+        shiftCode: 'T8',
+        label: null,
+        source: 'MANUAL' as const,
+        employee: fcf,
+      },
+    ];
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 7,
+      employees: [pao, fcf],
+      assignments,
+      preAllocations: [],
+    });
+    expect(grid.groups.find((g) => g.type === 'CMTE')?.rows.map((r) => r.employeeId)).toEqual(['fcf-1']);
+
+    const totals = computeGridAuditTotals(grid, assignments);
+    expect(totals.coverageGapDays[18]).toEqual(['T6', 'T7']);
+    expect(totals.coverageGapDays[19]).toEqual(['T6', 'T7']);
+    expect(totals.totalPaos).toBe(1);
+  });
+
   it('9b. computeCoverageGapsByDay lista dias sem T6/T7/T8', () => {
     const emp: Employee = {
       id: 'p1',

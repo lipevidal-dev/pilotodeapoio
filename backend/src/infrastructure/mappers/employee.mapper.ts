@@ -25,6 +25,7 @@ export function prismaEmployeeToDomain(row: PrismaEmployeeWithRole): DomainEmplo
     instructionEndDate: row.instructionEndDate
       ? isoDateKey(row.instructionEndDate)
       : null,
+    isFcf: row.isFcf ?? false,
   };
 }
 

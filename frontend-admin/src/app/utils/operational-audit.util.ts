@@ -517,6 +517,17 @@ export function computeCoveragePercents(
   };
 }
 
+/** PAO de rateio e CMTE/FCF: o turno já lançado conta como cobertura T6/T7/T8. */
+function coverageEmployeeIds(grid: ScheduleGridData): Set<string> {
+  const ids = new Set<string>();
+  for (const g of grid.groups) {
+    if (g.type === 'PAO' || g.type === 'CMTE') {
+      for (const row of g.rows) ids.add(row.employeeId);
+    }
+  }
+  return ids;
+}
+
 export function computeGridAuditTotals(
   grid: ScheduleGridData,
   assignments: ScheduleAssignmentRow[] = [],
@@ -550,12 +561,7 @@ export function computeGridAuditTotals(
     }
   }
 
-  const paoIds = new Set<string>();
-  for (const g of grid.groups) {
-    if (g.type === 'PAO') {
-      for (const row of g.rows) paoIds.add(row.employeeId);
-    }
-  }
+  const paoIds = coverageEmployeeIds(grid);
   const coverage = computeCoveragePercents(
     grid.year,
     grid.month,

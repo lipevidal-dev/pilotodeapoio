@@ -50,13 +50,15 @@ export function listPaoCoverageGaps(ctx: ScheduleContext): PaoCoverageGap[] {
 
   for (const day of iterDays(ctx.year, ctx.month)) {
     for (const shiftCode of PAO_COVERAGE_SHIFTS) {
-      const hasPao = ctx.assignments.some(
-        (a) =>
-          a.workDate === day &&
-          !isInstructionShiftCode(a.shiftCode) &&
-          baseShiftCode(a.shiftCode) === shiftCode &&
-          roleMap.get(a.employeeId) === "PAO",
-      );
+      const hasPao = ctx.assignments.some((a) => {
+        if (a.workDate !== day) return false;
+        if (isInstructionShiftCode(a.shiftCode)) return false;
+        if (baseShiftCode(a.shiftCode) !== shiftCode) return false;
+        const emp = ctx.employees.find((e) => e.id === a.employeeId);
+        if (emp?.isFcf) return true;
+        const role = (roleMap.get(a.employeeId) ?? "").toUpperCase();
+        return role === "PAO" || role === "PAO FCF";
+      });
       if (!hasPao) {
         gaps.push({ date: day, shiftCode });
       }
