@@ -23,6 +23,13 @@ describe('AuthService', () => {
     sessionStorage.clear();
   });
 
+  it('armazenamento vazio não cria administrador', () => {
+    expect(sessionStorage.getItem('escala_auth_token')).toBeNull();
+    expect(sessionStorage.getItem('escala_auth_user')).toBeNull();
+    expect(service.user()).toBeNull();
+    expect(service.isAuthenticated()).toBeFalse();
+  });
+
   it('login persiste token e usuário', () => {
     service.login('admin@escala.local', 'changeme').subscribe((res) => {
       expect('token' in res && res.token).toBeTruthy();

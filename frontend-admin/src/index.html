@@ -3,16 +3,37 @@
   <head>
     <script id="block-admin-url">
       (function () {
+        var stores = [];
+        try { stores.push(sessionStorage); } catch (e) {}
+        try { stores.push(localStorage); } catch (e) {}
+        stores.forEach(function (store) {
+          var token = null;
+          var raw = null;
+          try {
+            token = store.getItem('escala_auth_token');
+            raw = store.getItem('escala_auth_user');
+          } catch (e) {}
+          var id = '';
+          if (raw) {
+            try { id = String(JSON.parse(raw).id || ''); } catch (e) {}
+          }
+          if (token === 'open-access-token' || id === 'open-access') {
+            try {
+              store.removeItem('escala_auth_token');
+              store.removeItem('escala_auth_user');
+            } catch (e) {}
+          }
+        });
         var path = location.pathname || '/';
         if (path.length > 1 && path.charAt(path.length - 1) === '/') path = path.slice(0, -1);
         if (path === '/login' || path === '/portal' || path.indexOf('/portal/') === 0) return;
-        var raw = null;
+        var rawUser = null;
         try {
-          raw = sessionStorage.getItem('escala_auth_user') || localStorage.getItem('escala_auth_user');
+          rawUser = sessionStorage.getItem('escala_auth_user') || localStorage.getItem('escala_auth_user');
         } catch (e) {}
         var role = '';
-        if (raw) {
-          try { role = String(JSON.parse(raw).role || ''); } catch (e) {}
+        if (rawUser) {
+          try { role = String(JSON.parse(rawUser).role || ''); } catch (e) {}
         }
         if (role === 'ADMIN') return;
         location.replace(role === 'OPERATOR' || role === 'PILOT' ? '/portal/escala' : '/login');
