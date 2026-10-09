@@ -2,6 +2,12 @@ import type { EmployeeType, Prisma } from "@prisma/client";
 import { prisma } from "../../infrastructure/database/prisma-client.js";
 import { isoDateKey, toDbDate } from "../../domain/rules/date-keys.js";
 import {
+  canonicalSwapToken,
+  isBlankShiftDisplayToken,
+  shiftCodeForRecipient,
+  type SwapInstructionEmployee,
+} from "../../domain/schedule/shift-swap-day.js";
+import {
   ShiftSwapRepository,
   type ShiftSwapWithParties,
 } from "../../infrastructure/repositories/shift-swap.repository.js";
@@ -131,6 +137,7 @@ function splitClientTokens(joined: string | null | undefined, expected: number):
   return parts.slice(0, expected);
 }
 
+/** Só a escala realizada. Célula sem espelho executado é vazia — não herda a planejada. */
 async function tokenForEmployeeDay(
   tx: Tx | typeof prisma,
   scheduleMonthId: string,
@@ -138,47 +145,30 @@ async function tokenForEmployeeDay(
   iso: string,
 ): Promise<string> {
   const executed = await readExecutedDay(tx, scheduleMonthId, employeeId, iso);
-  const fromExecuted = displayTokenFromDay(executed.day);
-  if (fromExecuted) return fromExecuted;
-
-  // Fallback: escala planejada (caso o espelho executado ainda não tenha o dia).
-  const dbDate = toDbDate(iso);
-  const planned = await tx.scheduleAssignment.findUnique({
-    where: {
-      scheduleMonthId_employeeId_date: { scheduleMonthId, employeeId, date: dbDate },
-    },
-  });
-  if (planned) {
-    const shift = normalizeCode(planned.shiftCode);
-    if (shift) return shift;
-    if (planned.label) {
-      const fromLabel = shortFromLabel(planned.label);
-      if (fromLabel) return fromLabel;
-    }
-  }
-
-  const plannedPre = await tx.preAllocation.findUnique({
-    where: {
-      scheduleMonthId_employeeId_date: { scheduleMonthId, employeeId, date: dbDate },
-    },
-  });
-  if (plannedPre?.label) {
-    const fromPre = shortFromLabel(plannedPre.label);
-    if (fromPre) return fromPre;
-  }
-
-  return "";
+  return displayTokenFromDay(executed.day);
 }
 
 function isBlankDisplayToken(code: string | null | undefined): boolean {
-  const raw = (code ?? "").trim();
-  if (!raw) return true;
-  return raw
-    .split("+")
-    .every((part) => {
-      const p = part.trim().toLowerCase();
-      return !p || p === "em branco" || p === "-";
-    });
+  return isBlankShiftDisplayToken(code);
+}
+
+function storedSwapToken(dbToken: string, clientToken?: string | null): string {
+  return canonicalSwapToken(preferDisplayToken(dbToken, clientToken));
+}
+
+function retargetExecutedDay(
+  day: DaySnapshot,
+  recipient: SwapInstructionEmployee,
+  isoDate: string,
+): DaySnapshot {
+  const current = day.assignment?.shiftCode;
+  if (!current) return day;
+  const shiftCode = shiftCodeForRecipient(current, recipient, isoDate);
+  if (shiftCode === current.trim().toUpperCase()) return day;
+  return {
+    assignment: { shiftCode, label: day.assignment?.label ?? null },
+    preAllocation: day.preAllocation ? { ...day.preAllocation } : null,
+  };
 }
 
 async function readExecutedDay(
@@ -593,8 +583,8 @@ export class ShiftSwapUseCase {
         tokenForEmployeeDay(prisma, scheduleMonth.id, params.requesterEmployeeId, sourceDates[i]!),
         tokenForEmployeeDay(prisma, scheduleMonth.id, params.targetEmployeeId, targetDates[i]!),
       ]);
-      sourceTokens.push(preferDisplayToken(requesterTok, clientSource[i]));
-      targetTokens.push(preferDisplayToken(targetTok, clientTarget[i]));
+      sourceTokens.push(storedSwapToken(requesterTok, clientSource[i]));
+      targetTokens.push(storedSwapToken(targetTok, clientTarget[i]));
     }
 
     const requesterShiftCode = sourceTokens.join("+");
@@ -742,8 +732,8 @@ export class ShiftSwapUseCase {
         tokenForEmployeeDay(prisma, scheduleMonth.id, params.employeeId, sourceDates[i]!),
         tokenForEmployeeDay(prisma, scheduleMonth.id, params.employeeId, targetDates[i]!),
       ]);
-      sourceTokens.push(preferDisplayToken(s, clientSource[i]));
-      targetTokens.push(preferDisplayToken(t, clientTarget[i]));
+      sourceTokens.push(storedSwapToken(s, clientSource[i]));
+      targetTokens.push(storedSwapToken(t, clientTarget[i]));
     }
 
     const now = new Date();
@@ -899,6 +889,8 @@ export class ShiftSwapUseCase {
       targetDay: DaySnapshot;
       requesterDate: Date;
       targetDate: Date;
+      sourceIso: string;
+      targetIso: string;
     }> = [];
 
     for (const pair of datePairs) {
@@ -911,6 +903,8 @@ export class ShiftSwapUseCase {
         targetDay: targetPack.day,
         requesterDate: requesterPack.dbDate,
         targetDate: targetPack.dbDate,
+        sourceIso: pair.sourceIso,
+        targetIso: pair.targetIso,
       });
     }
 
@@ -925,14 +919,14 @@ export class ShiftSwapUseCase {
         row.scheduleMonthId,
         row.requesterEmployeeId,
         p.requesterDate,
-        p.targetDay,
+        retargetExecutedDay(p.targetDay, row.requester, p.sourceIso),
       );
       await writeExecutedDay(
         tx,
         row.scheduleMonthId,
         row.targetEmployeeId,
         p.targetDate,
-        p.requesterDay,
+        retargetExecutedDay(p.requesterDay, row.target, p.targetIso),
       );
     }
   }
@@ -944,8 +938,14 @@ export class ShiftSwapUseCase {
     }
 
     const employeeId = row.requesterEmployeeId;
-    const pairs: Array<{ source: DaySnapshot; target: DaySnapshot; sourceDate: Date; targetDate: Date }> =
-      [];
+    const pairs: Array<{
+      source: DaySnapshot;
+      target: DaySnapshot;
+      sourceDate: Date;
+      targetDate: Date;
+      sourceIso: string;
+      targetIso: string;
+    }> = [];
 
     for (const pair of datePairs) {
       const [sPack, tPack] = await Promise.all([
@@ -957,6 +957,8 @@ export class ShiftSwapUseCase {
         target: tPack.day,
         sourceDate: sPack.dbDate,
         targetDate: tPack.dbDate,
+        sourceIso: pair.sourceIso,
+        targetIso: pair.targetIso,
       });
     }
 
@@ -966,8 +968,20 @@ export class ShiftSwapUseCase {
     }
 
     for (const p of pairs) {
-      await writeExecutedDay(tx, row.scheduleMonthId, employeeId, p.sourceDate, p.target);
-      await writeExecutedDay(tx, row.scheduleMonthId, employeeId, p.targetDate, p.source);
+      await writeExecutedDay(
+        tx,
+        row.scheduleMonthId,
+        employeeId,
+        p.sourceDate,
+        retargetExecutedDay(p.target, row.requester, p.sourceIso),
+      );
+      await writeExecutedDay(
+        tx,
+        row.scheduleMonthId,
+        employeeId,
+        p.targetDate,
+        retargetExecutedDay(p.source, row.requester, p.targetIso),
+      );
     }
   }
 }
