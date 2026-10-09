@@ -1,6 +1,23 @@
 <!doctype html>
 <html lang="pt-BR">
   <head>
+    <script id="block-admin-url">
+      (function () {
+        var path = location.pathname || '/';
+        if (path.length > 1 && path.charAt(path.length - 1) === '/') path = path.slice(0, -1);
+        if (path === '/login' || path === '/portal' || path.indexOf('/portal/') === 0) return;
+        var raw = null;
+        try {
+          raw = sessionStorage.getItem('escala_auth_user') || localStorage.getItem('escala_auth_user');
+        } catch (e) {}
+        var role = '';
+        if (raw) {
+          try { role = String(JSON.parse(raw).role || ''); } catch (e) {}
+        }
+        if (role === 'ADMIN') return;
+        location.replace(role === 'OPERATOR' || role === 'PILOT' ? '/portal/escala' : '/login');
+      })();
+    </script>
     <meta charset="utf-8" />
     <title>Escala Piloto de Apoio v2 — Admin</title>
     <base href="/" />
