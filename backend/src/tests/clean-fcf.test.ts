@@ -128,6 +128,37 @@ describe("CleanEngine — FCF", () => {
     }
   });
 
+  it("turno manual de FCF cobre o dia e o motor não usa FCF para fechar outros furos", () => {
+    const fcf = emp(1, "Gabriel Castanho");
+    fcf.employee.isFcf = true;
+    const paos = [fcf, emp(2, "Bruno"), emp(3, "Carla"), emp(4, "Diego"), emp(5, "Edu")];
+    const input = baseInput(paos, {
+      lockedAllocations: [
+        { employeeUuid: "uuid-1", date: "2026-07-18", label: "T8" },
+        { employeeUuid: "uuid-1", date: "2026-07-19", label: "T8" },
+      ],
+    });
+
+    const result = generateCleanSchedule(input, { motorVersion: MOTOR_VERSION_NEXT });
+
+    for (const date of ["2026-07-18", "2026-07-19"]) {
+      const t8 = result.assignments.filter(
+        (a) => a.date === date && a.shiftCode.toUpperCase() === "T8",
+      );
+      expect(t8.map((a) => a.employeeUuid)).toEqual(["uuid-1"]);
+      expect(
+        result.violations.some(
+          (v) => v.type === "COVERAGE_GAP" && v.date === date && v.detail.includes("T8"),
+        ),
+      ).toBe(false);
+    }
+
+    const fcfShifts = result.assignments
+      .filter((a) => a.employeeUuid === "uuid-1")
+      .map((a) => `${a.date}|${a.shiftCode}`);
+    expect(fcfShifts).toEqual(["2026-07-18|T8", "2026-07-19|T8"]);
+  });
+
   it("FCF T9 quinzenal: aloca só nas quintas fora das férias", () => {
     const paos = [emp(1, "Rafael"), emp(2, "Bruno"), emp(3, "Carla"), emp(4, "Diego")];
     const firstHalfVacation = Array.from({ length: 15 }, (_, i) => {

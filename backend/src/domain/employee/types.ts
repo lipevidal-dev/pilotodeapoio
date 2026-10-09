@@ -21,4 +21,9 @@ export interface Employee {
   instructionStartDate?: string | null;
   /** yyyy-mm-dd — fim da janela de instrução (opcional). */
   instructionEndDate?: string | null;
+  /**
+   * FCF/CMTE: não entra no pool automático de cobertura.
+   * Turno já lançado (manual ou regra do dia da semana) continua contando como cobertura.
+   */
+  isFcf?: boolean;
 }

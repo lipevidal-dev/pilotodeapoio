@@ -102,7 +102,7 @@ export class CleanWorkspace {
     this.days = iterDays(input.year, input.month);
     this.motorRoleCodes = input.motorRoleCodes ?? DEFAULT_MOTOR_ROLE_CODES;
     const allPaos = input.employees.filter((e) =>
-      isMotorPaoRole(e.employee.role, this.motorRoleCodes),
+      isMotorPaoRole(e.employee.role, this.motorRoleCodes) && !e.employee.isFcf,
     );
     const scope = options.scopeEmployeeUuids;
     this.paoEmployees =
@@ -850,6 +850,14 @@ export class CleanWorkspace {
     return { assigned, reason: assigned ? undefined : "dia já ocupado" };
   }
 
+  /** PAO de rateio ou FCF/CMTE já alocado no turno (manual ou regra própria). */
+  private shiftCountsAsPaoCoverage(domainId: number): boolean {
+    const role = this.roleByDomain.get(domainId);
+    if (role && isMotorPaoRole(role, this.motorRoleCodes)) return true;
+    const emp = this.input.employees.find((e) => e.domainId === domainId);
+    return Boolean(emp?.employee.isFcf);
+  }
+
   hasPaoCoverage(date: string, shiftCode: string): boolean {
     const normalized = shiftCode.toUpperCase();
     for (const [key, code] of this.planned) {
@@ -857,8 +865,7 @@ export class CleanWorkspace {
       if (day !== date) continue;
       if (isInstructionShiftCode(code)) continue;
       if (baseShiftCode(code) !== normalized) continue;
-      const role = this.roleByDomain.get(Number(didStr));
-      if (role && isMotorPaoRole(role, this.motorRoleCodes)) return true;
+      if (this.shiftCountsAsPaoCoverage(Number(didStr))) return true;
     }
     return false;
   }
