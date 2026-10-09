@@ -754,6 +754,8 @@ function buildEmployeeRow(
     employeeId: employee.id,
     name: employee.name,
     type: employee.type,
+    isCmte: employee.isCmte ?? false,
+    isFcf: employee.isFcf ?? false,
     cif: employee.cif ?? null,
     cells,
     summary,

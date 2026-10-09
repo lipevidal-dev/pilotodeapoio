@@ -111,6 +111,10 @@ describe('schedule-cell.mapper — cores por turno', () => {
     const pao = grid.groups.find((g) => g.type === 'PAO');
     const apao = grid.groups.find((g) => g.type === 'APAO');
     expect(cmte?.label).toBe('CMTE / FCF');
+    expect(cmte?.rows.find((r) => r.name === 'Dreher')?.isFcf).toBeTrue();
+    expect(cmte?.rows.find((r) => r.name === 'Dreher')?.isCmte).toBeTrue();
+    expect(cmte?.rows.find((r) => r.name === 'Luccas Flavio')?.isFcf).toBeTrue();
+    expect(pao?.rows[0].isFcf).toBeFalse();
     expect(cmte?.rows.map((r) => r.name).sort()).toEqual([
       'Dreher',
       'Luccas Flavio',
