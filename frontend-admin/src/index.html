@@ -18,6 +18,28 @@
         location.replace(role === 'OPERATOR' || role === 'PILOT' ? '/portal/escala' : '/login');
       })();
     </script>
+    <script id="block-login-enter">
+      (function () {
+        document.addEventListener('click', function (e) {
+          var el = e.target;
+          if (!el || !el.closest) return;
+          var btn = el.closest('form.login-form button');
+          if (!btn) return;
+          var form = btn.closest('form');
+          if (form) form.setAttribute('data-allow-submit', '1');
+        }, true);
+        document.addEventListener('submit', function (e) {
+          var form = e.target;
+          if (!form || !form.classList || !form.classList.contains('login-form')) return;
+          if (form.getAttribute('data-allow-submit') === '1') {
+            form.removeAttribute('data-allow-submit');
+            return;
+          }
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }, true);
+      })();
+    </script>
     <meta charset="utf-8" />
     <title>Escala Piloto de Apoio v2 — Admin</title>
     <base href="/" />
