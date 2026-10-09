@@ -13,6 +13,7 @@ import {
 } from "../../infrastructure/repositories/shift-swap.repository.js";
 import { ScheduleRepository } from "../../infrastructure/repositories/schedule.repository.js";
 import { EmployeeNotLinkedError } from "./portal-request.use-case.js";
+import { isAdminExecutedAuditNotes } from "../../domain/schedule/admin-executed-audit.js";
 
 const swapRepo = new ShiftSwapRepository();
 const scheduleRepo = new ScheduleRepository();
@@ -381,8 +382,9 @@ export class ShiftSwapUseCase {
       swapRepo.listApprovedForMonth(scheduleMonth.id),
     ]);
     const awaitingForMonth = awaitingAdmin.filter((r) => r.scheduleMonthId === scheduleMonth.id);
+    const approvedVisible = approved.filter((row) => !isAdminExecutedAuditNotes(row.notes));
     return Promise.all(
-      [...active, ...awaitingForMonth, ...approved].map((row) => this.toSwapDto(row)),
+      [...active, ...awaitingForMonth, ...approvedVisible].map((row) => this.toSwapDto(row)),
     );
   }
 
@@ -413,23 +415,28 @@ export class ShiftSwapUseCase {
     const scheduleMonth = await scheduleRepo.findMonth(year, month);
     if (!scheduleMonth) return 0;
     const rows = (await swapRepo.listApprovedForMonth(scheduleMonth.id)).reverse();
+    let applied = 0;
     for (const row of rows) {
+      if (isAdminExecutedAuditNotes(row.notes)) continue;
       await prisma.$transaction(async (tx) => {
         if (row.kind === "SELF") await this.applySelfSwap(tx, row);
         else await this.applyPeerSwap(tx, row);
       });
+      applied += 1;
     }
-    return rows.length;
+    return applied;
   }
 
   /** Correção operacional idempotente por chamada controlada; não altera o histórico. */
   async reapplyApprovedById(swapId: string): Promise<ShiftSwapDto> {
     const row = await swapRepo.findById(swapId);
     if (!row || row.status !== "APPROVED") throw new ShiftSwapNotFoundError();
-    await prisma.$transaction(async (tx) => {
-      if (row.kind === "SELF") await this.applySelfSwap(tx, row);
-      else await this.applyPeerSwap(tx, row);
-    });
+    if (!isAdminExecutedAuditNotes(row.notes)) {
+      await prisma.$transaction(async (tx) => {
+        if (row.kind === "SELF") await this.applySelfSwap(tx, row);
+        else await this.applyPeerSwap(tx, row);
+      });
+    }
     return mapSwap(row);
   }
 
@@ -479,15 +486,15 @@ export class ShiftSwapUseCase {
           tokenForEmployeeDay(prisma, row.scheduleMonthId, row.requesterEmployeeId, pair.sourceIso),
           tokenForEmployeeDay(prisma, row.scheduleMonthId, row.requesterEmployeeId, pair.targetIso),
         ]);
-        sourceTokens.push(s || "");
-        targetTokens.push(t || "");
+        sourceTokens.push(canonicalSwapToken(s || ""));
+        targetTokens.push(canonicalSwapToken(t || ""));
       } else {
         const [requesterTok, targetTok] = await Promise.all([
           tokenForEmployeeDay(prisma, row.scheduleMonthId, row.requesterEmployeeId, pair.sourceIso),
           tokenForEmployeeDay(prisma, row.scheduleMonthId, row.targetEmployeeId, pair.targetIso),
         ]);
-        sourceTokens.push(requesterTok || "");
-        targetTokens.push(targetTok || "");
+        sourceTokens.push(canonicalSwapToken(requesterTok || ""));
+        targetTokens.push(canonicalSwapToken(targetTok || ""));
       }
     }
 
@@ -880,6 +887,48 @@ export class ShiftSwapUseCase {
       );
     }
     return scheduleMonth;
+  }
+
+  /** Registro histórico de alteração feita pelo admin na escala realizada (não reaplicável). */
+  async recordAdminExecutedAudit(params: {
+    scheduleMonthId: string;
+    kind: "PEER" | "SELF";
+    requesterEmployeeId: string;
+    targetEmployeeId: string;
+    date: string;
+    targetDate: string;
+    requesterShiftCode: string;
+    targetShiftCode: string;
+    notes?: string | null;
+  }): Promise<ShiftSwapDto> {
+    const now = new Date();
+    const dateIso = isoDateKey(params.date);
+    const targetIso = isoDateKey(params.targetDate);
+    const created = await prisma.shiftSwapRequest.create({
+      data: {
+        scheduleMonthId: params.scheduleMonthId,
+        kind: params.kind,
+        date: toDbDate(dateIso),
+        targetDate: toDbDate(targetIso),
+        pairLength: 1,
+        requesterDates: [dateIso],
+        targetDates: [targetIso],
+        requesterEmployeeId: params.requesterEmployeeId,
+        targetEmployeeId: params.targetEmployeeId,
+        requesterShiftCode: params.requesterShiftCode || "—",
+        targetShiftCode: params.targetShiftCode || "—",
+        notes: params.notes?.trim() || null,
+        status: "APPROVED",
+        respondedAt: now,
+        resolvedAt: now,
+      },
+      include: {
+        requester: { include: { role: true } },
+        target: { include: { role: true } },
+        scheduleMonth: true,
+      },
+    });
+    return mapSwap(created);
   }
 
   private async applyPeerSwap(tx: Tx, row: ShiftSwapWithParties): Promise<void> {
