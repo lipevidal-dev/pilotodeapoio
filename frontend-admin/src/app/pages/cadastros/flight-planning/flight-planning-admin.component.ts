@@ -6,6 +6,7 @@ import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import {
   FlightPlanningRequest,
+  FlightPlanningRosterEntry,
   FlightPlanningService,
 } from '../../../services/flight-planning.service';
 
@@ -26,6 +27,10 @@ export class FlightPlanningAdminComponent implements OnInit {
   readonly copying = signal(false);
   readonly enabled = signal(false);
   readonly requests = signal<FlightPlanningRequest[]>([]);
+  readonly roster = signal<FlightPlanningRosterEntry[]>([]);
+  readonly requestedCount = signal(0);
+  readonly pendingCount = signal(0);
+  readonly selectedEmployeeId = signal<string | null>(null);
   readonly emailText = signal('');
 
   ngOnInit(): void {
@@ -38,6 +43,12 @@ export class FlightPlanningAdminComponent implements OnInit {
       next: (view) => {
         this.enabled.set(view.enabled);
         this.requests.set(view.requests);
+        this.roster.set(view.roster ?? []);
+        this.requestedCount.set(view.requestedCount ?? 0);
+        this.pendingCount.set(view.pendingCount ?? 0);
+        if (!this.roster().some((row) => row.employeeId === this.selectedEmployeeId())) {
+          this.selectedEmployeeId.set(null);
+        }
         this.emailText.set(view.emailText);
         this.loading.set(false);
       },
@@ -90,6 +101,20 @@ export class FlightPlanningAdminComponent implements OnInit {
     } finally {
       this.copying.set(false);
     }
+  }
+
+  selectEmployee(employeeId: string): void {
+    this.selectedEmployeeId.set(this.selectedEmployeeId() === employeeId ? null : employeeId);
+  }
+
+  selectedRequests(): FlightPlanningRequest[] {
+    const id = this.selectedEmployeeId();
+    if (!id) return [];
+    return this.requests().filter((request) => request.employeeId === id);
+  }
+
+  selectedName(): string {
+    return this.roster().find((row) => row.employeeId === this.selectedEmployeeId())?.name ?? '';
   }
 
   formatDate(iso: string): string {

@@ -15,10 +15,19 @@ export interface FlightPlanningRequest {
   lines: FlightPlanningLine[];
 }
 
+export interface FlightPlanningRosterEntry {
+  employeeId: string;
+  name: string;
+  requested: boolean;
+}
+
 export interface FlightPlanningAdminView {
   enabled: boolean;
   requests: FlightPlanningRequest[];
   emailText: string;
+  roster: FlightPlanningRosterEntry[];
+  requestedCount: number;
+  pendingCount: number;
 }
 
 @Injectable({ providedIn: 'root' })

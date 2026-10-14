@@ -37,29 +37,54 @@
 
   @if (loading()) {
     <p>Carregando solicitações…</p>
-  } @else if (requests().length === 0) {
-    <p>Nenhuma solicitação enviada.</p>
   } @else {
-    <div class="request-list">
-      @for (request of requests(); track request.createdAt + request.employeeId + $index) {
-        <article class="request-card">
-          <header>
-            <strong>{{ request.employeeName }} solicita</strong>
-            <span>Enviado em {{ formatSentAt(request.createdAt) }}</span>
-          </header>
-          <ul>
-            @for (line of request.lines; track line.date + line.description) {
-              <li>
-                <span>{{ formatDate(line.date) }}</span>
-                {{ line.description }}
-              </li>
-            }
-          </ul>
-        </article>
-      }
+    <div class="roster-counter">
+      <strong>{{ requestedCount() }} de {{ roster().length }}</strong>
+      <span>já solicitaram · {{ pendingCount() }} ainda não</span>
     </div>
 
-    <label class="field-label" for="flight-planning-email">Texto para o e-mail</label>
-    <textarea id="flight-planning-email" class="email-text" readonly [value]="emailText()"></textarea>
+    <ul class="roster-list">
+      @for (row of roster(); track row.employeeId) {
+        <li [class.is-open]="selectedEmployeeId() === row.employeeId">
+          <span
+            class="roster-mark"
+            [class.roster-mark--ok]="row.requested"
+            [class.roster-mark--no]="!row.requested"
+            [attr.aria-label]="row.requested ? 'Já solicitou' : 'Ainda não solicitou'"
+          >{{ row.requested ? '✓' : '✕' }}</span>
+          <button type="button" class="roster-name" (click)="selectEmployee(row.employeeId)">
+            {{ row.name }}
+          </button>
+        </li>
+      }
+    </ul>
+
+    @if (selectedEmployeeId(); as selectedId) {
+      <article class="request-card">
+        <header>
+          <strong>{{ selectedName() }}</strong>
+        </header>
+        @if (selectedRequests().length === 0) {
+          <p>Nenhuma solicitação enviada.</p>
+        } @else {
+          @for (request of selectedRequests(); track request.createdAt + selectedId) {
+            <p class="request-when">Enviado em {{ formatSentAt(request.createdAt) }}</p>
+            <ul>
+              @for (line of request.lines; track line.date + line.description) {
+                <li>
+                  <span>{{ formatDate(line.date) }}</span>
+                  {{ line.description }}
+                </li>
+              }
+            </ul>
+          }
+        }
+      </article>
+    }
+
+    @if (emailText().trim()) {
+      <label class="field-label" for="flight-planning-email">Texto para o e-mail</label>
+      <textarea id="flight-planning-email" class="email-text" readonly [value]="emailText()"></textarea>
+    }
   }
 </p-card>

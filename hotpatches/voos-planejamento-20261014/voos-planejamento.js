@@ -34,6 +34,7 @@
   var confirmOpen = false;
   var submitting = false;
   var adminView = null;
+  var selectedEmployeeId = null;
   var adminLoading = false;
   var mode = null;
   var notice = "";
@@ -69,6 +70,16 @@
       ".vp-ok{margin:0 0 .8rem;padding:.7rem .8rem;border-radius:8px;background:#ecfdf5;color:#166534}" +
       ".vp-err{margin:0 0 .8rem;padding:.7rem .8rem;border-radius:8px;background:#fef2f2;color:#991b1b}" +
       ".vp-toolbar{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem}" +
+      ".vp-counter{display:flex;align-items:baseline;gap:.6rem;margin:0 0 .8rem}" +
+      ".vp-counter strong{font-size:1.45rem;color:#f15a22}" +
+      ".vp-counter span{color:#6b7280}" +
+      ".vp-roster{list-style:none;margin:0 0 1rem;padding:0;display:flex;flex-direction:column;gap:.35rem;max-height:22rem;overflow:auto}" +
+      ".vp-roster li{display:flex;align-items:center;gap:.55rem}" +
+      ".vp-mark{width:1.2rem;height:1.2rem;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;border:2px solid currentColor;border-radius:3px;font-size:.82rem;font-weight:800;line-height:1}" +
+      ".vp-mark--ok{color:#16a34a;background:#ecfdf5}" +
+      ".vp-mark--no{color:#dc2626;background:#fef2f2}" +
+      ".vp-name{border:0;background:transparent;padding:0;font:inherit;font-weight:650;color:#1f2937;cursor:pointer;text-align:left}" +
+      ".vp-roster li.is-open .vp-name,.vp-name:hover{color:#f15a22;text-decoration:underline}" +
       ".vp-card{border:1px solid #e5e7eb;border-radius:10px;padding:.75rem .9rem;margin:0 0 .65rem}" +
       ".vp-card header{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.4rem}" +
       ".vp-card ul{margin:0;padding-left:1.1rem}" +
@@ -431,6 +442,68 @@
       });
   }
 
+  function renderRoster(body, view) {
+    var roster = view.roster || [];
+    var requestedCount = typeof view.requestedCount === "number"
+      ? view.requestedCount
+      : roster.filter(function (row) { return row.requested; }).length;
+    var pendingCount = typeof view.pendingCount === "number"
+      ? view.pendingCount
+      : roster.length - requestedCount;
+    var counter = el("div", "vp-counter");
+    counter.appendChild(el("strong", "", requestedCount + " de " + roster.length));
+    counter.appendChild(el("span", "", "já solicitaram · " + pendingCount + " ainda não"));
+    body.appendChild(counter);
+    if (!roster.length) {
+      body.appendChild(el("p", "", "Nenhum PAO ou copiloto FCF ativo para acompanhar."));
+      return;
+    }
+    if (selectedEmployeeId && !roster.some(function (row) { return row.employeeId === selectedEmployeeId; })) {
+      selectedEmployeeId = null;
+    }
+    var list = document.createElement("ul");
+    list.className = "vp-roster";
+    roster.forEach(function (row) {
+      var item = document.createElement("li");
+      if (row.employeeId === selectedEmployeeId) item.className = "is-open";
+      var mark = el("span", row.requested ? "vp-mark vp-mark--ok" : "vp-mark vp-mark--no", row.requested ? "✓" : "✕");
+      mark.setAttribute("aria-label", row.requested ? "Já solicitou" : "Ainda não solicitou");
+      var name = el("button", "vp-name", row.name);
+      name.type = "button";
+      name.addEventListener("click", function () {
+        selectedEmployeeId = selectedEmployeeId === row.employeeId ? null : row.employeeId;
+        render();
+      });
+      item.appendChild(mark);
+      item.appendChild(name);
+      list.appendChild(item);
+    });
+    body.appendChild(list);
+    if (!selectedEmployeeId) return;
+    var selected = roster.find(function (row) { return row.employeeId === selectedEmployeeId; });
+    var own = (view.requests || []).filter(function (request) { return request.employeeId === selectedEmployeeId; });
+    var card = el("article", "vp-card");
+    var header = document.createElement("header");
+    header.appendChild(el("strong", "", (selected && selected.name) || "Colaborador"));
+    card.appendChild(header);
+    if (!own.length) {
+      card.appendChild(el("p", "", "Nenhuma solicitação enviada."));
+    } else {
+      own.forEach(function (request) {
+        card.appendChild(el("p", "", "Enviado em " + formatSent(request.createdAt)));
+        var lines = document.createElement("ul");
+        (request.lines || []).forEach(function (line) {
+          var item = document.createElement("li");
+          item.appendChild(el("span", "", formatBr(line.date)));
+          item.appendChild(document.createTextNode(line.description || ""));
+          lines.appendChild(item);
+        });
+        card.appendChild(lines);
+      });
+    }
+    body.appendChild(card);
+  }
+
   function renderAdmin(body) {
     if (adminLoading) {
       body.appendChild(el("p", "", "Carregando solicitações…"));
@@ -492,27 +565,8 @@
     buttons.appendChild(copy);
     bar.appendChild(buttons);
     body.appendChild(bar);
-    var requests = view.requests || [];
-    if (!requests.length) {
-      body.appendChild(el("p", "", "Nenhuma solicitação enviada."));
-      return;
-    }
-    requests.forEach(function (request) {
-      var card = el("article", "vp-card");
-      var header = document.createElement("header");
-      header.appendChild(el("strong", "", (request.employeeName || "Colaborador") + " solicita"));
-      header.appendChild(el("span", "", "Enviado em " + formatSent(request.createdAt)));
-      card.appendChild(header);
-      var list = document.createElement("ul");
-      (request.lines || []).forEach(function (line) {
-        var item = document.createElement("li");
-        item.appendChild(el("span", "", formatBr(line.date)));
-        item.appendChild(document.createTextNode(line.description || ""));
-        list.appendChild(item);
-      });
-      card.appendChild(list);
-      body.appendChild(card);
-    });
+    renderRoster(body, view);
+    if (!String(view.emailText || "").trim()) return;
     body.appendChild(el("p", "", "Texto para o e-mail"));
     var area = document.createElement("textarea");
     area.className = "vp-email";

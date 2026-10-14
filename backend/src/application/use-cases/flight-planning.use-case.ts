@@ -5,6 +5,11 @@ import {
   formatFlightPlanningEmail,
   type FlightPlanningEmailRequest,
 } from "../../domain/flight-planning/flight-planning-email.js";
+import {
+  buildFlightPlanningRoster,
+  type FlightPlanningRosterEmployee,
+  type FlightPlanningRosterEntry,
+} from "../../domain/flight-planning/flight-planning-roster.js";
 
 export const FLIGHT_PLANNING_CONFIG_KEY = "flight_planning_enabled";
 const MAX_LINES = 40;
@@ -75,19 +80,35 @@ export class FlightPlanningUseCase {
     return enabled;
   }
 
-  async listForAdmin(): Promise<{ enabled: boolean; requests: FlightPlanningEmailRequest[]; emailText: string }> {
-    const [enabled, rows] = await Promise.all([
+  async listForAdmin(): Promise<{
+    enabled: boolean;
+    requests: FlightPlanningEmailRequest[];
+    emailText: string;
+    roster: FlightPlanningRosterEntry[];
+    requestedCount: number;
+    pendingCount: number;
+  }> {
+    const [enabled, rows, employees] = await Promise.all([
       this.isEnabled(),
       prisma.flightPlanningRequest.findMany({
         include: requestInclude,
         orderBy: { createdAt: "asc" },
       }),
+      prisma.$queryRaw<FlightPlanningRosterEmployee[]>`
+        SELECT id, name, active, type::text AS type, is_fcf AS "isFcf", is_cmte AS "isCmte"
+        FROM "Employee"
+      `,
     ]);
     const requests = rows.map(mapRequest);
+    const roster = buildFlightPlanningRoster(employees, requests.map((request) => request.employeeId));
+    const requestedCount = roster.filter((row) => row.requested).length;
     return {
       enabled,
       requests,
       emailText: formatFlightPlanningEmail(requests),
+      roster,
+      requestedCount,
+      pendingCount: roster.length - requestedCount,
     };
   }
 
