@@ -144,6 +144,7 @@ model Employee {
   specificShiftRequests EmployeeSpecificShiftRequest[]
   shiftSwapsRequested ShiftSwapRequest[] @relation("ShiftSwapRequester")
   shiftSwapsTargeted  ShiftSwapRequest[] @relation("ShiftSwapTarget")
+  flightPlanningRequests FlightPlanningRequest[]
   isFcf               Boolean              @default(false) @map("is_fcf")
   fcfSchedule         Json                 @default("[]") @map("fcf_schedule")
   inInstruction       Boolean              @default(false) @map("in_instruction")
@@ -417,6 +418,66 @@ model FlightAssignment {
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([employeeId, date])
+}
+
+/** Janela em que o admin libera o envio. Cada mês do intervalo vira um pacote. */
+model FlightPlanningPeriod {
+  id        String    @id @default(uuid())
+  startsOn  DateTime  @map("starts_on") @db.Date
+  endsOn    DateTime  @map("ends_on") @db.Date
+  closedAt  DateTime? @map("closed_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  packages FlightPlanningPackage[]
+  requests FlightPlanningRequest[]
+
+  @@map("flight_planning_periods")
+}
+
+/** Pacote mensal das solicitações enviadas dentro do período, para consulta posterior. */
+model FlightPlanningPackage {
+  id        String   @id @default(uuid())
+  periodId  String   @map("period_id")
+  year      Int
+  month     Int
+  createdAt DateTime @default(now()) @map("created_at")
+
+  period   FlightPlanningPeriod    @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  requests FlightPlanningRequest[]
+
+  @@unique([periodId, year, month])
+  @@map("flight_planning_packages")
+}
+
+/** Solicitação de voos para o planejamento, enviada pelo portal quando o admin habilita. */
+model FlightPlanningRequest {
+  id         String   @id @default(uuid())
+  employeeId String   @map("employee_id")
+  periodId   String?  @map("period_id")
+  packageId  String?  @map("package_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  employee Employee                    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  period   FlightPlanningPeriod?       @relation(fields: [periodId], references: [id], onDelete: SetNull)
+  package  FlightPlanningPackage?      @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  lines    FlightPlanningRequestLine[]
+
+  @@index([employeeId, createdAt])
+  @@index([packageId])
+  @@map("flight_planning_requests")
+}
+
+model FlightPlanningRequestLine {
+  id          String   @id @default(uuid())
+  requestId   String   @map("request_id")
+  date        DateTime @db.Date
+  description String
+  sortOrder   Int      @map("sort_order")
+
+  request FlightPlanningRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, sortOrder])
+  @@map("flight_planning_request_lines")
 }
 
 model SystemConfig {

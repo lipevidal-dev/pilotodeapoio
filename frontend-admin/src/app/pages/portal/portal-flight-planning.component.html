@@ -1,0 +1,89 @@
+<section class="flight-planning-page">
+  <header class="flight-planning-header">
+    <span class="flight-planning-icon"><i class="pi pi-send"></i></span>
+    <div>
+      <h1>Voos Planejamento</h1>
+      <p>Uma linha para cada solicitação de voo.</p>
+    </div>
+  </header>
+
+  @if (loading()) {
+    <p class="flight-planning-wait">Carregando…</p>
+  } @else if (!enabled()) {
+    <p-message
+      severity="warn"
+      text="O administrador ainda não habilitou Voos Planejamento. O formulário fica disponível quando essa opção for liberada."
+    />
+  } @else {
+    <p-card styleClass="flight-planning-card gol-card-accent">
+      @if (successMessage(); as message) {
+        <p-message severity="success" [text]="message" />
+      }
+      @if (errorMessage(); as message) {
+        <p-message severity="error" [text]="message" />
+      }
+
+      <div class="flight-planning-table" role="table">
+        <div class="flight-planning-row flight-planning-row--head" role="row">
+          <span role="columnheader">Data</span>
+          <span role="columnheader">Solicitação do voo</span>
+          <span role="columnheader"></span>
+        </div>
+        @for (line of lines; track $index) {
+          <div class="flight-planning-row" role="row">
+            <label>
+              <span class="sr-only">Data da linha {{ $index + 1 }}</span>
+              <input type="date" name="date-{{ $index }}" [(ngModel)]="line.date" />
+            </label>
+            <label>
+              <span class="sr-only">Solicitação do voo da linha {{ $index + 1 }}</span>
+              <input
+                type="text"
+                name="flight-{{ $index }}"
+                maxlength="400"
+                placeholder="Descreva o voo"
+                [(ngModel)]="line.description"
+              />
+            </label>
+            <button type="button" class="remove-line" (click)="removeLine($index)" [attr.aria-label]="'Remover linha ' + ($index + 1)">
+              <i class="pi pi-trash"></i>
+            </button>
+          </div>
+        }
+      </div>
+
+      <div class="flight-planning-actions">
+        <button type="button" class="add-line" (click)="addLine()" aria-label="Adicionar linha">
+          <i class="pi pi-plus" aria-hidden="true"></i>
+        </button>
+        <p-button
+          label="Enviar solicitação"
+          icon="pi pi-send"
+          styleClass="btn-gol-primary"
+          (onClick)="askConfirm()"
+        />
+      </div>
+    </p-card>
+  }
+
+  @if (confirmOpen()) {
+    <div class="confirm-backdrop" (click)="closeConfirm()">
+      <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="flight-planning-confirm-title" (click)="$event.stopPropagation()">
+        <h2 id="flight-planning-confirm-title">Confirmar envio</h2>
+        <p>Ao clicar em enviar, o colaborador confirma que somente um voo nobre está sendo pedido, lembrando que a moderação das solicitações será avaliada mês a mês.</p>
+        <p>O usuário tem ciência de que os voos solicitados não podem quebrar pairings, e que não se pode pedir um voo somente de ida a um destino. Voos com solicitação para ir a um único destino são feitos para o Recovery no decorrer do mês.</p>
+        <p>Solicitações para o planejamento são cabíveis de avaliação antes da aprovação.</p>
+        <div class="confirm-actions">
+          <button type="button" class="confirm-back" (click)="closeConfirm()" [disabled]="submitting()">Voltar</button>
+          <p-button
+            label="Li e confirmo o envio"
+            icon="pi pi-check"
+            styleClass="btn-gol-primary"
+            [loading]="submitting()"
+            (onClick)="confirmSend()"
+          />
+        </div>
+      </div>
+    </div>
+  }
+</section>

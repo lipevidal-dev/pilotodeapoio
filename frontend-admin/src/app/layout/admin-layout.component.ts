@@ -42,6 +42,7 @@ export class AdminLayoutComponent {
         { label: 'Férias', icon: 'pi pi-sun', route: '/cadastros/ferias' },
         { label: 'Folgas Pedidas', icon: 'pi pi-calendar-minus', route: '/cadastros/folgas-pedidas' },
         { label: 'Voos', icon: 'pi pi-send', route: '/cadastros/voos' },
+        { label: 'Voos Planejamento', icon: 'pi pi-map', route: '/cadastros/voos-planejamento' },
         { label: 'Simulador', icon: 'pi pi-desktop', route: '/cadastros/simulador' },
         { label: 'Curso', icon: 'pi pi-book', route: '/cadastros/curso' },
         { label: 'CMA', icon: 'pi pi-heart', route: '/cadastros/cma' },

@@ -83,6 +83,12 @@ import {
   getNextMotorConfigController,
   updateNextMotorConfigController,
 } from "../controllers/next-motor-config.controller.js";
+import {
+  getAdminFlightPlanningController,
+  getPortalFlightPlanningStatusController,
+  submitPortalFlightPlanningController,
+  updateAdminFlightPlanningSettingsController,
+} from "../controllers/flight-planning.controller.js";
 
 export async function registerRoutes(app: FastifyInstance) {
   app.get("/health", healthController);
@@ -160,6 +166,11 @@ export async function registerRoutes(app: FastifyInstance) {
 
   app.get("/config/next-motor", getNextMotorConfigController);
   app.put("/config/next-motor", updateNextMotorConfigController);
+
+  app.get("/portal/flight-planning", getPortalFlightPlanningStatusController);
+  app.post("/portal/flight-planning/requests", submitPortalFlightPlanningController);
+  app.get("/flight-planning", getAdminFlightPlanningController);
+  app.put("/flight-planning/settings", updateAdminFlightPlanningSettingsController);
 
   app.patch("/schedules/:id/manual-cell", manualEditCellController);
   app.patch("/schedules/:id/manual-range", manualEditRangeController);
