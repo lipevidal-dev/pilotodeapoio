@@ -144,6 +144,7 @@ model Employee {
   specificShiftRequests EmployeeSpecificShiftRequest[]
   shiftSwapsRequested ShiftSwapRequest[] @relation("ShiftSwapRequester")
   shiftSwapsTargeted  ShiftSwapRequest[] @relation("ShiftSwapTarget")
+  flightPlanningRequests FlightPlanningRequest[]
   isFcf               Boolean              @default(false) @map("is_fcf")
   fcfSchedule         Json                 @default("[]") @map("fcf_schedule")
   inInstruction       Boolean              @default(false) @map("in_instruction")
@@ -417,6 +418,32 @@ model FlightAssignment {
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([employeeId, date])
+}
+
+/** Solicitação de voos para o planejamento, enviada pelo portal quando o admin habilita. */
+model FlightPlanningRequest {
+  id         String   @id @default(uuid())
+  employeeId String   @map("employee_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  employee Employee                   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  lines    FlightPlanningRequestLine[]
+
+  @@index([employeeId, createdAt])
+  @@map("flight_planning_requests")
+}
+
+model FlightPlanningRequestLine {
+  id          String   @id @default(uuid())
+  requestId   String   @map("request_id")
+  date        DateTime @db.Date
+  description String
+  sortOrder   Int      @map("sort_order")
+
+  request FlightPlanningRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, sortOrder])
+  @@map("flight_planning_request_lines")
 }
 
 model SystemConfig {

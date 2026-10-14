@@ -1,0 +1,65 @@
+<p-toast />
+
+<h1 class="page-title">Voos Planejamento</h1>
+<p class="page-subtitle">
+  Habilite o menu no portal do colaborador e copie as solicitações recebidas para o e-mail do setor.
+</p>
+
+<p-card styleClass="gol-card-accent">
+  <div class="toolbar-row">
+    <span class="toolbar-hint">
+      <i class="pi" [class.pi-lock-open]="enabled()" [class.pi-lock]="!enabled()"></i>
+      @if (enabled()) {
+        Colaboradores podem enviar solicitações.
+      } @else {
+        Menu bloqueado para o colaborador.
+      }
+    </span>
+    <div class="toolbar-actions">
+      <p-button
+        [label]="enabled() ? 'Desabilitar' : 'Habilitar'"
+        [icon]="enabled() ? 'pi pi-lock' : 'pi pi-lock-open'"
+        styleClass="btn-gol-primary"
+        [loading]="saving()"
+        [disabled]="loading()"
+        (onClick)="toggle()"
+      />
+      <p-button
+        label="Copiar solicitações"
+        icon="pi pi-copy"
+        [outlined]="true"
+        [loading]="copying()"
+        [disabled]="loading() || !emailText().trim()"
+        (onClick)="copyRequests()"
+      />
+    </div>
+  </div>
+
+  @if (loading()) {
+    <p>Carregando solicitações…</p>
+  } @else if (requests().length === 0) {
+    <p>Nenhuma solicitação enviada.</p>
+  } @else {
+    <div class="request-list">
+      @for (request of requests(); track request.createdAt + request.employeeId + $index) {
+        <article class="request-card">
+          <header>
+            <strong>{{ request.employeeName }} solicita</strong>
+            <span>Enviado em {{ formatSentAt(request.createdAt) }}</span>
+          </header>
+          <ul>
+            @for (line of request.lines; track line.date + line.description) {
+              <li>
+                <span>{{ formatDate(line.date) }}</span>
+                {{ line.description }}
+              </li>
+            }
+          </ul>
+        </article>
+      }
+    </div>
+
+    <label class="field-label" for="flight-planning-email">Texto para o e-mail</label>
+    <textarea id="flight-planning-email" class="email-text" readonly [value]="emailText()"></textarea>
+  }
+</p-card>

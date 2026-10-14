@@ -41,6 +41,13 @@ export const routes: Routes = [
             (m) => m.PortalVacationRequestComponent,
           ),
       },
+      {
+        path: 'voos-planejamento',
+        loadComponent: () =>
+          import('./pages/portal/portal-flight-planning.component').then(
+            (m) => m.PortalFlightPlanningComponent,
+          ),
+      },
       { path: 'folga', pathMatch: 'full', redirectTo: 'escala' },
       { path: 'perfil', pathMatch: 'full', redirectTo: 'escala' },
       { path: 'notificacoes', pathMatch: 'full', redirectTo: 'escala' },
@@ -83,6 +90,13 @@ export const routes: Routes = [
         path: 'cadastros/voos',
         loadComponent: () =>
           import('./pages/cadastros/flights/flights.component').then((m) => m.FlightsComponent),
+      },
+      {
+        path: 'cadastros/voos-planejamento',
+        loadComponent: () =>
+          import('./pages/cadastros/flight-planning/flight-planning-admin.component').then(
+            (m) => m.FlightPlanningAdminComponent,
+          ),
       },
       {
         path: 'cadastros/simulador',
