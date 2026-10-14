@@ -56,6 +56,9 @@
       ".vp-btn{border:0;background:#f15a22;color:#fff;padding:.62rem 1rem;font-weight:600}" +
       ".vp-btn:disabled{opacity:.6;cursor:wait}" +
       ".vp-btn-ghost{border:1px solid #d1d5db;background:#fff;color:#2d2d2d;padding:.62rem 1rem}" +
+      ".vp-add{width:2.75rem;height:2.75rem;padding:0;border:0;border-radius:0;background:#f15a22;color:#fff;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;line-height:1}" +
+      ".vp-add i{color:#fff;font-size:1.15rem}" +
+      ".vp-add:disabled{opacity:.55;cursor:not-allowed}" +
       ".vp-table{display:grid;gap:.45rem}" +
       ".vp-row{display:grid;grid-template-columns:11.5rem minmax(0,1fr) auto;gap:.5rem;align-items:center}" +
       ".vp-row--head{font-size:.78rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.02em}" +
@@ -334,8 +337,10 @@
     });
     body.appendChild(table);
     var actions = el("div", "vp-actions");
-    var add = el("button", "vp-btn-ghost", "Adicionar linha");
+    var add = el("button", "vp-add");
     add.type = "button";
+    add.setAttribute("aria-label", "Adicionar linha");
+    add.innerHTML = '<i class="pi pi-plus" aria-hidden="true"></i>';
     add.disabled = portalLines.length >= 40;
     add.addEventListener("click", function () {
       if (portalLines.length >= 40) return;
