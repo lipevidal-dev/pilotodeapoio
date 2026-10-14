@@ -1,10 +1,13 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import {
+  FlightPlanningPackage,
+  FlightPlanningPeriod,
   FlightPlanningRequest,
   FlightPlanningRosterEntry,
   FlightPlanningService,
@@ -13,7 +16,7 @@ import {
 @Component({
   selector: 'app-flight-planning-admin',
   standalone: true,
-  imports: [CommonModule, ButtonModule, CardModule, ToastModule],
+  imports: [CommonModule, FormsModule, ButtonModule, CardModule, ToastModule],
   providers: [MessageService],
   templateUrl: './flight-planning-admin.component.html',
   styleUrls: ['../cadastros-shared.scss', './flight-planning-admin.component.scss'],
@@ -26,6 +29,12 @@ export class FlightPlanningAdminComponent implements OnInit {
   readonly saving = signal(false);
   readonly copying = signal(false);
   readonly enabled = signal(false);
+  readonly period = signal<FlightPlanningPeriod | null>(null);
+  readonly packages = signal<FlightPlanningPackage[]>([]);
+  readonly selectedPackageId = signal<string | null>(null);
+  readonly periodForm = signal(false);
+  periodStart = '';
+  periodEnd = '';
   readonly requests = signal<FlightPlanningRequest[]>([]);
   readonly roster = signal<FlightPlanningRosterEntry[]>([]);
   readonly requestedCount = signal(0);
@@ -37,11 +46,14 @@ export class FlightPlanningAdminComponent implements OnInit {
     this.reload();
   }
 
-  reload(): void {
+  reload(packageId = this.selectedPackageId()): void {
     this.loading.set(true);
-    this.flightPlanning.adminView().subscribe({
+    this.flightPlanning.adminView(packageId).subscribe({
       next: (view) => {
         this.enabled.set(view.enabled);
+        this.period.set(view.period ?? null);
+        this.packages.set(view.packages ?? []);
+        this.selectedPackageId.set(view.selectedPackageId ?? null);
         this.requests.set(view.requests);
         this.roster.set(view.roster ?? []);
         this.requestedCount.set(view.requestedCount ?? 0);
@@ -59,26 +71,75 @@ export class FlightPlanningAdminComponent implements OnInit {
     });
   }
 
-  toggle(): void {
-    const next = !this.enabled();
+  get canClosePeriod(): boolean {
+    const status = this.period()?.status;
+    return status === 'open' || status === 'scheduled';
+  }
+
+  periodText(): string {
+    const period = this.period();
+    if (!period) return 'Menu bloqueado para o colaborador.';
+    const range = `${this.formatDate(period.startsOn)} até ${this.formatDate(period.endsOn)}`;
+    if (period.status === 'open') return `Portal aberto de ${range}.`;
+    if (period.status === 'scheduled') return `Período agendado de ${range}. O portal abre na data inicial.`;
+    return `Período encerrado: ${range}.`;
+  }
+
+  askEnable(): void {
+    this.periodForm.set(true);
+  }
+
+  confirmPeriod(): void {
     this.saving.set(true);
-    this.flightPlanning.setEnabled(next).subscribe({
+    this.flightPlanning.setEnabled(true, { startsOn: this.periodStart, endsOn: this.periodEnd }).subscribe({
+      next: (result) => {
+        this.enabled.set(result.enabled);
+        this.periodForm.set(false);
+        this.saving.set(false);
+        this.selectedPackageId.set(null);
+        this.messages.add({
+          severity: 'success',
+          summary: 'Período habilitado',
+          detail: result.period?.status === 'scheduled'
+            ? 'O portal abre na data inicial. Cada mês vira um pacote.'
+            : 'As solicitações de cada mês ficam num pacote para consulta.',
+        });
+        this.reload(null);
+      },
+      error: (err: { error?: { error?: string } }) => {
+        this.saving.set(false);
+        this.messages.add({
+          severity: 'error',
+          summary: 'Erro',
+          detail: err.error?.error ?? 'Não foi possível habilitar o período.',
+        });
+      },
+    });
+  }
+
+  disable(): void {
+    this.saving.set(true);
+    this.flightPlanning.setEnabled(false).subscribe({
       next: (result) => {
         this.enabled.set(result.enabled);
         this.saving.set(false);
         this.messages.add({
           severity: 'success',
-          summary: result.enabled ? 'Habilitado' : 'Desabilitado',
-          detail: result.enabled
-            ? 'Os colaboradores já podem abrir Voos Planejamento.'
-            : 'O menu do colaborador ficou bloqueado.',
+          summary: 'Desabilitado',
+          detail: 'O menu do colaborador ficou bloqueado. Os pacotes mensais continuam disponíveis.',
         });
+        this.reload(null);
       },
       error: () => {
         this.saving.set(false);
         this.messages.add({ severity: 'error', summary: 'Erro', detail: 'Não foi possível alterar a habilitação.' });
       },
     });
+  }
+
+  openPackage(packageId: string): void {
+    this.selectedEmployeeId.set(null);
+    this.reload(packageId);
   }
 
   async copyRequests(): Promise<void> {

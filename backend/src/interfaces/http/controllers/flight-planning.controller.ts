@@ -24,6 +24,12 @@ const submitSchema = z.object({
 
 const settingsSchema = z.object({
   enabled: z.boolean(),
+  startsOn: z.string().optional(),
+  endsOn: z.string().optional(),
+});
+
+const adminQuerySchema = z.object({
+  packageId: z.string().optional(),
 });
 
 function authError(err: unknown, reply: FastifyReply) {
@@ -88,7 +94,15 @@ export async function getAdminFlightPlanningController(req: FastifyRequest, repl
     if (response) return response;
     throw err;
   }
-  return reply.send(await flightPlanningUseCase.listForAdmin());
+  const query = adminQuerySchema.safeParse(req.query);
+  try {
+    return reply.send(await flightPlanningUseCase.listForAdmin(query.success ? query.data.packageId : undefined));
+  } catch (err) {
+    if (err instanceof FlightPlanningInvalidError) {
+      return reply.status(400).send({ error: err.message, code: err.code });
+    }
+    throw err;
+  }
 }
 
 export async function updateAdminFlightPlanningSettingsController(req: FastifyRequest, reply: FastifyReply) {
@@ -104,6 +118,16 @@ export async function updateAdminFlightPlanningSettingsController(req: FastifyRe
   if (!parsed.success) {
     return reply.status(400).send({ error: "Informe se o menu deve ficar habilitado." });
   }
-  const enabled = await flightPlanningUseCase.setEnabled(parsed.data.enabled);
-  return reply.send({ enabled });
+  try {
+    const result = await flightPlanningUseCase.setEnabled(parsed.data.enabled, {
+      startsOn: parsed.data.startsOn,
+      endsOn: parsed.data.endsOn,
+    });
+    return reply.send(result);
+  } catch (err) {
+    if (err instanceof FlightPlanningInvalidError) {
+      return reply.status(400).send({ error: err.message, code: err.code });
+    }
+    throw err;
+  }
 }

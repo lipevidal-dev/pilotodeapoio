@@ -9,20 +9,16 @@
   <div class="toolbar-row">
     <span class="toolbar-hint">
       <i class="pi" [class.pi-lock-open]="enabled()" [class.pi-lock]="!enabled()"></i>
-      @if (enabled()) {
-        Colaboradores podem enviar solicitações.
-      } @else {
-        Menu bloqueado para o colaborador.
-      }
+      {{ periodText() }}
     </span>
     <div class="toolbar-actions">
       <p-button
-        [label]="enabled() ? 'Desabilitar' : 'Habilitar'"
-        [icon]="enabled() ? 'pi pi-lock' : 'pi pi-lock-open'"
+        [label]="canClosePeriod ? 'Desabilitar' : 'Habilitar'"
+        [icon]="canClosePeriod ? 'pi pi-lock' : 'pi pi-lock-open'"
         styleClass="btn-gol-primary"
         [loading]="saving()"
         [disabled]="loading()"
-        (onClick)="toggle()"
+        (onClick)="canClosePeriod ? disable() : askEnable()"
       />
       <p-button
         label="Copiar solicitações"
@@ -34,6 +30,31 @@
       />
     </div>
   </div>
+
+  @if (periodForm()) {
+    <div class="period-form">
+      <label>De <input type="date" name="period-start" [(ngModel)]="periodStart" /></label>
+      <label>Até <input type="date" name="period-end" [(ngModel)]="periodEnd" /></label>
+      <button type="button" class="period-confirm" (click)="confirmPeriod()" [disabled]="saving()">Habilitar período</button>
+      <button type="button" class="period-cancel" (click)="periodForm.set(false)">Cancelar</button>
+    </div>
+    <p class="period-hint">Cada mês deste intervalo vira um pacote com as solicitações enviadas naquele mês.</p>
+  }
+
+  @if (packages().length) {
+    <div class="package-list">
+      @for (pkg of packages(); track pkg.id) {
+        <button
+          type="button"
+          class="package-chip"
+          [class.is-on]="pkg.id === selectedPackageId()"
+          (click)="openPackage(pkg.id)"
+        >
+          {{ pkg.label }} · {{ pkg.requestCount }}
+        </button>
+      }
+    </div>
+  }
 
   @if (loading()) {
     <p>Carregando solicitações…</p>

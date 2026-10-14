@@ -35,6 +35,10 @@
   var submitting = false;
   var adminView = null;
   var selectedEmployeeId = null;
+  var selectedPackageId = null;
+  var periodFormOpen = false;
+  var periodStart = "";
+  var periodEnd = "";
   var adminLoading = false;
   var mode = null;
   var notice = "";
@@ -70,6 +74,12 @@
       ".vp-ok{margin:0 0 .8rem;padding:.7rem .8rem;border-radius:8px;background:#ecfdf5;color:#166534}" +
       ".vp-err{margin:0 0 .8rem;padding:.7rem .8rem;border-radius:8px;background:#fef2f2;color:#991b1b}" +
       ".vp-toolbar{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem}" +
+      ".vp-period{display:flex;flex-wrap:wrap;gap:.55rem;align-items:flex-end;margin:0 0 .9rem;padding:.75rem;border:1px solid #fed7aa;border-radius:10px;background:#fff7ed}" +
+      ".vp-period label{display:flex;flex-direction:column;gap:.25rem;font-size:.75rem;font-weight:700;color:#9a3412}" +
+      ".vp-period input{border:1px solid #fdba74;border-radius:8px;padding:.45rem .55rem;font:inherit;background:#fff}" +
+      ".vp-packages{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 .9rem}" +
+      ".vp-package{border:1px solid #d1d5db;background:#fff;border-radius:999px;padding:.4rem .75rem;font:inherit;cursor:pointer;color:#374151}" +
+      ".vp-package.is-on{background:#fff4ed;border-color:#f15a22;color:#c2410c;font-weight:700}" +
       ".vp-counter{display:flex;align-items:baseline;gap:.6rem;margin:0 0 .8rem}" +
       ".vp-counter strong{font-size:1.45rem;color:#f15a22}" +
       ".vp-counter span{color:#6b7280}" +
@@ -421,7 +431,9 @@
   function loadAdmin() {
     adminLoading = true;
     render();
-    fetch(API + "/flight-planning", { headers: authHeaders() })
+    var url = API + "/flight-planning";
+    if (selectedPackageId) url += "?packageId=" + encodeURIComponent(selectedPackageId);
+    fetch(url, { headers: authHeaders() })
       .then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (body) {
           if (!r.ok) throw new Error(body.error || "Não foi possível carregar as solicitações.");
@@ -431,6 +443,7 @@
       .then(function (view) {
         adminView = view;
         enabled = !!view.enabled;
+        if (view.selectedPackageId) selectedPackageId = view.selectedPackageId;
         adminLoading = false;
         syncPortal();
         render();
@@ -504,6 +517,109 @@
     body.appendChild(card);
   }
 
+  function periodStatusText(period) {
+    if (!period) return "Menu bloqueado para o colaborador.";
+    var range = formatBr(period.startsOn) + " até " + formatBr(period.endsOn);
+    if (period.status === "open") return "Portal aberto de " + range + ".";
+    if (period.status === "scheduled") return "Período agendado de " + range + ". O portal abre na data inicial.";
+    return "Período encerrado: " + range + ".";
+  }
+
+  function savePeriod(turnOn) {
+    var payload = { enabled: turnOn };
+    if (turnOn) {
+      payload.startsOn = periodStart;
+      payload.endsOn = periodEnd;
+    }
+    fetch(API + "/flight-planning/settings", {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (body) {
+          if (!r.ok) throw new Error(body.error || "Não foi possível alterar a habilitação.");
+          return body;
+        });
+      })
+      .then(function (result) {
+        enabled = !!result.enabled;
+        periodFormOpen = false;
+        selectedPackageId = null;
+        selectedEmployeeId = null;
+        if (!turnOn) {
+          notice = { ok: true, text: "O menu do colaborador ficou bloqueado. Os pacotes mensais continuam disponíveis." };
+        } else if (result.period && result.period.status === "scheduled") {
+          notice = { ok: true, text: "Período agendado. O portal abre em " + formatBr(result.period.startsOn) + "." };
+        } else {
+          notice = { ok: true, text: "Período habilitado. As solicitações de cada mês ficam num pacote para consulta." };
+        }
+        syncPortal();
+        loadAdmin();
+      })
+      .catch(function (err) {
+        notice = { ok: false, text: err.message };
+        render();
+      });
+  }
+
+  function renderPeriodForm(body) {
+    var form = el("div", "vp-period");
+    var startLabel = el("label", "", "De");
+    var start = document.createElement("input");
+    start.type = "date";
+    start.value = periodStart;
+    start.addEventListener("input", function () { periodStart = start.value; });
+    startLabel.appendChild(start);
+    var endLabel = el("label", "", "Até");
+    var end = document.createElement("input");
+    end.type = "date";
+    end.value = periodEnd;
+    end.addEventListener("input", function () { periodEnd = end.value; });
+    endLabel.appendChild(end);
+    var confirm = el("button", "vp-btn", "Habilitar período");
+    confirm.type = "button";
+    confirm.addEventListener("click", function () {
+      if (!periodStart || !periodEnd) {
+        notice = { ok: false, text: "Informe o início e o fim do período." };
+        render();
+        return;
+      }
+      confirm.disabled = true;
+      savePeriod(true);
+    });
+    var cancel = el("button", "vp-btn-ghost", "Cancelar");
+    cancel.type = "button";
+    cancel.addEventListener("click", function () {
+      periodFormOpen = false;
+      render();
+    });
+    form.appendChild(startLabel);
+    form.appendChild(endLabel);
+    form.appendChild(confirm);
+    form.appendChild(cancel);
+    body.appendChild(form);
+    body.appendChild(el("p", "", "Cada mês deste intervalo vira um pacote com as solicitações enviadas naquele mês."));
+  }
+
+  function renderPackages(body, view) {
+    var packages = view.packages || [];
+    if (!packages.length) return;
+    var row = el("div", "vp-packages");
+    packages.forEach(function (pkg) {
+      var button = el("button", "vp-package" + (pkg.id === (view.selectedPackageId || selectedPackageId) ? " is-on" : ""), pkg.label + " · " + pkg.requestCount);
+      button.type = "button";
+      button.addEventListener("click", function () {
+        if (selectedPackageId === pkg.id) return;
+        selectedPackageId = pkg.id;
+        selectedEmployeeId = null;
+        loadAdmin();
+      });
+      row.appendChild(button);
+    });
+    body.appendChild(row);
+  }
+
   function renderAdmin(body) {
     if (adminLoading) {
       body.appendChild(el("p", "", "Carregando solicitações…"));
@@ -513,47 +629,21 @@
     if (view.error) body.appendChild(el("p", "vp-err", view.error));
     if (notice) body.appendChild(el("p", notice.ok ? "vp-ok" : "vp-err", notice.text));
     var bar = el("div", "vp-toolbar");
-    bar.appendChild(
-      el(
-        "span",
-        "",
-        view.enabled
-          ? "Colaboradores podem enviar solicitações."
-          : "Menu bloqueado para o colaborador."
-      )
-    );
+    bar.appendChild(el("span", "", periodStatusText(view.period)));
     var buttons = el("div", "vp-actions");
     buttons.style.marginTop = "0";
-    var toggle = el("button", "vp-btn", view.enabled ? "Desabilitar" : "Habilitar");
+    var canClose = view.period && (view.period.status === "open" || view.period.status === "scheduled");
+    var toggle = el("button", "vp-btn", canClose ? "Desabilitar" : "Habilitar");
     toggle.type = "button";
     toggle.addEventListener("click", function () {
+      if (!canClose) {
+        periodFormOpen = true;
+        notice = "";
+        render();
+        return;
+      }
       toggle.disabled = true;
-      fetch(API + "/flight-planning/settings", {
-        method: "PUT",
-        headers: authHeaders(),
-        body: JSON.stringify({ enabled: !view.enabled }),
-      })
-        .then(function (r) {
-          return r.json().catch(function () { return {}; }).then(function (body) {
-            if (!r.ok) throw new Error(body.error || "Não foi possível alterar a habilitação.");
-            return body;
-          });
-        })
-        .then(function (result) {
-          enabled = !!result.enabled;
-          notice = {
-            ok: true,
-            text: enabled
-              ? "Os colaboradores já podem abrir Voos Planejamento."
-              : "O menu do colaborador ficou bloqueado.",
-          };
-          syncPortal();
-          loadAdmin();
-        })
-        .catch(function (err) {
-          notice = { ok: false, text: err.message };
-          render();
-        });
+      savePeriod(false);
     });
     var copy = el("button", "vp-btn-ghost", "Copiar solicitações");
     copy.type = "button";
@@ -565,6 +655,8 @@
     buttons.appendChild(copy);
     bar.appendChild(buttons);
     body.appendChild(bar);
+    if (periodFormOpen) renderPeriodForm(body);
+    renderPackages(body, view);
     renderRoster(body, view);
     if (!String(view.emailText || "").trim()) return;
     body.appendChild(el("p", "", "Texto para o e-mail"));

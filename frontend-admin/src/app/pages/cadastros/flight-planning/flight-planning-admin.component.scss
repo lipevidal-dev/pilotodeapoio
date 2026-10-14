@@ -1,3 +1,13 @@
+.period-form { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: flex-end; margin: 0.75rem 0; }
+.period-form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.75rem; font-weight: 700; }
+.period-form input { border: 1px solid #d7dce2; border-radius: 8px; padding: 0.45rem 0.55rem; font: inherit; }
+.period-confirm, .period-cancel { border-radius: 8px; padding: 0.55rem 0.8rem; font: inherit; cursor: pointer; }
+.period-confirm { border: 0; background: var(--gol-orange, #f15a22); color: #fff; font-weight: 700; }
+.period-cancel { border: 1px solid #d7dce2; background: #fff; }
+.period-hint { margin: 0 0 0.75rem; color: var(--gol-gray-medium); }
+.package-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.9rem; }
+.package-chip { border: 1px solid #d7dce2; background: #fff; border-radius: 999px; padding: 0.35rem 0.7rem; font: inherit; cursor: pointer; }
+.package-chip.is-on { border-color: var(--gol-orange, #f15a22); color: #c2410c; font-weight: 700; background: #fff4ed; }
 .roster-counter { display: flex; align-items: baseline; gap: 0.65rem; margin: 0.25rem 0 0.85rem; }
 .roster-counter strong { font-size: 1.45rem; color: var(--gol-orange, #f15a22); }
 .roster-counter span { color: var(--gol-gray-medium); }
