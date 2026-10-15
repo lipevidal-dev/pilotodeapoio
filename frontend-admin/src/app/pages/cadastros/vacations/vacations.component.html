@@ -58,8 +58,9 @@
         <th>Início</th>
         <th>Fim</th>
         <th>Observação</th>
-        <th class="col-selection"><p-tableHeaderCheckbox /></th>
-        <th class="col-actions"></th>
+        <th class="col-selection"><span class="select-col-label">Selecionar</span><p-tableHeaderCheckbox /></th>
+        <th class="actions-header">Editar</th>
+        <th class="actions-header">Apagar</th>
       </tr>
     </ng-template>
 
@@ -70,8 +71,10 @@
         <td>{{ formatDate(row.endDate) }}</td>
         <td>{{ row.notes ?? '—' }}</td>
         <td class="col-selection"><p-tableCheckbox [value]="row" /></td>
-        <td class="col-actions">
+        <td class="actions-cell">
           <p-button icon="pi pi-pencil" severity="secondary" [text]="true" (onClick)="openEdit(row)" />
+        </td>
+        <td class="actions-cell">
           <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="confirmDelete(row)" />
         </td>
       </tr>
@@ -79,7 +82,7 @@
 
     <ng-template pTemplate="emptymessage">
 
-      <tr><td colspan="6">Nenhuma férias cadastrada.</td></tr>
+      <tr><td colspan="7">Nenhuma férias cadastrada.</td></tr>
 
     </ng-template>
 
