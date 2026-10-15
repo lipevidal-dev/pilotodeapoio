@@ -1,4 +1,9 @@
 import { isoDateKey } from "../../domain/rules/date-keys.js";
+import {
+  calendarQueryRange,
+  expandVacationPeriodsToDays,
+  mapVacationRowsToCalendarPeriods,
+} from "../../domain/rules/vacation-calendar.js";
 import { vacationToApi } from "../../infrastructure/mappers/vacation-api.mapper.js";
 import { VacationRepository } from "../../infrastructure/repositories/vacation.repository.js";
 import { executeBatchDelete } from "./batch-delete.js";
@@ -18,6 +23,18 @@ export class VacationUseCase {
   async list() {
     const rows = await this.repo.findAll();
     return rows.map(vacationToApi);
+  }
+
+  async portalCalendar(year: number, month: number, viewerEmployeeId: string | null) {
+    const range = calendarQueryRange(year, month);
+    const rows = await this.repo.findVisibleOverlapping(range.start, range.end);
+    const periods = mapVacationRowsToCalendarPeriods(rows, viewerEmployeeId);
+    return {
+      year,
+      month,
+      periods,
+      days: expandVacationPeriodsToDays(periods, range.start, range.end),
+    };
   }
 
   async create(input: { employeeId: string; startDate: string; endDate: string; notes?: string }) {

@@ -41,6 +41,23 @@ export class VacationRepository {
     });
   }
 
+  /** Pedidos visíveis no espelho do portal (aprovados e pendentes de todos). */
+  findVisibleOverlapping(
+    startDate: string,
+    endDate: string,
+    statuses: VacationStatus[] = ["PENDING", "APPROVED"],
+  ) {
+    return prisma.vacation.findMany({
+      where: {
+        status: { in: statuses },
+        startDate: { lte: toDbDate(endDate) },
+        endDate: { gte: toDbDate(startDate) },
+      },
+      include: { employee: { select: { id: true, name: true } } },
+      orderBy: [{ startDate: "asc" }, { employee: { name: "asc" } }],
+    });
+  }
+
   create(data: {
     employeeId: string;
     startDate: string;

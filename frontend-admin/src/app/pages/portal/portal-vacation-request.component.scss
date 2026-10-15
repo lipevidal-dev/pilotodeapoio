@@ -1,5 +1,5 @@
-.vacation-page { max-width: 42rem; margin: 0 auto; }
-.vacation-header { display: flex; align-items: center; gap: 0.85rem; margin-bottom: 1rem; }
+.vacation-page { max-width: 48rem; margin: 0 auto; display: flex; flex-direction: column; gap: 1rem; }
+.vacation-header { display: flex; align-items: center; gap: 0.85rem; }
 .vacation-header h1 { margin: 0; color: var(--gol-gray-dark); font-size: 1.45rem; }
 .vacation-header p { margin: 0.25rem 0 0; color: var(--gol-gray-medium); }
 .vacation-icon { display: grid; place-items: center; width: 3rem; height: 3rem; flex: 0 0 auto; border-radius: 50%; color: var(--gol-orange); background: rgba(241, 90, 34, 0.12); font-size: 1.35rem; }
@@ -17,8 +17,71 @@ input:focus, textarea:focus { outline: none; border-color: var(--gol-orange); bo
 .choice-buttons button { min-height: 2.75rem; border: 1px solid #d7dce2; border-radius: 8px; color: var(--gol-gray-dark); background: #fff; font: inherit; font-weight: 700; cursor: pointer; }
 .choice-buttons button.selected { border-color: var(--gol-orange); color: #fff; background: var(--gol-orange); box-shadow: 0 3px 8px rgba(241, 90, 34, 0.22); }
 :host ::ng-deep .vacation-submit .p-button { width: 100%; justify-content: center; }
+
+.mirror-cal { display: flex; flex-direction: column; gap: 0.85rem; }
+.mirror-cal-head { display: flex; justify-content: space-between; gap: 0.75rem; align-items: flex-start; }
+.mirror-cal-head h2 { margin: 0; font-size: 1.05rem; color: var(--gol-gray-dark); }
+.mirror-cal-head p { margin: 0.3rem 0 0; color: var(--gol-gray-medium); font-size: 0.82rem; font-weight: 500; }
+.mirror-cal-status { color: var(--gol-gray-medium); font-size: 0.78rem; font-weight: 700; }
+.mirror-cal-panel { border: 1px solid #e8eaed; border-radius: 10px; padding: 0.7rem 0.75rem 0.85rem; background: #fff; }
+.mirror-cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.45rem; }
+.mirror-cal-title { font-size: 0.92rem; font-weight: 700; color: var(--gol-gray-dark); }
+.mirror-cal-nav-btn { border: none; background: transparent; color: var(--gol-orange); cursor: pointer; padding: 0.25rem 0.45rem; border-radius: 6px; }
+.mirror-cal-nav-btn:hover { background: #fff4ed; }
+.mirror-cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 2px; }
+.mirror-cal-weekdays span { text-align: center; font-size: 0.68rem; font-weight: 700; color: #9ca3af; padding: 0.15rem 0; }
+.mirror-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+
+.mirror-day {
+  min-height: 3.15rem;
+  border: 1px solid #eceff3;
+  border-radius: 7px;
+  background: #fafbfc;
+  color: var(--gol-gray-dark);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  padding: 0.15rem 0.1rem;
+  font: inherit;
+  cursor: pointer;
+}
+.mirror-day.out-month { opacity: 0.38; }
+.mirror-day.weekend:not(.has-approved):not(.has-pending):not(.in-range) { background: #f4f5f7; }
+.mirror-day.today { box-shadow: inset 0 0 0 1px rgba(241, 90, 34, 0.45); }
+.mirror-day.has-approved { background: #e0f2fe; border-color: #7dd3fc; }
+.mirror-day.has-pending { background: #fef3c7; border-color: #fcd34d; }
+.mirror-day.has-approved.has-pending {
+  background: linear-gradient(135deg, #e0f2fe 50%, #fef3c7 50%);
+  border-color: #fbbf24;
+}
+.mirror-day.is-mine { box-shadow: inset 0 0 0 2px var(--gol-orange); }
+.mirror-day.in-range { outline: 2px solid rgba(241, 90, 34, 0.35); }
+.mirror-day.selected { border-color: var(--gol-orange); }
+.mirror-day-num { font-size: 0.78rem; font-weight: 700; line-height: 1; }
+.mirror-day-count { font-size: 0.62rem; font-weight: 800; color: #0369a1; line-height: 1; }
+
+.mirror-legend { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; color: var(--gol-gray-medium); font-size: 0.75rem; font-weight: 700; }
+.swatch { display: inline-block; width: 0.72rem; height: 0.72rem; border-radius: 3px; margin-right: 0.3rem; vertical-align: -1px; }
+.swatch-approved { background: #e0f2fe; border: 1px solid #7dd3fc; }
+.swatch-pending { background: #fef3c7; border: 1px solid #fcd34d; }
+.swatch-mine { background: #fff; border: 2px solid var(--gol-orange); }
+.swatch-range { background: #fff7f2; outline: 2px solid rgba(241, 90, 34, 0.35); }
+
+.mirror-day-detail, .mirror-period-list { background: #f8fafc; border: 1px solid #e8eaed; border-radius: 10px; padding: 0.8rem 0.9rem; }
+.mirror-day-detail h3, .mirror-period-list h3 { margin: 0 0 0.45rem; font-size: 0.86rem; color: var(--gol-gray-dark); }
+.mirror-day-detail p, .mirror-period-list p { margin: 0; color: var(--gol-gray-medium); font-size: 0.82rem; }
+.mirror-day-detail ul, .mirror-period-list ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.mirror-day-detail li, .mirror-period-list li { display: flex; flex-wrap: wrap; gap: 0.35rem 0.7rem; align-items: center; font-size: 0.82rem; color: var(--gol-gray-dark); }
+.mirror-day-detail li.mine, .mirror-period-list li.mine { font-weight: 700; }
+.status { border-radius: 999px; padding: 0.12rem 0.5rem; font-size: 0.7rem; font-weight: 800; }
+.status.approved { background: #e0f2fe; color: #0369a1; }
+.status.pending { background: #fef3c7; color: #92400e; }
+
 @media (max-width: 640px) {
   .date-grid { grid-template-columns: 1fr; }
   .vacation-header h1 { font-size: 1.25rem; }
   :host ::ng-deep .vacation-card .p-card-body { padding: 1rem; }
+  .mirror-day { min-height: 2.7rem; }
 }
