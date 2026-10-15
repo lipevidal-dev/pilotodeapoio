@@ -4,7 +4,6 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { EmployeesComponent } from './employees.component';
-import { buildMonthGrid } from '../../components/operational-calendar/operational-calendar.utils';
 import { environment } from '../../../environments/environment';
 
 describe('EmployeesComponent — preferência de turno e FCF', () => {
@@ -48,39 +47,26 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
     http.expectOne(`${base}/employees`).flush([]);
   }
 
-  it('exibe seção FCF no popup', () => {
+  it('agrupa os checkboxes e mostra login e senha visíveis', () => {
     flushInit();
     component.openNew();
     fixture.detectChanges();
     const html = fixture.nativeElement as HTMLElement;
-    expect(html.textContent).toContain('Não alocar voos');
+    expect(html.textContent).not.toContain('Não alocar voos');
     expect(html.textContent).not.toContain('Preferência de turno');
     expect(html.textContent).not.toContain('Preferência principal de turno');
+    expect(html.textContent).toContain('Opções');
+    expect(html.textContent).toContain('PAO');
     expect(html.textContent).toContain('Cargo FCF');
+    expect(html.textContent).toContain('Comandante (CMTE)');
+    expect(html.textContent).toContain('Somente escala manual');
+    expect(html.textContent).toContain('Em instrução');
+    expect(html.textContent).toContain('Ativo');
     expect(html.textContent).toContain('Motor de Escala');
+    expect(html.querySelector('#formPortalPassword')?.getAttribute('type')).toBe('text');
+    expect(html.querySelector('#formPortalLogin')).not.toBeNull();
     expect(html.textContent).not.toContain('Alocações FCF');
-    expect(html.textContent).not.toContain('Preferência por dia específico');
-    expect(html.textContent).not.toContain('Alocar em turno específico');
-    expect(html.textContent).not.toContain('Alocar turno em dias específicos');
     expect(html.textContent).not.toContain('Não alocar turno');
-  });
-
-  it('calendário permite selecionar dias e resume bloqueios', () => {
-    flushInit();
-    component.openNew();
-    component.formNoFlightDates = [new Date(2026, 5, 10)];
-    fixture.detectChanges();
-    expect(component.noFlightSummary()).toContain('1 dia');
-  });
-
-  it('selecionar mês inteiro adiciona todos os dias do mês visível', () => {
-    flushInit();
-    component.openNew();
-    component.calendarViewYear = 2026;
-    component.calendarViewMonth = 6;
-    component.selectFullMonthForNoFlight();
-    const expected = buildMonthGrid(2026, 6).filter((c) => c.inMonth).length;
-    expect(component.formNoFlightDates.length).toBe(expected);
   });
 
   it('ao editar carrega dias sem voo do GET /employees/:id', () => {
@@ -93,6 +79,10 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
       cargoCode: 'PAO',
       cargoName: 'PAO',
       active: true,
+    });
+    http.expectOne(`${environment.apiBaseUrl}/employees/emp-1/portal-access`).flush({
+      portalLogin: null,
+      portalPassword: null,
     });
     http.expectOne(`${environment.apiBaseUrl}/employees/emp-1`).flush({
       id: 'emp-1',
@@ -137,6 +127,10 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
       cargoName: 'PAO',
       active: true,
     });
+    http.expectOne(`${environment.apiBaseUrl}/employees/emp-1/portal-access`).flush({
+      portalLogin: null,
+      portalPassword: null,
+    });
     http.expectOne(`${environment.apiBaseUrl}/employees/emp-1`).flush({
       id: 'emp-1',
       name: 'Teste',
@@ -160,5 +154,61 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
     });
     fixture.detectChanges();
     expect(component.formIsFcf).toBeTrue();
+  });
+
+  it('salvar edição não envia dias sem voo nem preferência de turno', () => {
+    flushInit();
+    component.openEdit({
+      id: 'emp-1',
+      name: 'Teste',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'PAO',
+      active: true,
+    });
+    http.expectOne(`${environment.apiBaseUrl}/employees/emp-1/portal-access`).flush({
+      portalLogin: 'teste',
+      portalPassword: 'senha-vista',
+    });
+    http.expectOne(`${environment.apiBaseUrl}/employees/emp-1`).flush({
+      id: 'emp-1',
+      name: 'Teste',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'PAO',
+      seniorityNumber: 1,
+      seniorityLabel: '1',
+      active: true,
+      birthDate: null,
+      noFlightDates: ['2026-06-05'],
+      restrictedShiftIds: ['s-t8'],
+      restrictedShifts: [],
+      preferredShiftIds: ['s-t6'],
+      preferredShifts: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    expect(component.formPortalPassword).toBe('senha-vista');
+    component.save();
+    const req = http.expectOne(`${environment.apiBaseUrl}/employees/emp-1`);
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body.noFlightDates).toBeUndefined();
+    expect(req.request.body.preferredShiftIds).toBeUndefined();
+    expect(req.request.body.restrictedShiftIds).toBeUndefined();
+    expect(req.request.body.roleId).toBe('role-pao');
+    req.flush({
+      id: 'emp-1',
+      name: 'Teste',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'PAO',
+      active: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    http.expectOne(`${environment.apiBaseUrl}/employees`).flush([]);
   });
 });

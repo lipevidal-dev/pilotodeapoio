@@ -4,6 +4,7 @@ import {
   createEmployeeController,
   deleteEmployeeController,
   getEmployeeController,
+  getEmployeePortalAccessController,
   listEmployeesController,
   updateEmployeeController,
 } from "../controllers/employee.controller.js";
@@ -91,6 +92,7 @@ export async function registerRoutes(app: FastifyInstance) {
   app.get("/auth/me", meController);
 
   app.get("/employees", listEmployeesController);
+  app.get("/employees/:id/portal-access", getEmployeePortalAccessController);
   app.get("/employees/:id", getEmployeeController);
   app.post("/employees", createEmployeeController);
   app.put("/employees/:id", updateEmployeeController);

@@ -18,17 +18,11 @@ import { InputTextModule } from 'primeng/inputtext';
 
 import { InputNumberModule } from 'primeng/inputnumber';
 
-import { SelectModule } from 'primeng/select';
-
-import { MultiSelectModule } from 'primeng/multiselect';
-
 import { SelectButtonModule } from 'primeng/selectbutton';
 
 import { CheckboxModule } from 'primeng/checkbox';
 
 import { DatePickerModule } from 'primeng/datepicker';
-
-import { MessageModule } from 'primeng/message';
 
 import { ConfirmationService, MessageService } from 'primeng/api';
 
@@ -38,13 +32,7 @@ import { RoleService } from '../../services/role.service';
 
 import { ShiftService } from '../../services/shift.service';
 
-import { OperationalCalendarComponent } from '../../components/operational-calendar/operational-calendar.component';
-
-import { buildMonthGrid } from '../../components/operational-calendar/operational-calendar.utils';
-
 import { dateToIso, formatIsoDate } from '../../utils/date-format';
-
-import { mergeDates } from '../../utils/date-range-utils';
 
 import { formatSeniorityLabel, sortEmployeesBySeniority } from '../../utils/employee-sort.util';
 
@@ -85,19 +73,11 @@ type DialogMode = 'create' | 'edit';
 
     InputNumberModule,
 
-    SelectModule,
-
-    MultiSelectModule,
-
     SelectButtonModule,
 
     CheckboxModule,
 
     DatePickerModule,
-
-    MessageModule,
-
-    OperationalCalendarComponent,
 
   ],
 
@@ -186,10 +166,6 @@ export class EmployeesComponent implements OnInit {
     { label: 'Sexta', value: 5 },
     { label: 'Sábado', value: 6 },
   ];
-
-  calendarViewYear = new Date().getFullYear();
-
-  calendarViewMonth = new Date().getMonth() + 1;
 
   filter = signal<EmployeeFilter>('all');
 
@@ -562,40 +538,20 @@ export class EmployeesComponent implements OnInit {
 
     });
 
-  }
-
-
-
-  onCalendarPeriodChange(period: { year: number; month: number }): void {
-
-    this.calendarViewYear = period.year;
-
-    this.calendarViewMonth = period.month;
+    this.employeeService.getPortalAccess(emp.id).subscribe({
+      next: (access) => {
+        if (this.editingId !== emp.id || this.dialogMode !== 'edit') return;
+        if (access.portalPassword) this.formPortalPassword = access.portalPassword;
+      },
+    });
 
   }
 
 
 
-  selectFullMonthForNoFlight(): void {
-
-    const days = buildMonthGrid(this.calendarViewYear, this.calendarViewMonth)
-
-      .filter((c) => c.inMonth)
-
-      .map((c) => c.date);
-
-    this.formNoFlightDates = mergeDates(this.formNoFlightDates, days);
-
-  }
-
-
-
-  noFlightSummary(): string {
-
-    const n = this.formNoFlightDates.length;
-
-    return n === 0 ? 'Nenhum dia bloqueado para voo' : `${n} dia(s) bloqueado(s) para voo`;
-
+  setFormRole(roleId: string, checked: boolean): void {
+    if (!checked) return;
+    this.formRoleId = roleId;
   }
 
 
@@ -756,8 +712,6 @@ export class EmployeesComponent implements OnInit {
 
     const birthDate = this.formBirthDate ? dateToIso(this.formBirthDate) : null;
 
-    const noFlightDates = [...new Set(this.formNoFlightDates.map((d) => dateToIso(d)))].sort();
-
     if (this.dialogMode === 'create') {
 
       const payload: CreateEmployeePayload = {
@@ -773,8 +727,6 @@ export class EmployeesComponent implements OnInit {
         cif: this.formCif.trim() || null,
 
         active: this.formActive,
-
-        noFlightDates,
 
         isFcf,
 
@@ -825,8 +777,6 @@ export class EmployeesComponent implements OnInit {
         cif: this.formCif.trim() || null,
 
         active: this.formActive,
-
-        noFlightDates,
 
         isFcf,
 

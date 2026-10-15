@@ -91,6 +91,8 @@ model User {
   /** Login do portal (ex.: lfpcoordenador). E-mail continua válido para admins. */
   login        String?  @unique
   passwordHash String   @map("password_hash")
+  /** Cópia consultável pelo admin no cadastro. Ausente nas senhas gravadas só como hash. */
+  passwordVisible String? @map("password_visible")
   role         UserRole @default(OPERATOR)
   employeeId   String?  @map("employee_id")
   mfaEnabled   Boolean  @default(false) @map("mfa_enabled")
