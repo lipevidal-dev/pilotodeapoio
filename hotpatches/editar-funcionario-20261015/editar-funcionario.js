@@ -24,6 +24,7 @@
     ".lic-tab{border:1px solid #d1d5db;border-bottom:none;background:#f3f4f6;color:#4b5563;border-radius:8px 8px 0 0;padding:.45rem .9rem;font-weight:600;cursor:pointer;position:relative;top:1px}",
     ".lic-tab.active{background:#fff;color:#111827}",
     ".lic-panel{display:flex;flex-direction:column;gap:.75rem}",
+    ".form-stack[hidden],.lic-panel[hidden],.lic-rows[hidden],.lic-add[hidden],.lic-error[hidden]{display:none!important}",
     ".lic-rows{display:flex;flex-direction:column;gap:.55rem}",
     ".lic-row{display:grid;grid-template-columns:11rem minmax(0,1fr) auto;gap:.5rem;align-items:center}",
     ".lic-row input{width:100%;border:1px solid #d1d5db;border-radius:6px;padding:.45rem .55rem;background:#fff}",
@@ -244,7 +245,8 @@
     });
   }
 
-  function showLicTab(dialog, name) {
+  function applyLicTab(dialog) {
+    var name = dialog.dataset.licTab || "cadastro";
     var stack = dialog.querySelector(".form-stack");
     var panel = dialog.querySelector(".lic-panel.lic-hot");
     dialog.querySelectorAll(".lic-tabs .lic-tab").forEach(function (tab) {
@@ -252,6 +254,11 @@
     });
     if (stack) stack.hidden = name !== "cadastro";
     if (panel) panel.hidden = name !== "licencas";
+  }
+
+  function showLicTab(dialog, name) {
+    dialog.dataset.licTab = name || "cadastro";
+    applyLicTab(dialog);
   }
 
   function renderLicenses(dialog) {
@@ -448,13 +455,14 @@
     var legacy = /Não alocar voos|Preferência de turno|Turno preferencial/.test(stack.textContent || "") || !!stack.querySelector("p-select");
     tunePassword(stack);
     tuneSeniority(stack);
-    if (!legacy && stack.querySelector(".check-group")) return;
-    hideLegacy(stack);
-    if (!legacy) return;
-    var box = ensureOptions(stack);
-    place(stack, box);
-    syncRoles(stack);
-    loadPassword(window.__empDlg);
+    if (legacy || !stack.querySelector(".check-group")) hideLegacy(stack);
+    if (legacy) {
+      var box = ensureOptions(stack);
+      place(stack, box);
+      syncRoles(stack);
+      loadPassword(window.__empDlg);
+    }
+    applyLicTab(dialog);
   }
 
   var queued = false;

@@ -54,6 +54,11 @@
   gap: 1rem;
 }
 
+.form-stack[hidden],
+.lic-panel[hidden] {
+  display: none !important;
+}
+
 .identity-row {
   display: grid;
   grid-template-columns: 7.5rem minmax(0, 1fr);
