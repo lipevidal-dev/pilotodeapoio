@@ -50,7 +50,13 @@ describe('PortalVacationRequestComponent', () => {
       ],
     });
     fixture.detectChanges();
+    const text = fixture.nativeElement.textContent as string;
     expect(fixture.componentInstance.periods().length).toBe(1);
-    expect(fixture.nativeElement.textContent).toContain('Bruno');
+    expect(text).toContain('Bruno');
+    expect(text).toContain('FÉRIAS');
+    expect(text).toContain('Pedidos neste mês');
+    expect(text).not.toContain('Clique no dia');
+    expect(fixture.nativeElement.querySelectorAll('.op-cal-grid button').length).toBe(0);
+    expect(fixture.nativeElement.querySelectorAll('.op-cal-grid .op-cal-day').length).toBe(42);
   });
 });

@@ -19,62 +19,77 @@ input:focus, textarea:focus { outline: none; border-color: var(--gol-orange); bo
 :host ::ng-deep .vacation-submit .p-button { width: 100%; justify-content: center; }
 
 .mirror-cal { display: flex; flex-direction: column; gap: 0.85rem; }
-.mirror-cal-head { display: flex; justify-content: space-between; gap: 0.75rem; align-items: flex-start; }
+.mirror-cal-head { display: flex; justify-content: space-between; gap: 0.75rem; align-items: center; }
 .mirror-cal-head h2 { margin: 0; font-size: 1.05rem; color: var(--gol-gray-dark); }
-.mirror-cal-head p { margin: 0.3rem 0 0; color: var(--gol-gray-medium); font-size: 0.82rem; font-weight: 500; }
 .mirror-cal-status { color: var(--gol-gray-medium); font-size: 0.78rem; font-weight: 700; }
-.mirror-cal-panel { border: 1px solid #e8eaed; border-radius: 10px; padding: 0.7rem 0.75rem 0.85rem; background: #fff; }
-.mirror-cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.45rem; }
-.mirror-cal-title { font-size: 0.92rem; font-weight: 700; color: var(--gol-gray-dark); }
-.mirror-cal-nav-btn { border: none; background: transparent; color: var(--gol-orange); cursor: pointer; padding: 0.25rem 0.45rem; border-radius: 6px; }
-.mirror-cal-nav-btn:hover { background: #fff4ed; }
-.mirror-cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 2px; }
-.mirror-cal-weekdays span { text-align: center; font-size: 0.68rem; font-weight: 700; color: #9ca3af; padding: 0.15rem 0; }
-.mirror-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
 
-.mirror-day {
-  min-height: 3.15rem;
+.op-cal { max-width: 400px; display: flex; flex-direction: column; gap: 0.4rem; }
+.op-cal-panel {
+  padding: 0.5rem 0.55rem;
+  background: var(--gol-white);
+  border: 1px solid #e8eaed;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  user-select: none;
+}
+.op-cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem; }
+.op-cal-title { font-size: 0.85rem; font-weight: 600; color: var(--gol-gray-dark); }
+.op-cal-nav {
+  border: none;
+  background: transparent;
+  color: var(--gol-orange);
+  cursor: pointer;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.7rem;
+  border-radius: 4px;
+}
+.op-cal-nav:hover { background: #fff4ed; }
+.op-cal-weekdays,
+.op-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.op-cal-weekdays { gap: 1px; margin-bottom: 2px; }
+.op-cal-wd { text-align: center; font-size: 0.68rem; font-weight: 600; color: #9ca3af; padding: 0.1rem 0; }
+.op-cal-day {
+  min-height: 42px;
+  height: 42px;
   border: 1px solid #eceff3;
-  border-radius: 7px;
+  border-radius: 5px;
   background: #fafbfc;
   color: var(--gol-gray-dark);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.1rem;
-  padding: 0.15rem 0.1rem;
-  font: inherit;
-  cursor: pointer;
+  gap: 0;
+  padding: 1px 2px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.1;
+  cursor: default;
 }
-.mirror-day.out-month { opacity: 0.38; }
-.mirror-day.weekend:not(.has-approved):not(.has-pending):not(.in-range) { background: #f4f5f7; }
-.mirror-day.today { box-shadow: inset 0 0 0 1px rgba(241, 90, 34, 0.45); }
-.mirror-day.has-approved { background: #e0f2fe; border-color: #7dd3fc; }
-.mirror-day.has-pending { background: #fef3c7; border-color: #fcd34d; }
-.mirror-day.has-approved.has-pending {
-  background: linear-gradient(135deg, #e0f2fe 50%, #fef3c7 50%);
-  border-color: #fbbf24;
+.op-cal-day.out-month { opacity: 0.35; }
+.op-cal-day.weekend:not(.occupied) { background: #f4f5f7; }
+.op-cal-day.today:not(.occupied) { box-shadow: inset 0 0 0 1px rgba(241, 90, 34, 0.45); }
+.op-cal-day.occupied { background: #f8fafc; }
+.op-cal-day-num { font-size: 0.62rem; font-weight: 500; color: #9ca3af; line-height: 1; }
+.op-cal-badge {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.mirror-day.is-mine { box-shadow: inset 0 0 0 2px var(--gol-orange); }
-.mirror-day.in-range { outline: 2px solid rgba(241, 90, 34, 0.35); }
-.mirror-day.selected { border-color: var(--gol-orange); }
-.mirror-day-num { font-size: 0.78rem; font-weight: 700; line-height: 1; }
-.mirror-day-count { font-size: 0.62rem; font-weight: 800; color: #0369a1; line-height: 1; }
+.op-cal-day.occupied .op-cal-badge.kind-ferias { background: #e0f2fe; color: #0369a1; }
+.op-cal-day.occupied .op-cal-badge.kind-fp { background: #fef9c3; color: #854d0e; }
 
-.mirror-legend { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; color: var(--gol-gray-medium); font-size: 0.75rem; font-weight: 700; }
-.swatch { display: inline-block; width: 0.72rem; height: 0.72rem; border-radius: 3px; margin-right: 0.3rem; vertical-align: -1px; }
-.swatch-approved { background: #e0f2fe; border: 1px solid #7dd3fc; }
-.swatch-pending { background: #fef3c7; border: 1px solid #fcd34d; }
-.swatch-mine { background: #fff; border: 2px solid var(--gol-orange); }
-.swatch-range { background: #fff7f2; outline: 2px solid rgba(241, 90, 34, 0.35); }
-
-.mirror-day-detail, .mirror-period-list { background: #f8fafc; border: 1px solid #e8eaed; border-radius: 10px; padding: 0.8rem 0.9rem; }
-.mirror-day-detail h3, .mirror-period-list h3 { margin: 0 0 0.45rem; font-size: 0.86rem; color: var(--gol-gray-dark); }
-.mirror-day-detail p, .mirror-period-list p { margin: 0; color: var(--gol-gray-medium); font-size: 0.82rem; }
-.mirror-day-detail ul, .mirror-period-list ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
-.mirror-day-detail li, .mirror-period-list li { display: flex; flex-wrap: wrap; gap: 0.35rem 0.7rem; align-items: center; font-size: 0.82rem; color: var(--gol-gray-dark); }
-.mirror-day-detail li.mine, .mirror-period-list li.mine { font-weight: 700; }
+.mirror-period-list { background: #f8fafc; border: 1px solid #e8eaed; border-radius: 10px; padding: 0.8rem 0.9rem; }
+.mirror-period-list h3 { margin: 0 0 0.45rem; font-size: 0.86rem; color: var(--gol-gray-dark); }
+.mirror-period-list ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.mirror-period-list li { display: flex; flex-wrap: wrap; gap: 0.35rem 0.7rem; align-items: center; font-size: 0.82rem; color: var(--gol-gray-dark); }
 .status { border-radius: 999px; padding: 0.12rem 0.5rem; font-size: 0.7rem; font-weight: 800; }
 .status.approved { background: #e0f2fe; color: #0369a1; }
 .status.pending { background: #fef3c7; color: #92400e; }
@@ -83,5 +98,4 @@ input:focus, textarea:focus { outline: none; border-color: var(--gol-orange); bo
   .date-grid { grid-template-columns: 1fr; }
   .vacation-header h1 { font-size: 1.25rem; }
   :host ::ng-deep .vacation-card .p-card-body { padding: 1rem; }
-  .mirror-day { min-height: 2.7rem; }
 }

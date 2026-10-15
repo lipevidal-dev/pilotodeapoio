@@ -3,4 +3,4 @@
 Hotpatch de produção (2026-10-15): calendário de pedidos **aprovados** e **pendentes** em `/portal/ferias`.
 
 - API: `GET /portal/vacations/calendar?year=&month=`
-- UI: `ferias-calendario.js` injetado no `index.html`
+- UI: `ferias-calendario.js?v=2` no `index.html` — espelho compacto só leitura (badge FÉRIAS/PEND, sem clique). O resumo **Pedidos neste mês** permanece.

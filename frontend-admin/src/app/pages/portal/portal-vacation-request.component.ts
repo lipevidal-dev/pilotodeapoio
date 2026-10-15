@@ -17,7 +17,6 @@ import {
 import { dateToIso, formatIsoDate } from '../../utils/date-format';
 import {
   expandVacationPeriodsToDays,
-  isIsoInInclusiveRange,
   vacationStatusLabel,
 } from '../../utils/vacation-calendar.util';
 import type {
@@ -50,17 +49,11 @@ export class PortalVacationRequestComponent implements OnInit {
   readonly calendarLoading = signal(false);
   readonly calendarError = signal<string | null>(null);
   readonly periods = signal<PortalVacationCalendarPeriod[]>([]);
-  readonly selectedDayIso = signal<string | null>(null);
 
   readonly weekdays = weekdayLabels();
   readonly monthLabel = computed(() => monthTitle(this.viewYear(), this.viewMonth()));
   readonly gridCells = computed(() => buildMonthGrid(this.viewYear(), this.viewMonth()));
   readonly daysByIso = computed(() => expandVacationPeriodsToDays(this.periods()));
-  readonly selectedDayEntries = computed(() => {
-    const iso = this.selectedDayIso();
-    if (!iso) return [];
-    return this.daysByIso()[iso] ?? [];
-  });
   readonly monthPeriods = computed(() => {
     const prefix = `${this.viewYear()}-${String(this.viewMonth()).padStart(2, '0')}`;
     return this.periods().filter((period) => period.startDate <= `${prefix}-31` && period.endDate >= `${prefix}-01`);
@@ -105,29 +98,25 @@ export class PortalVacationRequestComponent implements OnInit {
     return isToday(date);
   }
 
-  isInFormRange(date: Date): boolean {
-    return isIsoInInclusiveRange(dateToIso(date), this.startDate, this.endDate);
+  cellBadge(cell: CalendarCell): string {
+    const entries = this.entriesFor(cell);
+    if (!entries.length) return '';
+    if (entries.every((entry) => entry.status === 'PENDING')) return 'PEND';
+    return 'FÉRIAS';
   }
 
-  isSelectedDay(date: Date): boolean {
-    return this.selectedDayIso() === dateToIso(date);
+  badgeClass(cell: CalendarCell): string {
+    const entries = this.entriesFor(cell);
+    if (entries.every((entry) => entry.status === 'PENDING')) return 'kind-fp';
+    return 'kind-ferias';
   }
 
-  onDayClick(cell: CalendarCell): void {
-    const iso = dateToIso(cell.date);
-    this.selectedDayIso.set(iso);
-    if (iso < this.minDate) return;
-    if (!this.startDate || (this.startDate && this.endDate)) {
-      this.startDate = iso;
-      this.endDate = '';
-      return;
-    }
-    if (iso < this.startDate) {
-      this.endDate = this.startDate;
-      this.startDate = iso;
-      return;
-    }
-    this.endDate = iso;
+  cellTitle(cell: CalendarCell): string {
+    const entries = this.entriesFor(cell);
+    if (!entries.length) return '';
+    return entries
+      .map((entry) => `${entry.mine ? 'Você' : entry.employeeName} (${this.statusLabel(entry.status)})`)
+      .join('\n');
   }
 
   submit(): void {

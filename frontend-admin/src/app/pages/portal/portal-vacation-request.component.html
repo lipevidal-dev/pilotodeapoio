@@ -3,17 +3,14 @@
     <span class="vacation-icon"><i class="pi pi-sun"></i></span>
     <div>
       <h1>Solicitar férias</h1>
-      <p>Veja no calendário quem já pediu o período (aprovado ou pendente) antes de enviar o seu pedido.</p>
+      <p>Consulte o espelho antes de pedir: dias marcados já têm férias aprovadas ou pendentes.</p>
     </div>
   </header>
 
   <p-card styleClass="vacation-card gol-card-accent">
     <div class="mirror-cal">
       <div class="mirror-cal-head">
-        <div>
-          <h2>Espelho de férias</h2>
-          <p>Azul = aprovado. Amarelo = aguardando aprovação. Clique no dia para ver os nomes e preencher as datas.</p>
-        </div>
+        <h2>Espelho de férias</h2>
         @if (calendarLoading()) {
           <span class="mirror-cal-status">Carregando…</span>
         }
@@ -23,75 +20,44 @@
         <p-message severity="warn" [text]="message" />
       }
 
-      <div class="mirror-cal-panel">
-        <div class="mirror-cal-nav">
-          <button type="button" class="mirror-cal-nav-btn" (click)="prevMonth()" aria-label="Mês anterior">
-            <i class="pi pi-chevron-left"></i>
-          </button>
-          <span class="mirror-cal-title">{{ monthLabel() }}</span>
-          <button type="button" class="mirror-cal-nav-btn" (click)="nextMonth()" aria-label="Próximo mês">
-            <i class="pi pi-chevron-right"></i>
-          </button>
-        </div>
-
-        <div class="mirror-cal-weekdays">
-          @for (wd of weekdays; track wd) {
-            <span>{{ wd }}</span>
-          }
-        </div>
-
-        <div class="mirror-cal-grid">
-          @for (cell of gridCells(); track cell.date.getTime()) {
-            <button
-              type="button"
-              class="mirror-day"
-              [class.out-month]="!cell.inMonth"
-              [class.weekend]="isWeekendDay(cell.date)"
-              [class.today]="isTodayDay(cell.date)"
-              [class.in-range]="isInFormRange(cell.date)"
-              [class.selected]="isSelectedDay(cell.date)"
-              [class.has-approved]="entriesFor(cell).some(e => e.status === 'APPROVED')"
-              [class.has-pending]="entriesFor(cell).some(e => e.status === 'PENDING')"
-              [class.is-mine]="entriesFor(cell).some(e => e.mine)"
-              [title]="cell.date | date: 'dd/MM/yyyy'"
-              (click)="onDayClick(cell)"
-            >
-              <span class="mirror-day-num">{{ cell.date.getDate() }}</span>
-              @if (entriesFor(cell).length > 0) {
-                <span class="mirror-day-count">{{ entriesFor(cell).length }}</span>
-              }
+      <div class="op-cal">
+        <div class="op-cal-panel">
+          <div class="op-cal-header">
+            <button type="button" class="op-cal-nav" (click)="prevMonth()" aria-label="Mês anterior">
+              <i class="pi pi-chevron-left"></i>
             </button>
-          }
+            <span class="op-cal-title">{{ monthLabel() }}</span>
+            <button type="button" class="op-cal-nav" (click)="nextMonth()" aria-label="Próximo mês">
+              <i class="pi pi-chevron-right"></i>
+            </button>
+          </div>
+
+          <div class="op-cal-weekdays">
+            @for (wd of weekdays; track wd) {
+              <span class="op-cal-wd">{{ wd }}</span>
+            }
+          </div>
+
+          <div class="op-cal-grid" aria-hidden="true">
+            @for (cell of gridCells(); track cell.date.getTime()) {
+              <div
+                class="op-cal-day"
+                [class.out-month]="!cell.inMonth"
+                [class.weekend]="isWeekendDay(cell.date)"
+                [class.today]="isTodayDay(cell.date)"
+                [class.occupied]="entriesFor(cell).length > 0"
+                [title]="cellTitle(cell)"
+              >
+                @if (entriesFor(cell).length > 0) {
+                  <span class="op-cal-day-num">{{ cell.date.getDate() }}</span>
+                  <span class="op-cal-badge" [ngClass]="badgeClass(cell)">{{ cellBadge(cell) }}</span>
+                } @else {
+                  {{ cell.date.getDate() }}
+                }
+              </div>
+            }
+          </div>
         </div>
-      </div>
-
-      <div class="mirror-legend">
-        <span><i class="swatch swatch-approved"></i> Aprovado</span>
-        <span><i class="swatch swatch-pending"></i> Pendente</span>
-        <span><i class="swatch swatch-mine"></i> Meu pedido</span>
-        <span><i class="swatch swatch-range"></i> Período escolhido</span>
-      </div>
-
-      <div class="mirror-day-detail">
-        @if (selectedDayIso(); as iso) {
-          <h3>{{ formatDate(iso) }}</h3>
-          @if (selectedDayEntries().length === 0) {
-            <p>Ninguém pediu férias neste dia.</p>
-          } @else {
-            <ul>
-              @for (entry of selectedDayEntries(); track entry.vacationId + entry.employeeId) {
-                <li [class.mine]="entry.mine">
-                  <strong>{{ entry.mine ? 'Você' : entry.employeeName }}</strong>
-                  <span class="status" [class.approved]="entry.status === 'APPROVED'" [class.pending]="entry.status === 'PENDING'">
-                    {{ statusLabel(entry.status) }}
-                  </span>
-                </li>
-              }
-            </ul>
-          }
-        } @else {
-          <p>Toque um dia para ver quem já pediu férias naquela data.</p>
-        }
       </div>
 
       @if (monthPeriods().length > 0) {
@@ -99,7 +65,7 @@
           <h3>Pedidos neste mês</h3>
           <ul>
             @for (period of monthPeriods(); track period.id) {
-              <li [class.mine]="period.mine">
+              <li>
                 <strong>{{ period.mine ? 'Você' : period.employeeName }}</strong>
                 <span>{{ formatDate(period.startDate) }} a {{ formatDate(period.endDate) }}</span>
                 <span class="status" [class.approved]="period.status === 'APPROVED'" [class.pending]="period.status === 'PENDING'">
