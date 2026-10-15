@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { environment } from '../../environments/environment';
 import { AuthService } from '../services/auth.service';
-import { isAdminRole, isEmployeeRole } from '../models/auth.models';
+import { homeRouteForUser, isAdminRole, isEmployeeRole, isEmployeesOnlyAdminUser } from '../models/auth.models';
 
 export const guestGuard: CanActivateFn = () => {
   const router = inject(Router);
@@ -14,7 +14,7 @@ export const guestGuard: CanActivateFn = () => {
   if (!auth.isAuthenticated() || !user) {
     return true;
   }
-  return router.createUrlTree([isAdminRole(user.role) ? '/dashboard' : '/portal']);
+  return router.createUrlTree([homeRouteForUser(user)]);
 };
 
 export const adminGuard: CanActivateFn = () => {
@@ -46,7 +46,7 @@ export const employeeGuard: CanActivateFn = () => {
     return router.createUrlTree(['/login']);
   }
   if (!isEmployeeRole(user.role)) {
-    return router.createUrlTree(['/dashboard']);
+    return router.createUrlTree([homeRouteForUser(user)]);
   }
   return true;
 };
@@ -62,5 +62,25 @@ export const authBootstrapGuard: CanActivateFn = () => {
   if (!auth.isAuthenticated() || !user) {
     return router.createUrlTree(['/login']);
   }
-  return router.createUrlTree([isAdminRole(user.role) ? '/dashboard' : '/portal']);
+  return router.createUrlTree([homeRouteForUser(user)]);
+};
+
+export const employeesAdminChildGuard: CanActivateFn = (_route, state) => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  if (!environment.authRequired) {
+    return true;
+  }
+  const user = auth.user();
+  if (!auth.isAuthenticated() || !user) {
+    return router.createUrlTree(['/login']);
+  }
+  if (!isEmployeesOnlyAdminUser(user)) {
+    return true;
+  }
+  const path = state.url.split('?')[0];
+  if (path === '/funcionarios' || path.startsWith('/funcionarios/')) {
+    return true;
+  }
+  return router.createUrlTree(['/funcionarios']);
 };

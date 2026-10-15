@@ -11,6 +11,27 @@ export function normalizePortalLogin(value: string | null | undefined): string |
   return login.length === 0 ? null : login;
 }
 
+export function stripLoginDiacritics(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+/** Variantes aceitas na tela de login (com/sem cedilha e após o sanitize antigo). */
+export function expandLoginCandidates(value: string | null | undefined): string[] {
+  const normalized = normalizePortalLogin(value);
+  if (!normalized) return [];
+  const ascii = stripLoginDiacritics(normalized);
+  const stripped = normalized.replace(/[^a-z0-9._@-]/g, "");
+  const out = [normalized, ascii, stripped];
+  if (ascii === "licencasadmin" || stripped === "licenasadmin") {
+    out.push("licencasadmin", "licenasadmin");
+  }
+  return [...new Set(out)];
+}
+
+export function isEmployeesOnlyAdminLogin(value: string | null | undefined): boolean {
+  return expandLoginCandidates(value).some((candidate) => candidate === "licencasadmin" || candidate === "licenasadmin");
+}
+
 export function isValidPortalLogin(login: string): boolean {
   return (
     login.length >= 3 &&

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isPortalLoginTaken, normalizePortalLogin } from "../domain/auth/portal-login.js";
+import {
+  expandLoginCandidates,
+  isEmployeesOnlyAdminLogin,
+  isPortalLoginTaken,
+  normalizePortalLogin,
+} from "../domain/auth/portal-login.js";
 import { updateEmployeeSchema } from "../interfaces/http/dto/employee.dto.js";
 
 const employeeId = "dd520d92-4840-4279-831d-ed33122c52a6";
@@ -8,6 +13,13 @@ describe("portal login", () => {
   it("normaliza maiúsculas e espaços", () => {
     expect(normalizePortalLogin("  LfpCoordenador  ")).toBe("lfpcoordenador");
     expect(normalizePortalLogin("   ")).toBeNull();
+  });
+
+  it("aceita licençasadmin com e sem cedilha", () => {
+    expect(expandLoginCandidates("licençasadmin")).toContain("licencasadmin");
+    expect(expandLoginCandidates("licençasadmin")).toContain("licenasadmin");
+    expect(isEmployeesOnlyAdminLogin("licençasadmin")).toBe(true);
+    expect(isEmployeesOnlyAdminLogin("licencasadmin")).toBe(true);
   });
 
   it("não trata o próprio colaborador como login em uso", () => {

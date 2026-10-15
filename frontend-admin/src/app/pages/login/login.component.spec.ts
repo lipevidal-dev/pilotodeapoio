@@ -32,6 +32,13 @@ describe('LoginComponent', () => {
     expect(el.querySelector('input#login')).toBeTruthy();
   });
 
+  it('converte cedilha no login digitado', () => {
+    const comp = fixture.componentInstance;
+    comp.login = 'licençasadmin';
+    comp.sanitizeLogin();
+    expect(comp.login).toBe('licencasadmin');
+  });
+
   it('submete credenciais para API', () => {
     const comp = fixture.componentInstance;
     comp.login = 'admin@escala.local';

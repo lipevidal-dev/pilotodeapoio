@@ -40,4 +40,13 @@ describe('auth guards', () => {
     const result = runGuard(employeeGuard, { id: '1', name: 'A', email: 'a@b.c', role: 'ADMIN' }, true);
     expect(result).toEqual(router.createUrlTree(['/dashboard']));
   });
+
+  it('guestGuard redireciona licencasadmin para funcionarios', () => {
+    const result = runGuard(
+      guestGuard,
+      { id: '3', name: 'Licenças', email: 'licencasadmin', role: 'ADMIN' },
+      true,
+    );
+    expect(result).toEqual(router.createUrlTree(['/funcionarios']));
+  });
 });

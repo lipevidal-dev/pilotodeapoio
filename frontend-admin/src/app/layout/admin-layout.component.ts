@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '../services/auth.service';
 import { environment } from '../../environments/environment';
+import { isEmployeesOnlyAdminUser } from '../models/auth.models';
 
 interface NavItem {
   label: string;
@@ -29,7 +30,7 @@ export class AdminLayoutComponent {
   readonly authRequired = environment.authRequired;
   readonly userName = () => this.auth.user()?.name ?? 'Administrador';
 
-  readonly navSections: NavSection[] = [
+  private readonly fullNavSections: NavSection[] = [
     {
       items: [
         { label: 'Dashboard', icon: 'pi pi-home', route: '/dashboard' },
@@ -58,6 +59,22 @@ export class AdminLayoutComponent {
       ],
     },
   ];
+
+  employeesOnlyAdmin(): boolean {
+    return isEmployeesOnlyAdminUser(this.auth.user());
+  }
+
+  get navSections(): NavSection[] {
+    if (this.employeesOnlyAdmin()) {
+      return [
+        {
+          title: 'Configurações',
+          items: [{ label: 'Funcionários', icon: 'pi pi-users', route: '/funcionarios' }],
+        },
+      ];
+    }
+    return this.fullNavSections;
+  }
 
   logout(): void {
     this.auth.logout();

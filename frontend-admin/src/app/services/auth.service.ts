@@ -10,7 +10,7 @@ import type {
   MfaChallengeResponse,
   MfaSetupChallengeResponse,
 } from '../models/auth.models';
-import { homeRouteForRole } from '../models/auth.models';
+import { homeRouteForUser } from '../models/auth.models';
 
 const STORAGE_TOKEN = 'escala_auth_token';
 const STORAGE_USER = 'escala_auth_user';
@@ -114,7 +114,7 @@ export class AuthService {
       void this.router.navigate(['/login']);
       return;
     }
-    void this.router.navigate([homeRouteForRole(user.role)]);
+    void this.router.navigate([homeRouteForUser(user)]);
   }
 
   private persistSession(token: string, user: AuthUser): void {

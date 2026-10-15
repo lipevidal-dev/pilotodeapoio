@@ -8,7 +8,7 @@ import { PasswordModule } from 'primeng/password';
 import { ButtonModule } from 'primeng/button';
 import { MessageModule } from 'primeng/message';
 import { AuthService } from '../../services/auth.service';
-import { homeRouteForRole } from '../../models/auth.models';
+import { homeRouteForUser } from '../../models/auth.models';
 import {
   LOGIN_TRANSITION_TOTAL_MS,
   LoginTransitionComponent,
@@ -63,7 +63,11 @@ export class LoginComponent implements OnInit, OnDestroy {
   }
 
   sanitizeLogin(): void {
-    this.login = this.login.replace(/[^a-zA-Z0-9._@-]/g, '').slice(0, 20);
+    this.login = this.login
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9._@-]/g, '')
+      .slice(0, 20);
   }
 
   submit(): void {
@@ -91,7 +95,7 @@ export class LoginComponent implements OnInit, OnDestroy {
           return;
         }
         this.loading.set(false);
-        this.pendingRoute = homeRouteForRole(res.user.role);
+        this.pendingRoute = homeRouteForUser(res.user);
         this.didNavigateAfterLogin = false;
         this.showTransition.set(true);
         // Navegação garantida no pai (não depende só do output do filho).

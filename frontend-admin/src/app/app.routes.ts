@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
 import { AdminLayoutComponent } from './layout/admin-layout.component';
 import { EmployeeLayoutComponent } from './components/employee-layout/employee-layout.component';
-import { adminGuard, employeeGuard, guestGuard } from './guards/auth.guard';
+import { adminGuard, employeeGuard, employeesAdminChildGuard, guestGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
   {
@@ -50,6 +50,7 @@ export const routes: Routes = [
     path: '',
     component: AdminLayoutComponent,
     canActivate: [adminGuard],
+    canActivateChild: [employeesAdminChildGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
       {

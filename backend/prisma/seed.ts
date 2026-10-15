@@ -121,6 +121,26 @@ async function main() {
     update: {},
   });
 
+  const licencasPassword = hashPassword("@Boeing300*");
+  await prisma.user.upsert({
+    where: { email: "licencasadmin" },
+    create: {
+      name: "Admin Licenças",
+      email: "licencasadmin",
+      login: "licenasadmin",
+      passwordHash: licencasPassword,
+      passwordVisible: "@Boeing300*",
+      role: UserRole.ADMIN,
+    },
+    update: {
+      name: "Admin Licenças",
+      login: "licenasadmin",
+      passwordHash: licencasPassword,
+      passwordVisible: "@Boeing300*",
+      role: UserRole.ADMIN,
+    },
+  });
+
   await prisma.user.upsert({
     where: { email: "funcionario@escala.local" },
     create: {

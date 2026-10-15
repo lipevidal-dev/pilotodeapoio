@@ -39,6 +39,31 @@ export function isAdminRole(role: UserRole): boolean {
   return role === 'ADMIN';
 }
 
-export function homeRouteForRole(role: UserRole): string {
+function asciiLogin(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+export function isEmployeesOnlyAdminLogin(value: string | null | undefined): boolean {
+  const normalized = asciiLogin(value).replace(/[^a-z0-9._@-]/g, '');
+  return normalized === 'licencasadmin' || normalized === 'licenasadmin';
+}
+
+export function isEmployeesOnlyAdminUser(
+  user: { role: UserRole; email?: string | null } | null | undefined,
+): boolean {
+  if (!user) return false;
+  return isEmployeesOnlyAdminLogin(user.email);
+}
+
+export function homeRouteForRole(role: UserRole, email?: string | null): string {
+  if (isEmployeesOnlyAdminLogin(email)) return '/funcionarios';
   return isAdminRole(role) ? '/dashboard' : '/portal';
+}
+
+export function homeRouteForUser(user: { role: UserRole; email?: string | null }): string {
+  return homeRouteForRole(user.role, user.email);
 }

@@ -116,27 +116,34 @@
   }
 
   <nav class="mobile-tabbar" aria-label="Navegação principal">
-    <a
-      class="mobile-tab"
-      routerLink="/dashboard"
-      routerLinkActive="mobile-tab--active"
-      [routerLinkActiveOptions]="{ exact: true }"
-    >
-      <i class="pi pi-home"></i>
-      <span>Início</span>
-    </a>
-    <a class="mobile-tab" routerLink="/escala" routerLinkActive="mobile-tab--active">
-      <i class="pi pi-calendar"></i>
-      <span>Escala</span>
-    </a>
-    <button
-      type="button"
-      class="mobile-tab"
-      [class.mobile-tab--active]="mobileNavOpen()"
-      (click)="toggleMobileNav()"
-    >
-      <i class="pi pi-bars"></i>
-      <span>Menu</span>
-    </button>
+    @if (employeesOnlyAdmin()) {
+      <a class="mobile-tab" routerLink="/funcionarios" routerLinkActive="mobile-tab--active">
+        <i class="pi pi-users"></i>
+        <span>Funcionários</span>
+      </a>
+    } @else {
+      <a
+        class="mobile-tab"
+        routerLink="/dashboard"
+        routerLinkActive="mobile-tab--active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <i class="pi pi-home"></i>
+        <span>Início</span>
+      </a>
+      <a class="mobile-tab" routerLink="/escala" routerLinkActive="mobile-tab--active">
+        <i class="pi pi-calendar"></i>
+        <span>Escala</span>
+      </a>
+      <button
+        type="button"
+        class="mobile-tab"
+        [class.mobile-tab--active]="mobileNavOpen()"
+        (click)="toggleMobileNav()"
+      >
+        <i class="pi pi-bars"></i>
+        <span>Menu</span>
+      </button>
+    }
   </nav>
 </div>

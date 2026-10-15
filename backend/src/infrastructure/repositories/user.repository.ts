@@ -1,6 +1,6 @@
 import type { UserRole } from "@prisma/client";
 import { prisma } from "../database/prisma-client.js";
-import { normalizePortalLogin } from "../../domain/auth/portal-login.js";
+import { expandLoginCandidates } from "../../domain/auth/portal-login.js";
 
 export const userRepository = {
   findByEmail(email: string) {
@@ -15,15 +15,18 @@ export const userRepository = {
 
   /** Localiza pelo login do portal ou pelo e-mail (admins). */
   async findByLogin(login: string) {
-    const normalized = normalizePortalLogin(login);
-    if (!normalized) return null;
-    const byLogin = await prisma.user.findFirst({
-      where: { login: { equals: normalized, mode: "insensitive" } },
-    });
-    if (byLogin) return byLogin;
-    return prisma.user.findFirst({
-      where: { email: { equals: normalized, mode: "insensitive" } },
-    });
+    const candidates = expandLoginCandidates(login);
+    for (const candidate of candidates) {
+      const byLogin = await prisma.user.findFirst({
+        where: { login: { equals: candidate, mode: "insensitive" } },
+      });
+      if (byLogin) return byLogin;
+      const byEmail = await prisma.user.findFirst({
+        where: { email: { equals: candidate, mode: "insensitive" } },
+      });
+      if (byEmail) return byEmail;
+    }
+    return null;
   },
 
   findPortalUserByEmployeeId(employeeId: string) {
