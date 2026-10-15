@@ -22,6 +22,13 @@ export class EmployeeService {
     return this.http.get<Employee>(`${this.base}/employees/${id}`);
   }
 
+  /** Login e senha visíveis do portal. Só administrador. Senha vazia quando ainda não foi gravada para consulta. */
+  getPortalAccess(id: string): Observable<{ portalLogin: string | null; portalPassword: string | null }> {
+    return this.http.get<{ portalLogin: string | null; portalPassword: string | null }>(
+      `${this.base}/employees/${id}/portal-access`,
+    );
+  }
+
   create(payload: CreateEmployeePayload): Observable<Employee> {
     return this.http.post<Employee>(`${this.base}/employees`, payload);
   }

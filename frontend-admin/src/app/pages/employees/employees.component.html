@@ -210,28 +210,6 @@
 
     <div>
 
-      <label class="field-label">Senioridade</label>
-
-      <p-inputNumber
-
-        [(ngModel)]="formSeniorityNumber"
-
-        [min]="1"
-
-        [useGrouping]="false"
-
-        placeholder="Automático se vazio"
-
-        class="w-full"
-
-      />
-
-      <small class="field-hint">{{ seniorityHint() }}</small>
-
-    </div>
-
-    <div>
-
       <label class="field-label">CIF</label>
 
       <input
@@ -246,194 +224,170 @@
 
     </div>
 
-    <div>
+    <div class="identity-row">
 
-      <label class="field-label">Login do portal</label>
+      <div class="seniority-field">
 
-      <input pInputText class="w-full" [(ngModel)]="formPortalLogin" maxlength="20" autocomplete="off" />
+        <label class="field-label">Senioridade</label>
 
-    </div>
+        <p-inputNumber
 
-    <div>
+          [(ngModel)]="formSeniorityNumber"
 
-      <label class="field-label">Senha do portal</label>
+          [min]="1"
 
-      <input
-        pInputText
-        type="password"
-        class="w-full"
-        [(ngModel)]="formPortalPassword"
-        maxlength="120"
-        autocomplete="new-password"
-        placeholder="Preencher só para definir/alterar"
-      />
+          [useGrouping]="false"
 
-      <small class="field-hint">Em branco mantém a senha atual. Mínimo 6 caracteres, até 120.</small>
+          [maxFractionDigits]="0"
 
-    </div>
-
-    <div class="form-check-row">
-
-      <p-checkbox [(ngModel)]="formIsCmte" [binary]="true" inputId="formIsCmte" />
-
-      <label for="formIsCmte">Comandante (CMTE)</label>
-
-    </div>
-
-    <div class="form-check-row">
-
-      <p-checkbox [(ngModel)]="formManualScheduleOnly" [binary]="true" inputId="formManualScheduleOnly" />
-
-      <label for="formManualScheduleOnly">Somente escala manual</label>
-
-    </div>
-
-    <div>
-
-      <label class="field-label">Cargo</label>
-
-      <p-select
-
-        [options]="cargoOptions()"
-
-        [(ngModel)]="formRoleId"
-
-        optionLabel="label"
-
-        optionValue="value"
-
-        placeholder="Selecione o cargo"
-
-        class="w-full"
-
-      />
-
-    </div>
-
-    <div>
-
-      <label class="field-label">Aniversário</label>
-
-      <p-datepicker
-
-        [(ngModel)]="formBirthDate"
-
-        dateFormat="dd/mm/yy"
-
-        [showIcon]="true"
-
-        [showButtonBar]="true"
-
-        placeholder="Selecione a data"
-
-        class="w-full"
-
-      />
-
-    </div>
-
-    <div class="flex align-items-center gap-2">
-
-      <p-checkbox [(ngModel)]="formActive" [binary]="true" inputId="formActive" />
-
-      <label for="formActive">Ativo</label>
-
-    </div>
-
-
-
-    <section class="restriction-section">
-
-      <h3 class="section-title">Não alocar voos</h3>
-
-      <p class="section-hint">Bloqueia elegibilidade para voo nos dias selecionados. Não impede turnos PAO/APAO.</p>
-
-      <div class="restriction-toolbar">
-
-        <p-button
-
-          label="Selecionar mês inteiro"
-
-          icon="pi pi-calendar"
-
-          severity="secondary"
-
-          [outlined]="true"
-
-          size="small"
-
-          (onClick)="selectFullMonthForNoFlight()"
+          placeholder="Auto"
 
         />
 
-        <span class="restriction-summary">{{ noFlightSummary() }}</span>
+        <small class="field-hint">{{ seniorityHint() }}</small>
 
       </div>
 
-      <app-operational-calendar
+      <div>
 
-        mode="multiple"
+        <label class="field-label">Aniversário</label>
 
-        hint="Selecione dias sem alocação de voo"
+        <p-datepicker
 
-        [(selectedDates)]="formNoFlightDates"
+          [(ngModel)]="formBirthDate"
 
-        (viewPeriodChange)="onCalendarPeriodChange($event)"
+          dateFormat="dd/mm/yy"
 
-      />
+          [showIcon]="true"
 
-    </section>
+          [showButtonBar]="true"
 
+          placeholder="Selecione a data"
 
-
-    <section class="restriction-section fcf-section">
-
-      <div class="flex align-items-center gap-2">
-
-        <p-checkbox
-
-          [(ngModel)]="formIsFcf"
-
-          [binary]="true"
-
-          inputId="formIsFcf"
+          class="w-full"
 
         />
 
-        <label for="formIsFcf" class="section-title inline-title">Cargo FCF</label>
+      </div>
+
+    </div>
+
+    <section class="portal-section">
+
+      <h3 class="section-title">Acesso ao portal</h3>
+
+      <div class="portal-grid">
+
+        <div>
+
+          <label class="field-label" for="formPortalLogin">Login</label>
+
+          <input
+            id="formPortalLogin"
+            pInputText
+            class="w-full"
+            [(ngModel)]="formPortalLogin"
+            maxlength="20"
+            autocomplete="off"
+          />
+
+        </div>
+
+        <div>
+
+          <label class="field-label" for="formPortalPassword">Senha</label>
+
+          <input
+            id="formPortalPassword"
+            pInputText
+            type="text"
+            class="w-full"
+            [(ngModel)]="formPortalPassword"
+            maxlength="120"
+            autocomplete="off"
+          />
+
+        </div>
+
+      </div>
+
+      <small class="field-hint">A senha fica visível. Em branco, a senha atual permanece.</small>
+
+    </section>
+
+    <section class="check-group">
+
+      <h3 class="section-title">Opções</h3>
+
+      <div class="check-grid">
+
+        @for (cargo of cargoOptions(); track cargo.value) {
+
+          <label class="check-item" [attr.for]="'role-' + cargo.value">
+
+            <p-checkbox
+
+              [binary]="true"
+
+              [ngModel]="formRoleId === cargo.value"
+
+              (ngModelChange)="setFormRole(cargo.value, $event)"
+
+              [inputId]="'role-' + cargo.value"
+
+            />
+
+            <span>{{ cargo.label }}</span>
+
+          </label>
+
+        }
+
+        <label class="check-item" for="formActive">
+
+          <p-checkbox [(ngModel)]="formActive" [binary]="true" inputId="formActive" />
+
+          <span>Ativo</span>
+
+        </label>
+
+        <label class="check-item" for="formIsCmte">
+
+          <p-checkbox [(ngModel)]="formIsCmte" [binary]="true" inputId="formIsCmte" />
+
+          <span>Comandante (CMTE)</span>
+
+        </label>
+
+        <label class="check-item" for="formManualScheduleOnly">
+
+          <p-checkbox [(ngModel)]="formManualScheduleOnly" [binary]="true" inputId="formManualScheduleOnly" />
+
+          <span>Somente escala manual</span>
+
+        </label>
+
+        <label class="check-item" for="formIsFcf">
+
+          <p-checkbox [(ngModel)]="formIsFcf" [binary]="true" inputId="formIsFcf" />
+
+          <span>Cargo FCF</span>
+
+        </label>
+
+        <label class="check-item" for="formInInstruction">
+
+          <p-checkbox [(ngModel)]="formInInstruction" [binary]="true" inputId="formInInstruction" />
+
+          <span>Em instrução</span>
+
+        </label>
 
       </div>
 
       <p class="section-hint">
-        Marque para identificar pilotos FCF. Configure o turno prioritário (T9) e o dia da semana em
-        <strong>Configurações → Motor de Escala → Funcionários no escopo</strong>.
-      </p>
-
-    </section>
-
-
-
-    <section class="restriction-section instruction-section">
-
-      <div class="flex align-items-center gap-2">
-
-        <p-checkbox
-
-          [(ngModel)]="formInInstruction"
-
-          [binary]="true"
-
-          inputId="formInInstruction"
-
-        />
-
-        <label for="formInInstruction" class="section-title inline-title">Em instrução</label>
-
-      </div>
-
-      <p class="section-hint">
-        Turnos alocados para este funcionário serão gravados como instrução (ex.: T6 → TI6) e exibidos em
-        amarelo na escala.
+        O turno prioritário fica em Configurações → Motor de Escala. Em instrução, o turno gravado vira instrução
+        (ex.: T6 → TI6).
       </p>
 
     </section>

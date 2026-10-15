@@ -54,6 +54,61 @@
   gap: 1rem;
 }
 
+.identity-row {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: start;
+}
+
+:host ::ng-deep .seniority-field .p-inputnumber,
+:host ::ng-deep .seniority-field .p-inputnumber-input {
+  width: 7.5rem;
+  max-width: 7.5rem;
+}
+
+.portal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.portal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+}
+
+.check-group {
+  border: 1px solid var(--surface-border, #e5e7eb);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.check-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.25rem;
+}
+
+.check-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .identity-row,
+  .portal-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .actions-header,
 .actions-cell {
   min-width: 7.5rem;

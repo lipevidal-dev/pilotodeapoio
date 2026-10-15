@@ -5,6 +5,7 @@ import {
 } from "../errors/employee.errors.js";
 import { isPortalLoginTaken, normalizePortalLogin } from "../../domain/auth/portal-login.js";
 import { hashPassword } from "../../infrastructure/auth/password.js";
+import { prisma } from "../../infrastructure/database/prisma-client.js";
 import { userRepository } from "../../infrastructure/repositories/user.repository.js";
 
 export interface SyncPortalAccessInput {
@@ -16,6 +17,11 @@ export interface SyncPortalAccessInput {
 
 function isUniqueConflict(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+}
+
+async function rememberPortalPassword(userId: string, password: string | null): Promise<void> {
+  if (!password) return;
+  await prisma.$executeRaw`UPDATE "User" SET password_visible = ${password} WHERE id = ${userId}`;
 }
 
 async function clearPortalAccess(employeeId: string): Promise<void> {
@@ -52,12 +58,13 @@ export async function syncPortalAccess(input: SyncPortalAccessInput): Promise<vo
   if (!target) {
     if (!password) throw new EmployeePortalPasswordRequiredError();
     try {
-      await userRepository.createPortalUser({
+      const created = await userRepository.createPortalUser({
         employeeId: input.employeeId,
         name: input.employeeName,
         login,
         passwordHash: hashPassword(password),
       });
+      await rememberPortalPassword(created.id, password);
     } catch (err) {
       if (isUniqueConflict(err)) throw new EmployeePortalLoginInUseError();
       throw err;
@@ -67,13 +74,14 @@ export async function syncPortalAccess(input: SyncPortalAccessInput): Promise<vo
 
   const email = target.email.includes("@") ? target.email : login;
   try {
-    await userRepository.updatePortalUser(target.id, {
+    const updated = await userRepository.updatePortalUser(target.id, {
       employeeId: input.employeeId,
       name: input.employeeName,
       login,
       email,
       ...(password ? { passwordHash: hashPassword(password) } : {}),
     });
+    await rememberPortalPassword(updated.id, password);
   } catch (err) {
     if (isUniqueConflict(err)) throw new EmployeePortalLoginInUseError();
     throw err;

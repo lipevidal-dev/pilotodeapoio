@@ -1,4 +1,5 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { InvalidAuthTokenError } from "../../../application/errors/auth.errors.js";
 import { EmployeeHasOperationalHistoryError } from "../../../application/use-cases/employee-delete.js";
 import { employeeUseCase } from "../../../application/use-cases/employee.use-case.js";
 import {
@@ -16,9 +17,29 @@ import {
   UnsupportedMotorRoleError,
 } from "../../../application/errors/role.errors.js";
 import { createEmployeeSchema, updateEmployeeSchema } from "../dto/employee.dto.js";
+import { ForbiddenError, requireAdminUser } from "../middleware/require-admin.js";
 
 export async function listEmployeesController(_req: FastifyRequest, reply: FastifyReply) {
   const data = await employeeUseCase.list();
+  return reply.send(data);
+}
+
+export async function getEmployeePortalAccessController(
+  req: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply,
+) {
+  try {
+    await requireAdminUser(req);
+  } catch (err) {
+    if (err instanceof InvalidAuthTokenError) {
+      return reply.status(401).send({ error: err.message, code: err.code });
+    }
+    if (err instanceof ForbiddenError) {
+      return reply.status(403).send({ error: err.message, code: err.code });
+    }
+    throw err;
+  }
+  const data = await employeeUseCase.getPortalAccess(req.params.id);
   return reply.send(data);
 }
 

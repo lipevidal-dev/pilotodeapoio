@@ -141,6 +141,21 @@ export class EmployeeUseCase {
 
   }
 
+  async getPortalAccess(employeeId: string): Promise<{ portalLogin: string | null; portalPassword: string | null }> {
+    const rows = await prisma.$queryRaw<Array<{ email: string; portalPassword: string | null }>>`
+      SELECT email, password_visible AS "portalPassword"
+      FROM "User"
+      WHERE employee_id = ${employeeId} AND role::text <> 'ADMIN'
+      ORDER BY created_at ASC
+      LIMIT 1
+    `;
+    const row = rows[0];
+    return {
+      portalLogin: row?.email ?? null,
+      portalPassword: row?.portalPassword ?? null,
+    };
+  }
+
 
 
   private async resolveRoleForCreate(roleId?: string, type?: string) {
