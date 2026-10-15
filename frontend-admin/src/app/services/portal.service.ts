@@ -8,6 +8,7 @@ import type {
   PendingPortalRequest,
   PortalScheduleResponse,
   PortalShiftPreferencesResponse,
+  PortalVacationCalendarResponse,
   RegisteredApaoPortalFolga,
   SetPortalShiftPreferencePayload,
 } from '../models/api.models';
@@ -34,6 +35,12 @@ export class PortalService {
   getSchedule(year: number, month: number): Observable<PortalScheduleResponse> {
     return this.http.get<PortalScheduleResponse>(`${this.base}/portal/schedules/${year}/${month}`, {
       params: { _ts: Date.now() },
+    });
+  }
+
+  getVacationCalendar(year: number, month: number): Observable<PortalVacationCalendarResponse> {
+    return this.http.get<PortalVacationCalendarResponse>(`${this.base}/portal/vacations/calendar`, {
+      params: { year, month, _ts: Date.now() },
     });
   }
 

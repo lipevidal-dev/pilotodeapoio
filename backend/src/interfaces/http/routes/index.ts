@@ -33,6 +33,7 @@ import {
   listVacationsController,
   updateVacationController,
 } from "../controllers/vacation.controller.js";
+import { getPortalVacationCalendarController } from "../controllers/portal-vacation-calendar.controller.js";
 import {
   createRequestedDayOffBatchController,
   createRequestedDayOffController,
@@ -119,6 +120,7 @@ export async function registerRoutes(app: FastifyInstance) {
   app.delete("/roles/:id", deleteRoleController);
 
   app.get("/vacations", listVacationsController);
+  app.get("/portal/vacations/calendar", getPortalVacationCalendarController);
   app.post("/vacations/batch", createVacationBatchController);
   app.post("/vacations", createVacationController);
   app.put("/vacations/:id", updateVacationController);

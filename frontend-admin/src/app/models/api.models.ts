@@ -779,6 +779,33 @@ export interface CreatePortalRequestPayload {
   sellTenDaysRequested?: boolean;
 }
 
+export type PortalVacationCalendarStatus = 'PENDING' | 'APPROVED';
+
+export interface PortalVacationCalendarPeriod {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  startDate: string;
+  endDate: string;
+  status: PortalVacationCalendarStatus;
+  mine: boolean;
+}
+
+export interface PortalVacationCalendarDayEntry {
+  vacationId: string;
+  employeeId: string;
+  employeeName: string;
+  status: PortalVacationCalendarStatus;
+  mine: boolean;
+}
+
+export interface PortalVacationCalendarResponse {
+  year: number;
+  month: number;
+  periods: PortalVacationCalendarPeriod[];
+  days?: Record<string, PortalVacationCalendarDayEntry[]>;
+}
+
 export interface PendingPortalRequest {
   id: string;
   employeeId: string;
