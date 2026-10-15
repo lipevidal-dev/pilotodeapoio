@@ -9,18 +9,15 @@
 
   <p-card styleClass="vacation-card gol-card-accent">
     <div class="mirror-cal">
-      <div class="mirror-cal-head">
-        <h2>Espelho de férias</h2>
-        @if (calendarLoading()) {
-          <span class="mirror-cal-status">Carregando…</span>
-        }
-      </div>
+      @if (calendarLoading()) {
+        <span class="mirror-cal-status">Carregando…</span>
+      }
 
       @if (calendarError(); as message) {
         <p-message severity="warn" [text]="message" />
       }
 
-      <div class="op-cal">
+      <div class="op-cal" aria-label="Calendário de férias">
         <div class="op-cal-panel">
           <div class="op-cal-header">
             <button type="button" class="op-cal-nav" (click)="prevMonth()" aria-label="Mês anterior">

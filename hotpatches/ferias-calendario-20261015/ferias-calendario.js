@@ -24,10 +24,9 @@
   style.id = "ferias-espelho-style";
   style.textContent = [
     "#" + ROOT_ID + "{margin:0 0 1rem;padding:1.05rem 1.1rem;border:1px solid #e8eaed;border-radius:12px;background:#fff;box-sizing:border-box}",
-    "#" + ROOT_ID + " h2{margin:0 0 .65rem;font-size:1.05rem;color:#2d2d2d}",
     "#" + ROOT_ID + " .status-line{margin:0 0 .55rem;color:#6b7280;font-size:.78rem;font-weight:600}",
     "#" + ROOT_ID + " .err{color:#b91c1c}",
-    "#" + ROOT_ID + " .op-cal{width:100%;max-width:420px;margin:0 auto;box-sizing:border-box}",
+    "#" + ROOT_ID + " .op-cal{width:100%;max-width:560px;margin:0 auto;box-sizing:border-box}",
     "#" + ROOT_ID + " .op-cal-panel{width:100%;box-sizing:border-box;padding:.5rem .55rem;border:1px solid #e8eaed;border-radius:8px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.05)}",
     "#" + ROOT_ID + " .op-cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem}",
     "#" + ROOT_ID + " .op-cal-title{font-size:.85rem;font-weight:600;color:#2d2d2d}",
@@ -36,7 +35,7 @@
     "#" + ROOT_ID + " .op-cal-weekdays,#" + ROOT_ID + " .op-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}",
     "#" + ROOT_ID + " .op-cal-weekdays{gap:1px;margin-bottom:2px}",
     "#" + ROOT_ID + " .op-cal-wd{text-align:center;font-size:.68rem;font-weight:600;color:#9ca3af;padding:.1rem 0}",
-    "#" + ROOT_ID + " .op-cal-day{min-height:42px;height:42px;border:1px solid #eceff3;border-radius:5px;background:#fafbfc;color:#2d2d2d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:1px 2px;font-size:.7rem;font-weight:600;line-height:1.1;cursor:default;user-select:none}",
+    "#" + ROOT_ID + " .op-cal-day{min-height:46px;height:clamp(46px,7vw,58px);border:1px solid #eceff3;border-radius:5px;background:#fafbfc;color:#2d2d2d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:1px 2px;font-size:.7rem;font-weight:600;line-height:1.1;cursor:default;user-select:none}",
     "#" + ROOT_ID + " .op-cal-day.out{opacity:.35}",
     "#" + ROOT_ID + " .op-cal-day.weekend:not(.occupied){background:#f4f5f7}",
     "#" + ROOT_ID + " .op-cal-day.today:not(.occupied){box-shadow:inset 0 0 0 1px rgba(241,90,34,.45)}",
@@ -182,7 +181,7 @@
 
     var byDay = entriesByDay();
     var cells = monthCells();
-    var html = "<h2>Espelho de férias</h2>";
+    var html = "";
     if (loading) html += "<p class='status-line'>Carregando…</p>";
     if (errorMsg) html += "<p class='status-line err'>" + errorMsg + "</p>";
     html += "<div class='op-cal'><div class='op-cal-panel'>";
