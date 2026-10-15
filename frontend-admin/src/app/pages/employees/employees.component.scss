@@ -54,6 +54,11 @@
   gap: 1rem;
 }
 
+.form-stack[hidden],
+.lic-panel[hidden] {
+  display: none !important;
+}
+
 .identity-row {
   display: grid;
   grid-template-columns: 7.5rem minmax(0, 1fr);
@@ -105,6 +110,146 @@
 @media (max-width: 640px) {
   .identity-row,
   .portal-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lic-bell {
+  color: #dc2626;
+  margin-left: 0.4rem;
+
+  i {
+    font-size: 0.95rem;
+  }
+}
+
+.lic-tabs {
+  display: flex;
+  gap: 1.25rem;
+  border-bottom: 1px solid #e8eaed;
+  margin-bottom: 1rem;
+  font-family: inherit;
+}
+
+.lic-tab {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin: 0 0 -1px;
+  padding: 0.35rem 0.05rem 0.55rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--gol-gray-medium, #6b7280);
+  cursor: pointer;
+  border-radius: 0;
+
+  &.active {
+    color: var(--gol-gray-dark, #2d2d2d);
+    border-bottom-color: var(--gol-orange, #f15a22);
+  }
+}
+
+.lic-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  font-family: inherit;
+  color: var(--gol-gray-dark, #2d2d2d);
+}
+
+.lic-head,
+.lic-row {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr) 2.25rem;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.lic-head span {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gol-gray-medium, #6b7280);
+}
+
+.lic-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.lic-row input {
+  width: 100%;
+  height: 2.5rem;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--gol-gray-dark, #2d2d2d);
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+
+  &:focus {
+    outline: none;
+    border-color: var(--gol-orange, #f15a22);
+    box-shadow: 0 0 0 1px var(--gol-orange, #f15a22);
+  }
+}
+
+.lic-row.lic-due input {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.lic-add {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--gol-orange, #f15a22);
+  background: #fff;
+  border: 1px solid var(--gol-orange, #f15a22);
+  border-radius: 6px;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+
+  &:hover {
+    background: #fff4ed;
+  }
+}
+
+.lic-remove {
+  width: 2.25rem;
+  height: 2.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: #dc2626;
+  border-radius: 6px;
+  padding: 0;
+  cursor: pointer;
+
+  &:hover {
+    background: #fef2f2;
+  }
+
+  .pi {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .lic-head,
+  .lic-row {
     grid-template-columns: 1fr;
   }
 }

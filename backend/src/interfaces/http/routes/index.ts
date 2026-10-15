@@ -9,6 +9,11 @@ import {
   updateEmployeeController,
 } from "../controllers/employee.controller.js";
 import {
+  getEmployeeLicensesController,
+  listEmployeeLicenseAlertsController,
+  replaceEmployeeLicensesController,
+} from "../controllers/employee-licenses.controller.js";
+import {
   createPreAllocationBatchController,
   createPreAllocationController,
   deletePreAllocationController,
@@ -92,6 +97,9 @@ export async function registerRoutes(app: FastifyInstance) {
   app.get("/auth/me", meController);
 
   app.get("/employees", listEmployeesController);
+  app.get("/employees/license-alerts", listEmployeeLicenseAlertsController);
+  app.get("/employees/:id/licenses", getEmployeeLicensesController);
+  app.put("/employees/:id/licenses", replaceEmployeeLicensesController);
   app.get("/employees/:id/portal-access", getEmployeePortalAccessController);
   app.get("/employees/:id", getEmployeeController);
   app.post("/employees", createEmployeeController);

@@ -45,6 +45,7 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
       { id: 's-t9', code: 'T9', name: 'Turno 9', startTime: '10:00', endTime: '18:00', roleType: 'PAO', durationHours: 8, active: true, displayOrder: 4, mandatoryCoverage: false, requiresT8PairNd: false, coverageType: 'PARALLEL' },
     ]);
     http.expectOne(`${base}/employees`).flush([]);
+    http.expectOne(`${base}/employees/license-alerts`).flush({ alerts: [] });
   }
 
   it('agrupa os checkboxes e mostra login e senha visíveis', () => {
@@ -62,6 +63,8 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
     expect(html.textContent).toContain('Somente escala manual');
     expect(html.textContent).toContain('Em instrução');
     expect(html.textContent).toContain('Ativo');
+    expect(html.textContent).toContain('Licenças e Habilitações');
+    expect(html.textContent).toContain('Cadastro');
     expect(html.textContent).toContain('Motor de Escala');
     expect(html.querySelector('#formPortalPassword')?.getAttribute('type')).toBe('text');
     expect(html.querySelector('#formPortalLogin')).not.toBeNull();
@@ -79,6 +82,11 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
       cargoCode: 'PAO',
       cargoName: 'PAO',
       active: true,
+    });
+    http.expectOne(`${environment.apiBaseUrl}/employees/emp-1/licenses`).flush({
+      today: '2026-10-15',
+      alertUntil: '2026-12-14',
+      items: [],
     });
     http.expectOne(`${environment.apiBaseUrl}/employees/emp-1/portal-access`).flush({
       portalLogin: null,
@@ -127,6 +135,11 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
       cargoName: 'PAO',
       active: true,
     });
+    http.expectOne(`${environment.apiBaseUrl}/employees/emp-1/licenses`).flush({
+      today: '2026-10-15',
+      alertUntil: '2026-12-14',
+      items: [],
+    });
     http.expectOne(`${environment.apiBaseUrl}/employees/emp-1/portal-access`).flush({
       portalLogin: null,
       portalPassword: null,
@@ -166,6 +179,11 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
       cargoCode: 'PAO',
       cargoName: 'PAO',
       active: true,
+    });
+    http.expectOne(`${environment.apiBaseUrl}/employees/emp-1/licenses`).flush({
+      today: '2026-10-15',
+      alertUntil: '2026-12-14',
+      items: [{ id: 'lic-1', dueOn: '2026-11-01', description: 'CMA', alert: true }],
     });
     http.expectOne(`${environment.apiBaseUrl}/employees/emp-1/portal-access`).flush({
       portalLogin: 'teste',
@@ -210,5 +228,6 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
       updatedAt: new Date().toISOString(),
     });
     http.expectOne(`${environment.apiBaseUrl}/employees`).flush([]);
+    http.expectOne(`${environment.apiBaseUrl}/employees/license-alerts`).flush({ alerts: [] });
   });
 });

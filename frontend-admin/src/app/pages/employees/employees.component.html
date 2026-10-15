@@ -98,7 +98,12 @@
 
         <td class="emp-seniority">{{ displaySeniority(emp) }}</td>
 
-        <td class="emp-name">{{ emp.name }}</td>
+        <td class="emp-name">
+          {{ emp.name }}
+          @if (hasLicenseAlert(emp.id)) {
+            <span class="lic-bell" title="Licença ou habilitação a vencer em até 60 dias"><i class="pi pi-bell"></i></span>
+          }
+        </td>
 
         <td>
 
@@ -198,7 +203,12 @@
 
 >
 
-  <div class="form-stack">
+  <div class="lic-tabs" role="tablist">
+    <button type="button" class="lic-tab" [class.active]="formTab === 'cadastro'" (click)="formTab = 'cadastro'">Cadastro</button>
+    <button type="button" class="lic-tab" [class.active]="formTab === 'licencas'" (click)="formTab = 'licencas'">Licenças e Habilitações</button>
+  </div>
+
+  <div class="form-stack" [hidden]="formTab !== 'cadastro'">
 
     <div>
 
@@ -392,6 +402,37 @@
 
     </section>
 
+  </div>
+
+  <div class="lic-panel" data-lic-source="angular" [hidden]="formTab !== 'licencas'">
+    @if (dialogMode === 'create') {
+      <p class="section-hint">Salve o funcionário antes de cadastrar licenças e habilitações.</p>
+    } @else {
+      <p class="section-hint">
+        Informe a data de vencimento e a descrição. Com 60 dias ou menos, o sino vermelho aparece no menu Funcionários e ao lado do nome.
+      </p>
+      @if (formLicenses.length) {
+        <div class="lic-head"><span>Vencimento</span><span>Descrição</span><span></span></div>
+      }
+      <div class="lic-rows">
+        @for (item of formLicenses; track $index) {
+          <div class="lic-row" [class.lic-due]="licenseDue(item.dueOn)">
+            <input type="date" [ngModel]="item.dueOn" (ngModelChange)="item.dueOn = $event; markLicensesDirty()" />
+            <input
+              type="text"
+              maxlength="200"
+              placeholder="Descrição"
+              [ngModel]="item.description"
+              (ngModelChange)="item.description = $event; markLicensesDirty()"
+            />
+            <button type="button" class="lic-remove" aria-label="Remover" (click)="removeLicense($index)">
+              <i class="pi pi-trash"></i>
+            </button>
+          </div>
+        }
+      </div>
+      <button type="button" class="lic-add" (click)="addLicense()"><i class="pi pi-plus"></i><span>Adicionar</span></button>
+    }
   </div>
 
   <ng-template pTemplate="footer">

@@ -157,6 +157,18 @@ export class EmployeesComponent implements OnInit {
 
   formPortalPassword = '';
 
+  formTab: 'cadastro' | 'licencas' = 'cadastro';
+
+  formLicenses: Array<{ dueOn: string; description: string }> = [];
+
+  licensesLoaded = false;
+
+  licensesDirty = false;
+
+  licenseAlertUntil = '';
+
+  readonly licenseAlertIds = signal<Set<string>>(new Set());
+
   readonly weekdayOptions = [
     { label: 'Domingo', value: 0 },
     { label: 'Segunda', value: 1 },
@@ -368,6 +380,8 @@ export class EmployeesComponent implements OnInit {
 
         this.loading.set(false);
 
+        this.loadLicenseAlerts();
+
       },
 
       error: () => {
@@ -440,6 +454,16 @@ export class EmployeesComponent implements OnInit {
 
     this.formPortalPassword = '';
 
+    this.formTab = 'cadastro';
+
+    this.formLicenses = [];
+
+    this.licensesLoaded = false;
+
+    this.licensesDirty = false;
+
+    this.licenseAlertUntil = '';
+
     this.dialogVisible.set(true);
 
   }
@@ -490,6 +514,16 @@ export class EmployeesComponent implements OnInit {
 
     this.formPortalPassword = '';
 
+    this.formTab = 'cadastro';
+
+    this.formLicenses = [];
+
+    this.licensesLoaded = false;
+
+    this.licensesDirty = false;
+
+    this.licenseAlertUntil = '';
+
     this.dialogVisible.set(true);
 
     this.loadingDetail.set(true);
@@ -538,6 +572,16 @@ export class EmployeesComponent implements OnInit {
 
     });
 
+    this.employeeService.getLicenses(emp.id).subscribe({
+      next: (data) => {
+        if (this.editingId !== emp.id || this.dialogMode !== 'edit') return;
+        this.formLicenses = data.items.map((item) => ({ dueOn: item.dueOn, description: item.description }));
+        this.licenseAlertUntil = data.alertUntil;
+        this.licensesLoaded = true;
+        this.licensesDirty = false;
+      },
+    });
+
     this.employeeService.getPortalAccess(emp.id).subscribe({
       next: (access) => {
         if (this.editingId !== emp.id || this.dialogMode !== 'edit') return;
@@ -552,6 +596,28 @@ export class EmployeesComponent implements OnInit {
   setFormRole(roleId: string, checked: boolean): void {
     if (!checked) return;
     this.formRoleId = roleId;
+  }
+
+  hasLicenseAlert(employeeId: string): boolean {
+    return this.licenseAlertIds().has(employeeId);
+  }
+
+  addLicense(): void {
+    this.formLicenses = [...this.formLicenses, { dueOn: '', description: '' }];
+    this.licensesDirty = true;
+  }
+
+  removeLicense(index: number): void {
+    this.formLicenses = this.formLicenses.filter((_, i) => i !== index);
+    this.licensesDirty = true;
+  }
+
+  markLicensesDirty(): void {
+    this.licensesDirty = true;
+  }
+
+  licenseDue(dueOn: string): boolean {
+    return !!dueOn && !!this.licenseAlertUntil && dueOn <= this.licenseAlertUntil;
   }
 
 
@@ -704,6 +770,18 @@ export class EmployeesComponent implements OnInit {
 
     }
 
+    const licenseError = this.licenseFormError();
+
+    if (licenseError) {
+
+      this.formTab = 'licencas';
+
+      this.messages.add({ severity: 'warn', summary: 'Validação', detail: licenseError });
+
+      return;
+
+    }
+
     const isFcf = this.formIsFcf;
 
     const inInstruction = this.formInInstruction;
@@ -762,7 +840,7 @@ export class EmployeesComponent implements OnInit {
 
 
 
-    this.employeeService
+    const updateEmployee = () => this.employeeService
 
       .update(this.editingId, {
 
@@ -796,19 +874,54 @@ export class EmployeesComponent implements OnInit {
 
         manualScheduleOnly: this.formManualScheduleOnly,
 
-      })
-
-      .subscribe({
-
-        next: () => this.onSaveSuccess('Funcionário atualizado.'),
-
-        error: (err) => this.onSaveError(err.error?.error ?? 'Falha ao atualizar funcionário.'),
-
       });
+
+    const afterLicense = () => {
+      updateEmployee().subscribe({
+        next: () => this.onSaveSuccess('Funcionário atualizado.'),
+        error: (err) => this.onSaveError(err.error?.error ?? 'Falha ao atualizar funcionário.'),
+      });
+    };
+
+    if (this.licensesLoaded && this.licensesDirty) {
+      this.employeeService.replaceLicenses(this.editingId, this.licensePayload()).subscribe({
+        next: () => {
+          this.licensesDirty = false;
+          afterLicense();
+        },
+        error: (err) => this.onSaveError(err.error?.error ?? 'Falha ao salvar licenças e habilitações.'),
+      });
+      return;
+    }
+
+    afterLicense();
 
   }
 
 
+
+  private loadLicenseAlerts(): void {
+    this.employeeService.listLicenseAlerts().subscribe({
+      next: (data) => this.licenseAlertIds.set(new Set(data.alerts.map((row) => row.employeeId))),
+    });
+  }
+
+  private licensePayload(): Array<{ dueOn: string; description: string }> {
+    return this.formLicenses
+      .map((item) => ({ dueOn: item.dueOn, description: item.description.trim() }))
+      .filter((item) => item.dueOn || item.description);
+  }
+
+  private licenseFormError(): string | null {
+    const items = this.licensePayload();
+    if (items.length > 40) return 'São permitidas no máximo 40 licenças.';
+    for (const item of items) {
+      if (!item.dueOn || !item.description) return 'Preencha a data e a descrição de cada licença.';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(item.dueOn)) return 'Informe a data de vencimento.';
+      if (item.description.length > 200) return 'A descrição deve ter no máximo 200 caracteres.';
+    }
+    return null;
+  }
 
   private portalAccessPayload(): { portalLogin: string | null; portalPassword: string | null } {
     return {
