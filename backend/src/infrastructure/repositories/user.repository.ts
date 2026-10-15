@@ -4,9 +4,7 @@ import { expandLoginCandidates } from "../../domain/auth/portal-login.js";
 
 export const userRepository = {
   findByEmail(email: string) {
-    return prisma.user.findFirst({
-      where: { email: { equals: email.toLowerCase().trim(), mode: "insensitive" } },
-    });
+    return userRepository.findByLogin(email);
   },
 
   findById(id: string) {
