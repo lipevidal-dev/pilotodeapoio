@@ -92,6 +92,34 @@ body {
     background: #fff4ed !important;
   }
 
+  .p-tag {
+    border: none !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+  }
+
+  .p-tag-success {
+    background: #dcfce7 !important;
+    color: #15803d !important;
+  }
+
+  .p-tag-warn,
+  .p-tag-warning,
+  .p-tag-info {
+    background: #fff4ed !important;
+    color: var(--gol-orange-dark) !important;
+  }
+
+  .p-tag-secondary {
+    background: #f3f4f6 !important;
+    color: var(--gol-gray-medium) !important;
+  }
+
+  .p-tag-danger {
+    background: #fee2e2 !important;
+    color: var(--status-critical) !important;
+  }
+
   .col-selection {
     width: 3rem;
     text-align: center;

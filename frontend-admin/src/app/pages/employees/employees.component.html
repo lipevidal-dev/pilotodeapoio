@@ -86,7 +86,9 @@
 
         <th>Cadastro</th>
 
-        <th class="actions-header">Ações</th>
+        <th class="actions-header">Editar</th>
+        <th class="actions-header">Ativar/Desativar</th>
+        <th class="actions-header">Apagar</th>
 
       </tr>
 
@@ -128,43 +130,18 @@
         <td>{{ formatDate(emp.createdAt) }}</td>
 
         <td class="actions-cell">
-
+          <p-button icon="pi pi-pencil" severity="secondary" [text]="true" (onClick)="openEdit(emp)" />
+        </td>
+        <td class="actions-cell">
           <p-button
-
-            icon="pi pi-pencil"
-
-            severity="secondary"
-
-            [text]="true"
-
-            (onClick)="openEdit(emp)"
-
-          />
-
-          <p-button
-
             [icon]="emp.active ? 'pi pi-ban' : 'pi pi-check-circle'"
-
             [severity]="emp.active ? 'warn' : 'success'"
-
             [text]="true"
-
             (onClick)="toggleActive(emp)"
-
           />
-
-          <p-button
-
-            icon="pi pi-trash"
-
-            severity="danger"
-
-            [text]="true"
-
-            (onClick)="confirmDelete(emp)"
-
-          />
-
+        </td>
+        <td class="actions-cell">
+          <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="confirmDelete(emp)" />
         </td>
 
       </tr>
@@ -175,7 +152,7 @@
 
       <tr>
 
-        <td colspan="7">Nenhum funcionário encontrado para o filtro selecionado.</td>
+        <td colspan="9">Nenhum funcionário encontrado para o filtro selecionado.</td>
 
       </tr>
 

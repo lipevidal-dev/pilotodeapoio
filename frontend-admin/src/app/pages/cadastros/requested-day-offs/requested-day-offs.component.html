@@ -54,8 +54,9 @@
         <th>Data</th>
         <th>Status</th>
         <th>Observação</th>
-        <th class="col-selection"><p-tableHeaderCheckbox /></th>
-        <th class="col-actions"></th>
+        <th class="col-selection"><span class="select-col-label">Selecionar</span><p-tableHeaderCheckbox /></th>
+        <th class="actions-header">Editar</th>
+        <th class="actions-header">Apagar</th>
       </tr>
     </ng-template>
     <ng-template pTemplate="body" let-row>
@@ -65,14 +66,16 @@
         <td><p-tag [value]="row.status" [severity]="statusSeverity(row.status)" /></td>
         <td>{{ row.notes ?? '—' }}</td>
         <td class="col-selection"><p-tableCheckbox [value]="row" /></td>
-        <td class="col-actions">
+        <td class="actions-cell">
           <p-button icon="pi pi-pencil" severity="secondary" [text]="true" (onClick)="openEdit(row)" />
+        </td>
+        <td class="actions-cell">
           <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="confirmDelete(row)" />
         </td>
       </tr>
     </ng-template>
     <ng-template pTemplate="emptymessage">
-      <tr><td colspan="6">Nenhuma FP cadastrada.</td></tr>
+      <tr><td colspan="7">Nenhuma FP cadastrada.</td></tr>
     </ng-template>
   </p-table>
 </p-card>

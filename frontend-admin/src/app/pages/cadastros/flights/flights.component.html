@@ -54,8 +54,9 @@
         <th>Data</th>
         <th>Descrição</th>
         <th>Origem</th>
-        <th class="col-selection"><p-tableHeaderCheckbox /></th>
-        <th class="col-actions"></th>
+        <th class="col-selection"><span class="select-col-label">Selecionar</span><p-tableHeaderCheckbox /></th>
+        <th class="actions-header">Editar</th>
+        <th class="actions-header">Apagar</th>
       </tr>
     </ng-template>
     <ng-template pTemplate="body" let-row>
@@ -65,14 +66,16 @@
         <td>{{ row.description ?? '—' }}</td>
         <td><p-tag [value]="row.source" severity="info" /></td>
         <td class="col-selection"><p-tableCheckbox [value]="row" /></td>
-        <td class="col-actions">
+        <td class="actions-cell">
           <p-button icon="pi pi-pencil" severity="secondary" [text]="true" (onClick)="openEdit(row)" />
+        </td>
+        <td class="actions-cell">
           <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="confirmDelete(row)" />
         </td>
       </tr>
     </ng-template>
     <ng-template pTemplate="emptymessage">
-      <tr><td colspan="6">Nenhum voo cadastrado.</td></tr>
+      <tr><td colspan="7">Nenhum voo cadastrado.</td></tr>
     </ng-template>
   </p-table>
 </p-card>
