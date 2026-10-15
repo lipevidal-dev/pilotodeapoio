@@ -9,6 +9,19 @@ import type {
   UpdateEmployeePayload,
 } from '../models/api.models';
 
+export interface EmployeeLicenseItem {
+  id: string;
+  dueOn: string;
+  description: string;
+  alert: boolean;
+}
+
+export interface EmployeeLicensesResponse {
+  today: string;
+  alertUntil: string;
+  items: EmployeeLicenseItem[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class EmployeeService {
   private readonly http = inject(HttpClient);
@@ -20,6 +33,20 @@ export class EmployeeService {
 
   get(id: string): Observable<Employee> {
     return this.http.get<Employee>(`${this.base}/employees/${id}`);
+  }
+
+  listLicenseAlerts(): Observable<{ alerts: Array<{ employeeId: string; name: string }> }> {
+    return this.http.get<{ alerts: Array<{ employeeId: string; name: string }> }>(
+      `${this.base}/employees/license-alerts`,
+    );
+  }
+
+  getLicenses(id: string): Observable<EmployeeLicensesResponse> {
+    return this.http.get<EmployeeLicensesResponse>(`${this.base}/employees/${id}/licenses`);
+  }
+
+  replaceLicenses(id: string, items: Array<{ dueOn: string; description: string }>): Observable<EmployeeLicensesResponse> {
+    return this.http.put<EmployeeLicensesResponse>(`${this.base}/employees/${id}/licenses`, { items });
   }
 
   /** Login e senha visíveis do portal. Só administrador. Senha vazia quando ainda não foi gravada para consulta. */

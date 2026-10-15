@@ -152,8 +152,22 @@ model Employee {
   instructionStartDate DateTime?           @map("instruction_start_date") @db.Date
   instructionEndDate   DateTime?           @map("instruction_end_date") @db.Date
   users               User[]
+  licenses            EmployeeLicense[]
 
   @@unique([type, seniorityNumber])
+}
+
+model EmployeeLicense {
+  id          String   @id @default(uuid())
+  employeeId  String   @map("employee_id")
+  dueOn       DateTime @map("due_on") @db.Date
+  description String
+  createdAt   DateTime @default(now()) @map("created_at")
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([dueOn])
+  @@map("employee_licenses")
 }
 
 model EmployeeFlightRestriction {

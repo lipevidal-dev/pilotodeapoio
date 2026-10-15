@@ -109,6 +109,87 @@
   }
 }
 
+.lic-bell {
+  color: #dc2626;
+  margin-left: 0.4rem;
+
+  i {
+    font-size: 0.95rem;
+  }
+}
+
+.lic-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.25rem;
+  border-bottom: 1px solid #d1d5db;
+  margin-bottom: 1rem;
+}
+
+.lic-tab {
+  border: 1px solid #d1d5db;
+  border-bottom: none;
+  background: #f3f4f6;
+  color: #4b5563;
+  border-radius: 8px 8px 0 0;
+  padding: 0.45rem 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  position: relative;
+  top: 1px;
+
+  &.active {
+    background: #fff;
+    color: #111827;
+  }
+}
+
+.lic-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.lic-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.lic-row {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+
+  input {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 0.45rem 0.55rem;
+  }
+
+  &.lic-due input {
+    color: #dc2626;
+    font-weight: 700;
+  }
+}
+
+.lic-add,
+.lic-remove {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 6px;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .lic-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .actions-header,
 .actions-cell {
   min-width: 7.5rem;
