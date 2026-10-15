@@ -411,6 +411,9 @@
       <p class="section-hint">
         Informe a data de vencimento e a descrição. Com 60 dias ou menos, o sino vermelho aparece no menu Funcionários e ao lado do nome.
       </p>
+      @if (formLicenses.length) {
+        <div class="lic-head"><span>Vencimento</span><span>Descrição</span><span></span></div>
+      }
       <div class="lic-rows">
         @for (item of formLicenses; track $index) {
           <div class="lic-row" [class.lic-due]="licenseDue(item.dueOn)">
@@ -422,11 +425,13 @@
               [ngModel]="item.description"
               (ngModelChange)="item.description = $event; markLicensesDirty()"
             />
-            <button type="button" class="lic-remove" (click)="removeLicense($index)">Remover</button>
+            <button type="button" class="lic-remove" aria-label="Remover" (click)="removeLicense($index)">
+              <i class="pi pi-trash"></i>
+            </button>
           </div>
         }
       </div>
-      <button type="button" class="lic-add" (click)="addLicense()">Adicionar</button>
+      <button type="button" class="lic-add" (click)="addLicense()"><i class="pi pi-plus"></i><span>Adicionar</span></button>
     }
   </div>
 

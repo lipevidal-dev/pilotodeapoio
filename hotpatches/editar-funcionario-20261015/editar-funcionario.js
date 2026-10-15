@@ -20,18 +20,24 @@
     "@media (max-width:640px){.emp-pair,.form-stack .portal-access-section.emp-portal{grid-template-columns:1fr}}",
     ".lic-bell{color:#dc2626;margin-left:.4rem;display:inline-flex;align-items:center}",
     ".lic-bell .pi{font-size:.95rem}",
-    ".lic-tabs{display:flex;align-items:flex-end;gap:.25rem;border-bottom:1px solid #d1d5db;margin:0 0 1rem}",
-    ".lic-tab{border:1px solid #d1d5db;border-bottom:none;background:#f3f4f6;color:#4b5563;border-radius:8px 8px 0 0;padding:.45rem .9rem;font-weight:600;cursor:pointer;position:relative;top:1px}",
-    ".lic-tab.active{background:#fff;color:#111827}",
-    ".lic-panel{display:flex;flex-direction:column;gap:.75rem}",
-    ".form-stack[hidden],.lic-panel[hidden],.lic-rows[hidden],.lic-add[hidden],.lic-error[hidden]{display:none!important}",
+    ".lic-tabs{display:flex;gap:1.25rem;border-bottom:1px solid #e8eaed;margin:0 0 1rem;font-family:inherit}",
+    ".lic-tab{appearance:none;background:transparent;border:0;border-bottom:2px solid transparent;margin:0 0 -1px;padding:.35rem .05rem .55rem;font-family:inherit;font-size:.9rem;font-weight:600;color:var(--gol-gray-medium,#6b7280);cursor:pointer;border-radius:0}",
+    ".lic-tab.active{color:var(--gol-gray-dark,#2d2d2d);border-bottom-color:var(--gol-orange,#f15a22)}",
+    ".lic-panel{display:flex;flex-direction:column;gap:.85rem;font-family:inherit;color:var(--gol-gray-dark,#2d2d2d)}",
+    ".form-stack[hidden],.lic-panel[hidden],.lic-rows[hidden],.lic-head[hidden],.lic-add[hidden],.lic-error[hidden]{display:none!important}",
+    ".lic-head,.lic-row{display:grid;grid-template-columns:11rem minmax(0,1fr) 2.25rem;gap:.65rem;align-items:center}",
+    ".lic-head span{font-size:.8rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--gol-gray-medium,#6b7280)}",
     ".lic-rows{display:flex;flex-direction:column;gap:.55rem}",
-    ".lic-row{display:grid;grid-template-columns:11rem minmax(0,1fr) auto;gap:.5rem;align-items:center}",
-    ".lic-row input{width:100%;border:1px solid #d1d5db;border-radius:6px;padding:.45rem .55rem;background:#fff}",
+    ".lic-row input{width:100%;height:2.5rem;box-sizing:border-box;font-family:inherit;font-size:.9rem;color:var(--gol-gray-dark,#2d2d2d);background:#fff;border:1px solid #d1d5db;border-radius:6px;padding:.5rem .65rem}",
+    ".lic-row input:focus{outline:none;border-color:var(--gol-orange,#f15a22);box-shadow:0 0 0 1px var(--gol-orange,#f15a22)}",
     ".lic-row.lic-due input{color:#dc2626;font-weight:700}",
-    ".lic-add,.lic-remove{border:1px solid #d1d5db;background:#fff;border-radius:6px;padding:.4rem .7rem;cursor:pointer}",
-    ".lic-error{color:#dc2626;font-size:.85rem;margin:0}",
-    "@media (max-width:640px){.lic-row{grid-template-columns:1fr}}",
+    ".lic-add{align-self:flex-start;display:inline-flex;align-items:center;gap:.4rem;font-family:inherit;font-size:.875rem;font-weight:600;color:var(--gol-orange,#f15a22);background:#fff;border:1px solid var(--gol-orange,#f15a22);border-radius:6px;padding:.45rem .8rem;cursor:pointer}",
+    ".lic-add:hover{background:#fff4ed}",
+    ".lic-remove{width:2.25rem;height:2.25rem;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:#dc2626;border-radius:6px;padding:0;cursor:pointer}",
+    ".lic-remove:hover{background:#fef2f2}",
+    ".lic-remove .pi{font-size:1rem}",
+    ".lic-error{color:#dc2626;font-size:.85rem;margin:0;font-family:inherit}",
+    "@media (max-width:640px){.lic-head,.lic-row{grid-template-columns:1fr}}",
   ].join("");
   document.head.appendChild(style);
 
@@ -281,7 +287,8 @@
       var remove = document.createElement("button");
       remove.type = "button";
       remove.className = "lic-remove";
-      remove.textContent = "Remover";
+      remove.setAttribute("aria-label", "Remover");
+      remove.innerHTML = '<i class="pi pi-trash"></i>';
       date.addEventListener("input", function () {
         item.dueOn = date.value;
         state.dirty = true;
@@ -299,6 +306,8 @@
       row.append(date, desc, remove);
       host.appendChild(row);
     });
+    var head = dialog.querySelector(".lic-head");
+    if (head) head.hidden = state.items.length === 0;
   }
 
   function ensureTabs(dialog) {
@@ -311,7 +320,7 @@
     var panel = document.createElement("div");
     panel.className = "lic-panel lic-hot";
     panel.hidden = true;
-    panel.innerHTML = '<p class="section-hint lic-hint"></p><div class="lic-rows"></div><button type="button" class="lic-add">Adicionar</button><p class="lic-error" hidden></p>';
+    panel.innerHTML = '<p class="section-hint lic-hint"></p><div class="lic-head" hidden><span>Vencimento</span><span>Descrição</span><span></span></div><div class="lic-rows"></div><button type="button" class="lic-add"><i class="pi pi-plus"></i><span>Adicionar</span></button><p class="lic-error" hidden></p>';
     stack.before(tabs);
     stack.after(panel);
     tabs.addEventListener("click", function (ev) {
