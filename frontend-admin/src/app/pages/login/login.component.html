@@ -20,15 +20,15 @@
 
       <form class="login-form" (ngSubmit)="submit()">
         <div class="field">
-          <label for="email">E-mail</label>
+          <label for="email">Login ou E-mail</label>
           <input
             pInputText
             id="email"
-            type="email"
+            type="text"
             name="email"
             [(ngModel)]="email"
             autocomplete="username"
-            placeholder="seu.email@gol.com.br"
+            placeholder="seu.email@gol.com.br ou login"
             class="w-full"
             required
           />

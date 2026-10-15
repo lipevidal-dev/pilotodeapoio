@@ -34,6 +34,15 @@ describe("AuthUseCase", () => {
     expect(result.user.email).toBe("admin@test.local");
   });
 
+  it("login autentica perfil licençasadmin (EMPLOYEES_ADMIN)", async () => {
+    vi.spyOn(userRepoModule.userRepository, "findByEmail").mockResolvedValue(null);
+    const uc = new AuthUseCase();
+    const result = await uc.login("licençasadmin", "@Boeing300*");
+    expect(result.user.role).toBe("EMPLOYEES_ADMIN");
+    expect(result.user.email).toBe("licençasadmin");
+    expect(result.token).toBeTruthy();
+  });
+
   it("login falha com senha incorreta", async () => {
     vi.spyOn(userRepoModule.userRepository, "findByEmail").mockResolvedValue(adminUser);
     const uc = new AuthUseCase();

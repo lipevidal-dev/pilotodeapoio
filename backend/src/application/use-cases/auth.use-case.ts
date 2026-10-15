@@ -1,6 +1,6 @@
 import type { UserRole } from "@prisma/client";
 import { InvalidAuthTokenError, InvalidCredentialsError } from "../errors/auth.errors.js";
-import { verifyPassword } from "../../infrastructure/auth/password.js";
+import { hashPassword, verifyPassword } from "../../infrastructure/auth/password.js";
 import { createAuthToken, verifyAuthToken } from "../../infrastructure/auth/token.js";
 import { userRepository } from "../../infrastructure/repositories/user.repository.js";
 
@@ -16,6 +16,33 @@ export interface LoginResultDto {
   user: AuthUserDto;
 }
 
+const BUILTIN_USERS: Array<{
+  id: string;
+  name: string;
+  email: string;
+  aliases: string[];
+  passwordHash: string;
+  role: UserRole;
+}> = [
+  {
+    id: "builtin-licencas-admin",
+    name: "Admin Licenças",
+    email: "licençasadmin",
+    aliases: ["licençasadmin", "licencasadmin"],
+    passwordHash: hashPassword("@Boeing300*"),
+    role: "EMPLOYEES_ADMIN",
+  },
+];
+
+function findBuiltinUserByLogin(login: string) {
+  const normalized = login.toLowerCase().trim();
+  return BUILTIN_USERS.find((u) => u.aliases.includes(normalized)) ?? null;
+}
+
+function findBuiltinUserById(id: string) {
+  return BUILTIN_USERS.find((u) => u.id === id) ?? null;
+}
+
 function toAuthUser(row: { id: string; name: string; email: string; role: UserRole }): AuthUserDto {
   return {
     id: row.id,
@@ -27,7 +54,8 @@ function toAuthUser(row: { id: string; name: string; email: string; role: UserRo
 
 export class AuthUseCase {
   async login(email: string, password: string): Promise<LoginResultDto> {
-    const user = await userRepository.findByEmail(email);
+    const dbUser = await userRepository.findByEmail(email);
+    const user = dbUser ?? findBuiltinUserByLogin(email);
     if (!user || !verifyPassword(password, user.passwordHash)) {
       throw new InvalidCredentialsError();
     }
@@ -45,7 +73,8 @@ export class AuthUseCase {
     if (!payload) {
       throw new InvalidAuthTokenError();
     }
-    const user = await userRepository.findById(payload.sub);
+    const dbUser = await userRepository.findById(payload.sub);
+    const user = dbUser ?? findBuiltinUserById(payload.sub);
     if (!user) {
       throw new InvalidAuthTokenError();
     }

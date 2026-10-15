@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { AuthService } from '../services/auth.service';
-import { isAdminRole, isEmployeeRole } from '../models/auth.models';
+import { homeRouteForRole, isAdminRole, isEmployeeRole, isFullAdminRole } from '../models/auth.models';
 
 export const guestGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
@@ -10,7 +10,7 @@ export const guestGuard: CanActivateFn = () => {
   if (!auth.isAuthenticated() || !user) {
     return true;
   }
-  return router.createUrlTree([isAdminRole(user.role) ? '/dashboard' : '/portal']);
+  return router.createUrlTree([homeRouteForRole(user.role)]);
 };
 
 export const adminGuard: CanActivateFn = () => {
@@ -26,6 +26,22 @@ export const adminGuard: CanActivateFn = () => {
   return true;
 };
 
+export const fullAdminGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  const user = auth.user();
+  if (!auth.isAuthenticated() || !user) {
+    return router.createUrlTree(['/login']);
+  }
+  if (!isAdminRole(user.role)) {
+    return router.createUrlTree(['/portal']);
+  }
+  if (!isFullAdminRole(user.role)) {
+    return router.createUrlTree([homeRouteForRole(user.role)]);
+  }
+  return true;
+};
+
 export const employeeGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   const router = inject(Router);
@@ -34,7 +50,7 @@ export const employeeGuard: CanActivateFn = () => {
     return router.createUrlTree(['/login']);
   }
   if (!isEmployeeRole(user.role)) {
-    return router.createUrlTree(['/dashboard']);
+    return router.createUrlTree([homeRouteForRole(user.role)]);
   }
   return true;
 };
@@ -46,5 +62,5 @@ export const authBootstrapGuard: CanActivateFn = () => {
   if (!auth.isAuthenticated() || !user) {
     return router.createUrlTree(['/login']);
   }
-  return router.createUrlTree([isAdminRole(user.role) ? '/dashboard' : '/portal']);
+  return router.createUrlTree([homeRouteForRole(user.role)]);
 };

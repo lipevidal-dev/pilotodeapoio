@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
 import { AdminLayoutComponent } from './layout/admin-layout.component';
 import { EmployeeLayoutComponent } from './components/employee-layout/employee-layout.component';
-import { adminGuard, employeeGuard, guestGuard } from './guards/auth.guard';
+import { adminGuard, employeeGuard, fullAdminGuard, guestGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
   {
@@ -60,6 +60,7 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
       {
         path: 'dashboard',
+        canActivate: [fullAdminGuard],
         loadComponent: () =>
           import('./pages/dashboard/dashboard.component').then((m) => m.DashboardComponent),
       },
@@ -70,16 +71,19 @@ export const routes: Routes = [
       },
       {
         path: 'escala',
+        canActivate: [fullAdminGuard],
         loadComponent: () =>
           import('./pages/schedule/schedule.component').then((m) => m.ScheduleComponent),
       },
       {
         path: 'cadastros/ferias',
+        canActivate: [fullAdminGuard],
         loadComponent: () =>
           import('./pages/cadastros/vacations/vacations.component').then((m) => m.VacationsComponent),
       },
       {
         path: 'cadastros/folgas-pedidas',
+        canActivate: [fullAdminGuard],
         loadComponent: () =>
           import('./pages/cadastros/requested-day-offs/requested-day-offs.component').then(
             (m) => m.RequestedDayOffsComponent,
@@ -87,11 +91,13 @@ export const routes: Routes = [
       },
       {
         path: 'cadastros/voos',
+        canActivate: [fullAdminGuard],
         loadComponent: () =>
           import('./pages/cadastros/flights/flights.component').then((m) => m.FlightsComponent),
       },
       {
         path: 'cadastros/simulador',
+        canActivate: [fullAdminGuard],
         loadComponent: () =>
           import('./pages/cadastros/labeled-pre-allocation/labeled-pre-allocation.component').then(
             (m) => m.LabeledPreAllocationComponent,
@@ -108,6 +114,7 @@ export const routes: Routes = [
       },
       {
         path: 'cadastros/curso',
+        canActivate: [fullAdminGuard],
         loadComponent: () =>
           import('./pages/cadastros/labeled-pre-allocation/labeled-pre-allocation.component').then(
             (m) => m.LabeledPreAllocationComponent,
@@ -124,6 +131,7 @@ export const routes: Routes = [
       },
       {
         path: 'cadastros/cma',
+        canActivate: [fullAdminGuard],
         loadComponent: () =>
           import('./pages/cadastros/labeled-pre-allocation/labeled-pre-allocation.component').then(
             (m) => m.LabeledPreAllocationComponent,
@@ -140,6 +148,7 @@ export const routes: Routes = [
       },
       {
         path: 'cadastros/outros',
+        canActivate: [fullAdminGuard],
         loadComponent: () =>
           import('./pages/cadastros/labeled-pre-allocation/labeled-pre-allocation.component').then(
             (m) => m.LabeledPreAllocationComponent,
@@ -156,11 +165,13 @@ export const routes: Routes = [
       },
       {
         path: 'configuracoes/cargos',
+        canActivate: [fullAdminGuard],
         loadComponent: () =>
           import('./pages/configuracoes/roles/roles.component').then((m) => m.RolesComponent),
       },
       {
         path: 'configuracoes/turnos',
+        canActivate: [fullAdminGuard],
         loadComponent: () =>
           import('./pages/configuracoes/shifts/shifts.component').then((m) => m.ShiftsComponent),
       },

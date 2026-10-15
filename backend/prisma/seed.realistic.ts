@@ -120,6 +120,21 @@ async function main() {
     update: {},
   });
 
+  await prisma.user.upsert({
+    where: { email: "licençasadmin" },
+    create: {
+      name: "Admin Licenças",
+      email: "licençasadmin",
+      passwordHash: hashPassword("@Boeing300*"),
+      role: UserRole.EMPLOYEES_ADMIN,
+    },
+    update: {
+      name: "Admin Licenças",
+      passwordHash: hashPassword("@Boeing300*"),
+      role: UserRole.EMPLOYEES_ADMIN,
+    },
+  });
+
   await prisma.scheduleMonth.upsert({
     where: { year_month: { year: 2026, month: 6 } },
     create: { year: 2026, month: 6, status: "DRAFT" },
