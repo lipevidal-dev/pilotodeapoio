@@ -23,12 +23,12 @@
   var style = document.createElement("style");
   style.id = "ferias-espelho-style";
   style.textContent = [
-    "#" + ROOT_ID + "{margin:0 0 1rem;padding:1.05rem 1.1rem;border:1px solid #e8eaed;border-radius:12px;background:#fff}",
+    "#" + ROOT_ID + "{margin:0 0 1rem;padding:1.05rem 1.1rem;border:1px solid #e8eaed;border-radius:12px;background:#fff;box-sizing:border-box}",
     "#" + ROOT_ID + " h2{margin:0 0 .65rem;font-size:1.05rem;color:#2d2d2d}",
     "#" + ROOT_ID + " .status-line{margin:0 0 .55rem;color:#6b7280;font-size:.78rem;font-weight:600}",
     "#" + ROOT_ID + " .err{color:#b91c1c}",
-    "#" + ROOT_ID + " .op-cal{max-width:400px}",
-    "#" + ROOT_ID + " .op-cal-panel{padding:.5rem .55rem;border:1px solid #e8eaed;border-radius:8px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.05)}",
+    "#" + ROOT_ID + " .op-cal{width:100%;max-width:420px;margin:0 auto;box-sizing:border-box}",
+    "#" + ROOT_ID + " .op-cal-panel{width:100%;box-sizing:border-box;padding:.5rem .55rem;border:1px solid #e8eaed;border-radius:8px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.05)}",
     "#" + ROOT_ID + " .op-cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem}",
     "#" + ROOT_ID + " .op-cal-title{font-size:.85rem;font-weight:600;color:#2d2d2d}",
     "#" + ROOT_ID + " .op-cal-nav{border:none;background:transparent;color:#f15a22;cursor:pointer;padding:.15rem .35rem;border-radius:4px;font-size:.7rem}",
@@ -45,7 +45,7 @@
     "#" + ROOT_ID + " .op-cal-badge{font-size:.58rem;font-weight:700;letter-spacing:.01em;line-height:1;padding:2px 4px;border-radius:3px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
     "#" + ROOT_ID + " .op-cal-badge.kind-ferias{background:#e0f2fe;color:#0369a1}",
     "#" + ROOT_ID + " .op-cal-badge.kind-fp{background:#fef9c3;color:#854d0e}",
-    "#" + ROOT_ID + " .list{background:#f8fafc;border:1px solid #e8eaed;border-radius:10px;padding:.75rem .85rem;margin-top:.75rem}",
+    "#" + ROOT_ID + " .list{width:100%;box-sizing:border-box;background:#f8fafc;border:1px solid #e8eaed;border-radius:10px;padding:.75rem .85rem;margin-top:.75rem}",
     "#" + ROOT_ID + " .list h3{margin:0 0 .4rem;font-size:.86rem;color:#2d2d2d}",
     "#" + ROOT_ID + " ul{list-style:none;margin:0;padding:0;display:grid;gap:.35rem}",
     "#" + ROOT_ID + " li{display:flex;flex-wrap:wrap;gap:.3rem .65rem;align-items:center;font-size:.82rem;color:#2d2d2d}",
