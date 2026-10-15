@@ -220,7 +220,8 @@
       if (!el.closest("nav, aside, .sidebar, .mobile-drawer")) return;
       var span = el.querySelector("span");
       var text = ((span && span.childNodes.length ? span.childNodes[0].textContent : el.textContent) || "").replace(/\s+/g, " ").trim();
-      if (text !== "Funcionários") return;
+      var href = el.getAttribute("href") || "";
+      if (text !== "Funcionários" && !/funcionarios?/.test(href)) return;
       var bell = el.querySelector(".lic-bell");
       if (!Object.keys(alertNames).length) {
         if (bell) bell.remove();
