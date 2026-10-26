@@ -779,3 +779,130 @@ describe('schedule-cell.mapper — cores por turno', () => {
     expect(row.leadCells?.[5]?.display).toBe('T7');
   });
 });
+
+describe('schedule-cell.mapper — troca aprovada', () => {
+  const empA: Employee = {
+    id: 'pao-a',
+    name: 'Ana',
+    type: 'PAO',
+    roleId: 'role-pao',
+    cargoCode: 'PAO',
+    cargoName: 'Piloto de Apoio Operacional',
+    active: true,
+  };
+  const empB: Employee = {
+    id: 'pao-b',
+    name: 'Beto',
+    type: 'PAO',
+    roleId: 'role-pao',
+    cargoCode: 'PAO',
+    cargoName: 'Piloto de Apoio Operacional',
+    active: true,
+  };
+
+  const assignment = (
+    id: string,
+    employeeId: string,
+    date: string,
+    shiftCode: string,
+  ) => ({
+    id,
+    scheduleMonthId: 'm-nov',
+    employeeId,
+    date,
+    shiftCode,
+    label: null,
+    source: 'GENERATOR',
+  });
+
+  const approvedPeer = {
+    id: 'swap-1',
+    kind: 'PEER' as const,
+    date: '2026-11-10',
+    targetDate: '2026-11-10',
+    pairLength: 1,
+    requesterDates: ['2026-11-10'],
+    targetDates: ['2026-11-10'],
+    requesterEmployeeId: 'pao-a',
+    requesterName: 'Ana',
+    requesterShiftCode: 'T1',
+    targetEmployeeId: 'pao-b',
+    targetName: 'Beto',
+    targetShiftCode: 'T4',
+    status: 'APPROVED' as const,
+  };
+
+  it('realoca o display quando a troca foi aprovada mas a grade ainda tem os turnos originais', () => {
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 11,
+      employees: [empA, empB],
+      assignments: [
+        assignment('a1', 'pao-a', '2026-11-10T12:00:00.000Z', 'T1'),
+        assignment('b1', 'pao-b', '2026-11-10T12:00:00.000Z', 'T4'),
+      ],
+      preAllocations: [],
+      operationalCadastros: [],
+      shiftSwaps: [approvedPeer],
+    });
+
+    const ana = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-a')!;
+    const beto = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-b')!;
+    expect(ana.cells[9]!.display).toBe('T4');
+    expect(beto.cells[9]!.display).toBe('T1');
+    expect(ana.cells[9]!.swapApplied).toBe(true);
+    expect(beto.cells[9]!.swapApplied).toBe(true);
+  });
+
+  it('não inverte de novo quando o backend já persistiu a realocação', () => {
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 11,
+      employees: [empA, empB],
+      assignments: [
+        assignment('a1', 'pao-a', '2026-11-10T12:00:00.000Z', 'T4'),
+        assignment('b1', 'pao-b', '2026-11-10T12:00:00.000Z', 'T1'),
+      ],
+      preAllocations: [],
+      operationalCadastros: [],
+      shiftSwaps: [approvedPeer],
+    });
+
+    const ana = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-a')!;
+    const beto = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-b')!;
+    expect(ana.cells[9]!.display).toBe('T4');
+    expect(beto.cells[9]!.display).toBe('T1');
+    expect(ana.cells[9]!.swapApplied).toBe(true);
+    expect(beto.cells[9]!.swapApplied).toBe(true);
+  });
+
+  it('realoca dias diferentes na própria escala (SELF)', () => {
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 11,
+      employees: [empA],
+      assignments: [
+        assignment('a1', 'pao-a', '2026-11-10T12:00:00.000Z', 'T1'),
+        assignment('a2', 'pao-a', '2026-11-15T12:00:00.000Z', 'T4'),
+      ],
+      preAllocations: [],
+      operationalCadastros: [],
+      shiftSwaps: [
+        {
+          ...approvedPeer,
+          kind: 'SELF',
+          targetDate: '2026-11-15',
+          targetDates: ['2026-11-15'],
+          targetEmployeeId: 'pao-a',
+          targetName: 'Ana',
+        },
+      ],
+    });
+
+    const ana = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-a')!;
+    expect(ana.cells[9]!.display).toBe('T4');
+    expect(ana.cells[14]!.display).toBe('T1');
+    expect(ana.cells[9]!.swapApplied).toBe(true);
+    expect(ana.cells[14]!.swapApplied).toBe(true);
+  });
+});

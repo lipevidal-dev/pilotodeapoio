@@ -1,10 +1,11 @@
 /**
  * Alertas de descanso APAO + VOO/CURSO/SIMULADOR no popup.
  * Só leitura/informativo: não bloqueia alocação e não mexe no PAO.
+ * v5: realoca visualmente trocas APPROVED cujo backend ainda não persistiu.
  */
 (function () {
-  if (window.__apaoAlertasV4) return;
-  window.__apaoAlertasV4 = true;
+  if (window.__apaoAlertasV5) return;
+  window.__apaoAlertasV5 = true;
 
   var HOUR_MS = 60 * 60 * 1000;
   var DAY_MS = 24 * HOUR_MS;
@@ -28,7 +29,7 @@
   var lastSchedule = null;
   var lastPaintKey = "";
 
-  var style = document.createElement("style");
+  var style = document.getElementById("apao-alertas-style") || document.createElement("style");
   style.id = "apao-alertas-style";
   style.textContent = [
     ".group-row .group-filler.col-day{text-align:center;vertical-align:middle}",
@@ -44,6 +45,8 @@
     ".apao-extra-status{margin:.45rem 0 0;font-size:.75rem;color:#6b7280}",
     ".apao-extra-status.err{color:#b91c1c}",
     ".schedule-cell.cell-fa,.legend-chip.cell-fa{background:#bbf7d0!important;color:#166534!important;border-color:#86efac!important}",
+    ".schedule-cell.cell-swap-applied{position:relative}",
+    ".schedule-cell.cell-swap-applied::after{content:'';position:absolute;top:0;right:0;width:0;height:0;border-style:solid;border-width:0 .55rem .55rem 0;border-color:transparent #dc2626 transparent transparent;pointer-events:none}",
   ].join("");
   (document.head || document.documentElement).appendChild(style);
 
@@ -132,6 +135,165 @@
     return !!DAY_OFF[String(text || "").trim().toUpperCase()];
   }
 
+  function isoDay(value) {
+    var s = String(value || "");
+    var m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : s.slice(0, 10);
+  }
+
+  function expandIso(start, length) {
+    var n = Math.max(1, Number(length) || 1);
+    var out = [];
+    var base = isoDay(start);
+    if (!base) return out;
+    for (var i = 0; i < n; i++) out.push(addDays(base, i));
+    return out;
+  }
+
+  function shortToken(label) {
+    var n = compact(label).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (!n) return "";
+    if (n.indexOf("VOO") >= 0) return "VOO";
+    if (n === "ND" || n.indexOf("NAO DISPONIVEL") >= 0) return "ND";
+    if (n.indexOf("FOLGA PEDIDA") >= 0 || n === "FP") return "FP";
+    if (n === "FOLGA SOCIAL" || n === "FS") return "FS";
+    if (n.indexOf("FOLGA AGRUPADA") >= 0 || n === "FA") return "FA";
+    if (n.indexOf("FOLGA ANIVERS") >= 0 || n === "FANI") return "FANI";
+    if (n === "FOLGA" || n === "F") return "F";
+    if (n.indexOf("SIMULADOR") >= 0) return "SIM";
+    if (n.indexOf("CURSO") >= 0) return "CRS";
+    if (n === "CMA") return "CMA";
+    if (n.indexOf("FERIAS") >= 0) return "FER";
+    return n;
+  }
+
+  function normTok(value) {
+    var raw = compact(value).toUpperCase();
+    if (!raw || raw === "·" || raw === "-" || raw === "EM BRANCO") return "";
+    return raw;
+  }
+
+  function tokensMatch(display, stored) {
+    var a = normTok(display);
+    var b = normTok(stored);
+    if (!b) return !a;
+    return a === b || a.indexOf(b) === 0 || b.indexOf(a) === 0;
+  }
+
+  function findDayIndex(list, empId, iso) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].employeeId === empId && isoDay(list[i].date) === iso) return i;
+    }
+    return -1;
+  }
+
+  function retargetDate(prev, iso) {
+    if (!prev) return iso + "T12:00:00.000Z";
+    var s = String(prev);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return iso;
+    if (s.indexOf("T") > 0) return iso + s.slice(10);
+    return iso + "T12:00:00.000Z";
+  }
+
+  function tokenAt(assignments, pres, empId, iso) {
+    var pIdx = findDayIndex(pres, empId, iso);
+    if (pIdx >= 0) {
+      var fromPre = shortToken(pres[pIdx].label);
+      if (fromPre) return fromPre;
+    }
+    var aIdx = findDayIndex(assignments, empId, iso);
+    if (aIdx >= 0) {
+      var shift = normTok(assignments[aIdx].shiftCode);
+      if (shift) return shift;
+      var fromAssign = shortToken(assignments[aIdx].label);
+      if (fromAssign) return fromAssign;
+    }
+    return "";
+  }
+
+  function relocateDay(list, fromEmp, fromIso, toEmp, toIso) {
+    var fromIdx = findDayIndex(list, fromEmp, fromIso);
+    var fromRow = fromIdx >= 0 ? list[fromIdx] : null;
+    if (fromIdx >= 0) list.splice(fromIdx, 1);
+    var toIdx = findDayIndex(list, toEmp, toIso);
+    var toRow = toIdx >= 0 ? list[toIdx] : null;
+    if (toIdx >= 0) list.splice(toIdx, 1);
+    if (fromRow) {
+      list.push(Object.assign({}, fromRow, {
+        employeeId: toEmp,
+        date: retargetDate(fromRow.date, toIso),
+      }));
+    }
+    if (toRow) {
+      list.push(Object.assign({}, toRow, {
+        employeeId: fromEmp,
+        date: retargetDate(toRow.date, fromIso),
+      }));
+    }
+  }
+
+  function partAt(joined, index) {
+    var parts = String(joined || "").split("+").map(function (p) { return p.trim(); }).filter(Boolean);
+    if (!parts.length) return "";
+    return parts[Math.min(index, parts.length - 1)] || "";
+  }
+
+  function applyApprovedSwapsToPayload(data) {
+    if (!data || !Array.isArray(data.shiftSwaps) || !Array.isArray(data.assignments)) return false;
+    var assignments = data.assignments;
+    var pres = Array.isArray(data.preAllocations) ? data.preAllocations : [];
+    var changed = false;
+    for (var s = 0; s < data.shiftSwaps.length; s++) {
+      var swap = data.shiftSwaps[s];
+      if (!swap || swap.status !== "APPROVED") continue;
+      var srcDates = swap.requesterDates && swap.requesterDates.length
+        ? swap.requesterDates.map(isoDay)
+        : expandIso(swap.date, swap.pairLength || 1);
+      var tgtDates = swap.targetDates && swap.targetDates.length
+        ? swap.targetDates.map(isoDay)
+        : expandIso(swap.targetDate || swap.date, swap.pairLength || 1);
+      var n = Math.min(srcDates.length, tgtDates.length);
+      var self = swap.kind === "SELF";
+      var reqEmp = swap.requesterEmployeeId;
+      var tgtEmp = self ? reqEmp : swap.targetEmployeeId;
+      if (!reqEmp || !tgtEmp) continue;
+      for (var i = 0; i < n; i++) {
+        var srcIso = srcDates[i];
+        var tgtIso = tgtDates[i];
+        var origReq = partAt(swap.requesterShiftCode, i);
+        var origTgt = partAt(swap.targetShiftCode, i);
+        if (!normTok(origReq) && !normTok(origTgt)) continue;
+        if (normTok(origReq) === normTok(origTgt)) continue;
+        var nowReq = tokenAt(assignments, pres, reqEmp, srcIso);
+        var nowTgt = tokenAt(assignments, pres, tgtEmp, tgtIso);
+        if (tokensMatch(nowReq, origTgt) && tokensMatch(nowTgt, origReq)) continue;
+        if (!(tokensMatch(nowReq, origReq) && tokensMatch(nowTgt, origTgt))) continue;
+        relocateDay(assignments, reqEmp, srcIso, tgtEmp, tgtIso);
+        relocateDay(pres, reqEmp, srcIso, tgtEmp, tgtIso);
+        changed = true;
+      }
+    }
+    if (changed) {
+      data.assignments = assignments;
+      data.preAllocations = pres;
+    }
+    return changed;
+  }
+
+  function isExecutedScheduleUrl(url) {
+    return /\/schedules\/\d+\/\d+\/executed(?:\?|$|\/)/.test(url || "")
+      || /\/portal\/schedules\/\d+\/\d+\/executed(?:\?|$|\/)/.test(url || "");
+  }
+
+  function patchExecutedBody(url, text) {
+    if (!isExecutedScheduleUrl(url) || !text) return text;
+    try {
+      var data = JSON.parse(text);
+      if (applyApprovedSwapsToPayload(data)) return JSON.stringify(data);
+    } catch (err) {}
+    return text;
+  }
+
   function captureSchedule(url, body) {
     if (!/\/schedules\//.test(url || "")) return;
     try {
@@ -154,25 +316,76 @@
       var input = arguments[0];
       var url = typeof input === "string" ? input : (input && input.url) || "";
       return origFetch.apply(this, arguments).then(function (res) {
-        try {
-          var clone = res.clone();
-          clone.text().then(function (text) { captureSchedule(url, text); }).catch(function () {});
-        } catch (err) {}
-        return res;
+        if (!isExecutedScheduleUrl(url)) {
+          try {
+            var clone = res.clone();
+            clone.text().then(function (text) { captureSchedule(url, text); }).catch(function () {});
+          } catch (err) {}
+          return res;
+        }
+        return res.text().then(function (text) {
+          var patched = patchExecutedBody(url, text);
+          captureSchedule(url, patched);
+          return new Response(patched, {
+            status: res.status,
+            statusText: res.statusText,
+            headers: res.headers,
+          });
+        });
       });
     };
   }
 
   var xhrOpen = XMLHttpRequest.prototype.open;
-  var xhrSend = XMLHttpRequest.prototype.send;
+  var textDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, "responseText");
+  var respDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, "response");
   XMLHttpRequest.prototype.open = function (method, url) {
     this.__apaoUrl = url;
+    if (isExecutedScheduleUrl(url) && respDesc && respDesc.get) {
+      var patched = false;
+      var xhr = this;
+      Object.defineProperty(xhr, "response", {
+        configurable: true,
+        get: function () {
+          var value = respDesc.get.call(xhr);
+          if (xhr.readyState === 4 && !patched) {
+            patched = true;
+            if (value && typeof value === "object") {
+              applyApprovedSwapsToPayload(value);
+              try { captureSchedule(url, JSON.stringify(value)); } catch (err) {}
+            } else if (typeof value === "string") {
+              var text = patchExecutedBody(url, value);
+              try { value = JSON.parse(text); } catch (err) { value = text; }
+              captureSchedule(url, typeof value === "string" ? text : JSON.stringify(value));
+            }
+          }
+          return value;
+        },
+      });
+      if (textDesc && textDesc.get) {
+        Object.defineProperty(xhr, "responseText", {
+          configurable: true,
+          get: function () {
+            try {
+              var raw = textDesc.get.call(xhr);
+              return xhr.readyState === 4 ? patchExecutedBody(url, raw) : raw;
+            } catch (err) {
+              try { return JSON.stringify(xhr.response); } catch (e2) { return ""; }
+            }
+          },
+        });
+      }
+    }
     return xhrOpen.apply(this, arguments);
   };
+  var xhrSend = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.send = function () {
-    this.addEventListener("load", function () {
-      captureSchedule(this.__apaoUrl, this.responseText);
-    });
+    var xhr = this;
+    if (!isExecutedScheduleUrl(xhr.__apaoUrl)) {
+      xhr.addEventListener("load", function () {
+        captureSchedule(xhr.__apaoUrl, xhr.responseText);
+      });
+    }
     return xhrSend.apply(this, arguments);
   };
 
