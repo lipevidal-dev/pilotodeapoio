@@ -135,7 +135,23 @@
                   ></i>
                 </button>
               }
-              {{ group.label }}
+              <span class="group-label-text">{{ group.label }}</span>
+              @if (group.type === 'APAO' && apaoRestAlerts().length > 0) {
+                <span class="apao-rest-alerts" aria-label="Alertas de descanso APAO">
+                  @for (alert of apaoRestAlerts(); track alert.kind) {
+                    <span
+                      class="apao-rest-alert"
+                      [attr.aria-label]="alert.label + ': ' + alert.count"
+                      [pTooltip]="alert.tooltip"
+                      tooltipPosition="top"
+                      [escape]="false"
+                    >
+                      <img [src]="alert.iconSrc" alt="" aria-hidden="true" />
+                      <span>{{ alert.count }}</span>
+                    </span>
+                  }
+                </span>
+              }
             </td>
             @for (col of visibleColumns(); track col.isoDate) {
               <td

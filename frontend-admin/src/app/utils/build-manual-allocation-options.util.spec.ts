@@ -80,7 +80,7 @@ describe('buildManualAllocationOptions', () => {
     expect(keys[keys.length - 1]).toBe('CLEAR');
   });
 
-  it('APAO: cadastros operacionais reduzidos (sem VOO/CURSO/etc.)', () => {
+  it('APAO: inclui VOO, CURSO e SIMULADOR no popup', () => {
     const options = buildManualAllocationOptions([shift({ code: 'T1', roleType: 'APAO' })], 'APAO');
     const keys = options.map((o) => o.key);
 
@@ -88,8 +88,9 @@ describe('buildManualAllocationOptions', () => {
     expect(keys).toContain('FS');
     expect(keys).toContain('FP');
     expect(keys).toContain('ND');
-    expect(keys.includes('VOO' as ManualAllocationType)).toBe(false);
-    expect(keys.includes('CURSO' as ManualAllocationType)).toBe(false);
+    expect(keys).toContain('VOO');
+    expect(keys).toContain('CURSO');
+    expect(keys).toContain('SIMULADOR');
   });
 
   it('PAO fallback quando não há turnos ativos', () => {

@@ -24,6 +24,9 @@ const APAO_OPERATIONAL_OPTIONS: AllocationSelectOption[] = [
   { key: 'FOLGA', label: 'Folga' },
   { key: 'FS', label: 'Folga Social' },
   { key: 'FP', label: 'Folga Pedida' },
+  { key: 'VOO', label: 'VOO' },
+  { key: 'CURSO', label: 'Curso' },
+  { key: 'SIMULADOR', label: 'Simulador' },
   { key: 'ND', label: 'ND' },
 ];
 
