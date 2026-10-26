@@ -3,8 +3,8 @@
  * Só leitura/informativo: não bloqueia alocação e não mexe no PAO.
  */
 (function () {
-  if (window.__apaoAlertasV3) return;
-  window.__apaoAlertasV3 = true;
+  if (window.__apaoAlertasV4) return;
+  window.__apaoAlertasV4 = true;
 
   var HOUR_MS = 60 * 60 * 1000;
   var DAY_MS = 24 * HOUR_MS;
@@ -43,6 +43,7 @@
     ".apao-extra-options button:hover{border-color:#f15a22;color:#f15a22;background:#fff4ed}",
     ".apao-extra-status{margin:.45rem 0 0;font-size:.75rem;color:#6b7280}",
     ".apao-extra-status.err{color:#b91c1c}",
+    ".schedule-cell.cell-fa,.legend-chip.cell-fa{background:#bbf7d0!important;color:#166534!important;border-color:#86efac!important}",
   ].join("");
   (document.head || document.documentElement).appendChild(style);
 

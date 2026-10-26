@@ -9,7 +9,7 @@ BRANCH=cursor/alertas-descanso-apao-326e
 RAW="https://raw.githubusercontent.com/lipevidal-dev/pilotodeapoio/${BRANCH}"
 PATCH_DIR="$ROOT/hotpatches/apao-alertas-descanso-20261026"
 CID="${ADMIN_CONTAINER:-piloto_apoio_admin}"
-VERSION=3
+VERSION=4
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
