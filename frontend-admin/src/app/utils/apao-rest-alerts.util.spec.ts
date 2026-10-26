@@ -5,7 +5,7 @@ import type {
   ScheduleGridData,
   ScheduleGridGroup,
 } from '../models/schedule-grid.models';
-import { computeApaoRestAlerts } from './apao-rest-alerts.util';
+import { computeApaoRestAlerts, groupApaoRestAlertsByDate } from './apao-rest-alerts.util';
 
 const shifts: Shift[] = [
   {
@@ -238,5 +238,47 @@ describe('computeApaoRestAlerts', () => {
     expect(alert?.count).toBe(1);
     expect(alert?.violations[0]?.previousDate).toBe('2026-06-30');
     expect(alert?.violations[0]?.nextDate).toBe('2026-07-01');
+  });
+
+  it('coloca o alerta na coluna do próximo turno', () => {
+    const shiftRest = computeApaoRestAlerts(
+      grid([
+        {
+          type: 'APAO',
+          label: 'APAO',
+          rows: [
+            row('APAO', 'Ana APAO', [
+              cell('T4', 'shift'),
+              cell('T1', 'shift'),
+              cell('', 'empty'),
+              cell('', 'empty'),
+            ]),
+          ],
+        },
+      ]),
+      shifts,
+    );
+    const afterDayOff = computeApaoRestAlerts(
+      grid([
+        {
+          type: 'APAO',
+          label: 'APAO',
+          rows: [
+            row('APAO', 'Bia APAO', [
+              cell('T4', 'shift'),
+              cell('F', 'folga'),
+              cell('T1', 'shift'),
+              cell('', 'empty'),
+            ]),
+          ],
+        },
+      ]),
+      shifts,
+    );
+
+    expect(groupApaoRestAlertsByDate(shiftRest).get('2026-07-02')?.[0]?.kind).toBe('SHIFT_REST_11H');
+    expect(groupApaoRestAlertsByDate(shiftRest).has('2026-07-01')).toBe(false);
+    expect(groupApaoRestAlertsByDate(afterDayOff).get('2026-07-03')?.[0]?.kind).toBe('POST_DAY_OFF_36H');
+    expect(groupApaoRestAlertsByDate(afterDayOff).has('2026-07-01')).toBe(false);
   });
 });

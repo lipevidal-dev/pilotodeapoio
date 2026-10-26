@@ -340,7 +340,7 @@ describe('ScheduleGridComponent — edição interativa 8.1A', () => {
     expect(comp.coverageSurplusTooltip(13)).toContain('T6');
   });
 
-  it('mostra os alertas de descanso somente no cabeçalho APAO', () => {
+  it('mostra os alertas de descanso na coluna APAO do dia em conflito', () => {
     const grid = minimalGrid();
     grid.groups.push({
       type: 'APAO',
@@ -393,7 +393,13 @@ describe('ScheduleGridComponent — edição interativa 8.1A', () => {
     fixture.detectChanges();
 
     const headers = fixture.nativeElement.querySelectorAll('.group-label');
+    const groupRows = fixture.nativeElement.querySelectorAll('.group-row');
+    const paoDays = groupRows[0]?.querySelectorAll('td.col-day');
+    const apaoDays = groupRows[1]?.querySelectorAll('td.col-day');
     expect(headers[0]?.querySelector('.apao-rest-alert')).toBeNull();
-    expect(headers[1]?.querySelector('.apao-rest-alert')?.textContent).toContain('1');
+    expect(headers[1]?.querySelector('.apao-rest-alert')).toBeNull();
+    expect(paoDays?.[0]?.querySelector('.apao-rest-alert')).toBeNull();
+    expect(apaoDays?.[0]?.querySelector('.apao-rest-alert')).toBeNull();
+    expect(apaoDays?.[1]?.querySelector('.apao-rest-alert')?.textContent).toContain('1');
   });
 });

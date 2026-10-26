@@ -580,11 +580,17 @@ $crosshair-focus-bg: #fce1d7;
     vertical-align: middle;
   }
 
+  .group-row .group-filler.col-day {
+    text-align: center;
+    vertical-align: middle;
+  }
+
   .apao-rest-alerts {
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
-    margin-left: 0.55rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.12rem;
     vertical-align: middle;
   }
 

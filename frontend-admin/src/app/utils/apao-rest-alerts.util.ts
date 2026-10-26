@@ -144,10 +144,39 @@ function toAlert(
   };
 }
 
+/** Agrupa os alertas no dia do próximo turno — a coluna em que o descanso falhou. */
+export function groupApaoRestAlertsByDate(
+  alerts: readonly ApaoRestAlert[],
+): ReadonlyMap<string, ApaoRestAlert[]> {
+  const violationsByDate = new Map<string, Map<ApaoRestAlertKind, ApaoRestViolation[]>>();
+
+  for (const alert of alerts) {
+    for (const violation of alert.violations) {
+      const byKind = violationsByDate.get(violation.nextDate) ?? new Map();
+      const list = byKind.get(violation.kind) ?? [];
+      list.push(violation);
+      byKind.set(violation.kind, list);
+      violationsByDate.set(violation.nextDate, byKind);
+    }
+  }
+
+  const result = new Map<string, ApaoRestAlert[]>();
+  for (const [isoDate, byKind] of violationsByDate) {
+    result.set(
+      isoDate,
+      [
+        toAlert('SHIFT_REST_11H', byKind.get('SHIFT_REST_11H') ?? []),
+        toAlert('POST_DAY_OFF_36H', byKind.get('POST_DAY_OFF_36H') ?? []),
+      ].filter((alert): alert is ApaoRestAlert => alert !== null),
+    );
+  }
+  return result;
+}
+
 /**
  * Auditoria visual exclusiva de APAO.
  *
- * Não bloqueia nem altera alocações. Apenas resume no cabeçalho APAO:
+ * Não bloqueia nem altera alocações. O ícone vai na coluna do próximo turno:
  * - menos de 11h entre turnos em dias consecutivos;
  * - menos de 36h entre o fim de um turno e o próximo turno quando há folga no dia intermediário.
  */

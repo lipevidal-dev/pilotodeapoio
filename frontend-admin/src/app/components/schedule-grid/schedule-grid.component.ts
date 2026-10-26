@@ -20,7 +20,10 @@ import type {
   ScheduleGridData,
 } from '../../models/schedule-grid.models';
 import type { GridAuditTotals } from '../../utils/operational-audit.util';
-import { computeApaoRestAlerts } from '../../utils/apao-rest-alerts.util';
+import {
+  computeApaoRestAlerts,
+  groupApaoRestAlertsByDate,
+} from '../../utils/apao-rest-alerts.util';
 import {
   isDeletableCell as cellIsDeletable,
   isDraggableCell as cellIsDraggable,
@@ -87,6 +90,7 @@ export class ScheduleGridComponent {
   readonly auditTotals = input<GridAuditTotals | null>(null);
   readonly shifts = input<Shift[]>([]);
   readonly apaoRestAlerts = computed(() => computeApaoRestAlerts(this.grid(), this.shifts()));
+  readonly apaoRestAlertsByDate = computed(() => groupApaoRestAlertsByDate(this.apaoRestAlerts()));
   readonly editable = input(false);
   /** Escala realizada: qualquer célula preenchida pode mover/excluir. */
   readonly fullyEditable = input(false);
@@ -309,6 +313,10 @@ export class ScheduleGridComponent {
     if (cols[index]) return cols[index]!.isWeekend;
     const label = this.grid().weekdayLabels[index];
     return label === 'Dom' || label === 'Sáb';
+  }
+
+  apaoRestAlertsForDate(isoDate: string) {
+    return this.apaoRestAlertsByDate().get(isoDate) ?? [];
   }
 
   hasCoverageGap(day: number): boolean {
