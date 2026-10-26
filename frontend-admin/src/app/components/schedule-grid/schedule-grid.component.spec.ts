@@ -339,4 +339,36 @@ describe('ScheduleGridComponent — edição interativa 8.1A', () => {
     expect(comp.hasCoverageSurplus(19)).toBe(false);
     expect(comp.coverageSurplusTooltip(13)).toContain('T6');
   });
+
+  it('mostra os alertas de descanso somente no cabeçalho APAO', () => {
+    const grid = minimalGrid();
+    grid.groups.push({
+      type: 'APAO',
+      label: 'APAO',
+      rows: [
+        {
+          ...grid.groups[0]!.rows[0]!,
+          employeeId: 'apao-1',
+          name: 'APAO Test',
+          type: 'APAO',
+        },
+      ],
+    });
+    fixture.componentRef.setInput('grid', grid);
+    fixture.componentRef.setInput('apaoRestAlerts', [
+      {
+        kind: 'SHIFT_REST_11H',
+        count: 2,
+        iconSrc: 'assets/icons/coverage-attention.svg',
+        label: 'Descanso entre turnos menor que 11 horas',
+        tooltip: 'Motivo detalhado',
+        violations: [],
+      },
+    ]);
+    fixture.detectChanges();
+
+    const headers = fixture.nativeElement.querySelectorAll('.group-label');
+    expect(headers[0]?.querySelector('.apao-rest-alert')).toBeNull();
+    expect(headers[1]?.querySelector('.apao-rest-alert')?.textContent).toContain('2');
+  });
 });
