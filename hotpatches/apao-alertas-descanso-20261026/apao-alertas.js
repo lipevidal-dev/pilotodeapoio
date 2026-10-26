@@ -1,11 +1,11 @@
 /**
  * Alertas de descanso APAO + VOO/CURSO/SIMULADOR no popup.
  * Só leitura/informativo: não bloqueia alocação e não mexe no PAO.
- * v5: realoca visualmente trocas APPROVED cujo backend ainda não persistiu.
+ * v6: realoca na grade (JSON + DOM) trocas APPROVED, inclusive bloco de 2 dias.
  */
 (function () {
-  if (window.__apaoAlertasV5) return;
-  window.__apaoAlertasV5 = true;
+  if (window.__apaoAlertasV6) return;
+  window.__apaoAlertasV6 = true;
 
   var HOUR_MS = 60 * 60 * 1000;
   var DAY_MS = 24 * HOUR_MS;
@@ -27,6 +27,7 @@
   ];
 
   var lastSchedule = null;
+  var lastSwaps = [];
   var lastPaintKey = "";
 
   var style = document.getElementById("apao-alertas-style") || document.createElement("style");
@@ -174,8 +175,8 @@
   }
 
   function tokensMatch(display, stored) {
-    var a = normTok(display);
-    var b = normTok(stored);
+    var a = baseShift(display);
+    var b = baseShift(stored);
     if (!b) return !a;
     return a === b || a.indexOf(b) === 0 || b.indexOf(a) === 0;
   }
@@ -196,17 +197,17 @@
   }
 
   function tokenAt(assignments, pres, empId, iso) {
+    var aIdx = findDayIndex(assignments, empId, iso);
+    if (aIdx >= 0) {
+      var shift = baseShift(assignments[aIdx].shiftCode);
+      if (shift) return shift;
+      var fromAssign = shortToken(assignments[aIdx].label);
+      if (fromAssign) return fromAssign;
+    }
     var pIdx = findDayIndex(pres, empId, iso);
     if (pIdx >= 0) {
       var fromPre = shortToken(pres[pIdx].label);
       if (fromPre) return fromPre;
-    }
-    var aIdx = findDayIndex(assignments, empId, iso);
-    if (aIdx >= 0) {
-      var shift = normTok(assignments[aIdx].shiftCode);
-      if (shift) return shift;
-      var fromAssign = shortToken(assignments[aIdx].label);
-      if (fromAssign) return fromAssign;
     }
     return "";
   }
@@ -262,12 +263,13 @@
         var tgtIso = tgtDates[i];
         var origReq = partAt(swap.requesterShiftCode, i);
         var origTgt = partAt(swap.targetShiftCode, i);
-        if (!normTok(origReq) && !normTok(origTgt)) continue;
-        if (normTok(origReq) === normTok(origTgt)) continue;
+        origReq = baseShift(origReq);
+        origTgt = baseShift(origTgt);
+        if (!origReq && !origTgt) continue;
+        if (origReq === origTgt) continue;
         var nowReq = tokenAt(assignments, pres, reqEmp, srcIso);
         var nowTgt = tokenAt(assignments, pres, tgtEmp, tgtIso);
         if (tokensMatch(nowReq, origTgt) && tokensMatch(nowTgt, origReq)) continue;
-        if (!(tokensMatch(nowReq, origReq) && tokensMatch(nowTgt, origTgt))) continue;
         relocateDay(assignments, reqEmp, srcIso, tgtEmp, tgtIso);
         relocateDay(pres, reqEmp, srcIso, tgtEmp, tgtIso);
         changed = true;
@@ -281,8 +283,7 @@
   }
 
   function isExecutedScheduleUrl(url) {
-    return /\/schedules\/\d+\/\d+\/executed(?:\?|$|\/)/.test(url || "")
-      || /\/portal\/schedules\/\d+\/\d+\/executed(?:\?|$|\/)/.test(url || "");
+    return /\/(?:portal\/)?schedules\/\d+\/\d+(?:\/executed)?(?:\?|$)/.test(url || "");
   }
 
   function patchExecutedBody(url, text) {
@@ -297,9 +298,10 @@
   function captureSchedule(url, body) {
     if (!/\/schedules\//.test(url || "")) return;
     try {
-      var data = JSON.parse(body);
+      var data = typeof body === "string" ? JSON.parse(body) : body;
       if (!data || !Array.isArray(data.employees) || !Array.isArray(data.assignments)) return;
       lastSchedule = data;
+      if (Array.isArray(data.shiftSwaps)) lastSwaps = data.shiftSwaps;
       var shifts = data.shifts || [];
       for (var i = 0; i < shifts.length; i++) {
         var code = String(shifts[i].code || "").toUpperCase();
@@ -340,55 +342,33 @@
   var textDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, "responseText");
   var respDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, "response");
   XMLHttpRequest.prototype.open = function (method, url) {
-    this.__apaoUrl = url;
-    if (isExecutedScheduleUrl(url) && respDesc && respDesc.get) {
-      var patched = false;
-      var xhr = this;
-      Object.defineProperty(xhr, "response", {
-        configurable: true,
-        get: function () {
-          var value = respDesc.get.call(xhr);
-          if (xhr.readyState === 4 && !patched) {
-            patched = true;
-            if (value && typeof value === "object") {
-              applyApprovedSwapsToPayload(value);
-              try { captureSchedule(url, JSON.stringify(value)); } catch (err) {}
-            } else if (typeof value === "string") {
-              var text = patchExecutedBody(url, value);
-              try { value = JSON.parse(text); } catch (err) { value = text; }
-              captureSchedule(url, typeof value === "string" ? text : JSON.stringify(value));
-            }
-          }
-          return value;
-        },
-      });
-      if (textDesc && textDesc.get) {
-        Object.defineProperty(xhr, "responseText", {
-          configurable: true,
-          get: function () {
-            try {
-              var raw = textDesc.get.call(xhr);
-              return xhr.readyState === 4 ? patchExecutedBody(url, raw) : raw;
-            } catch (err) {
-              try { return JSON.stringify(xhr.response); } catch (e2) { return ""; }
-            }
-          },
-        });
-      }
-    }
+    this.__apaoUrl = String(url || "");
+    var xhr = this;
+    xhr.addEventListener("readystatechange", function () {
+      if (xhr.readyState !== 4) return;
+      try {
+        var value = null;
+        if (respDesc && respDesc.get) {
+          try { value = respDesc.get.call(xhr); } catch (err) { value = null; }
+        }
+        if (value && typeof value === "object") {
+          applyApprovedSwapsToPayload(value);
+          captureSchedule(xhr.__apaoUrl, value);
+          return;
+        }
+        var raw = "";
+        if (textDesc && textDesc.get) {
+          try { raw = textDesc.get.call(xhr); } catch (err) { raw = ""; }
+        }
+        if (!raw) {
+          try { raw = xhr.responseText; } catch (err) { raw = ""; }
+        }
+        var patched = patchExecutedBody(xhr.__apaoUrl, raw);
+        captureSchedule(xhr.__apaoUrl, patched);
+      } catch (err) {}
+    });
     return xhrOpen.apply(this, arguments);
   };
-  var xhrSend = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.send = function () {
-    var xhr = this;
-    if (!isExecutedScheduleUrl(xhr.__apaoUrl)) {
-      xhr.addEventListener("load", function () {
-        captureSchedule(xhr.__apaoUrl, xhr.responseText);
-      });
-    }
-    return xhrSend.apply(this, arguments);
-  };
-
   function groupTitle(group) {
     var textEl = group.querySelector(".group-label-text");
     var raw = compact((textEl || group).textContent || "");
@@ -797,6 +777,104 @@
     });
   }
 
+  function classForCode(code) {
+    var c = baseShift(code);
+    if (c === "T6") return "cell-t6";
+    if (c === "T7") return "cell-t7";
+    if (c === "T8") return "cell-t8";
+    if (c === "T9") return "cell-t9";
+    if (c === "ND") return "cell-nd";
+    if (c === "FS") return "cell-fs";
+    if (c === "FA") return "cell-fa";
+    if (c === "FANI") return "cell-fani";
+    if (c === "FP") return "cell-fp";
+    if (c === "F" || c === "FOLGA") return "cell-folga";
+    if (c === "FER") return "cell-ferias";
+    if (c === "VOO") return "cell-voo";
+    if (c === "SIM") return "cell-simulador";
+    if (c === "CRS") return "cell-curso";
+    if (c === "CMA") return "cell-cma";
+    if (/^TI/.test(normTok(code))) return "cell-instruction";
+    if (/^T/.test(c)) return "cell-shift";
+    return "cell-other";
+  }
+
+  function findDataRow(table, name) {
+    var want = compact(name).toUpperCase();
+    if (!want) return null;
+    var rows = table.querySelectorAll("tbody tr");
+    for (var i = 0; i < rows.length; i++) {
+      var el = rows[i].querySelector(".emp-name");
+      if (!el) continue;
+      if (compact(el.textContent).toUpperCase() === want) return rows[i];
+    }
+    for (var j = 0; j < rows.length; j++) {
+      var el2 = rows[j].querySelector(".emp-name");
+      if (!el2) continue;
+      var got = compact(el2.textContent).toUpperCase();
+      if (got.indexOf(want) >= 0 || want.indexOf(got) >= 0) return rows[j];
+    }
+    return null;
+  }
+
+  function tdForIso(table, row, iso, year, month) {
+    if (!row || !iso) return null;
+    var cols = columnMeta(table);
+    var tds = row.querySelectorAll("td.col-day");
+    for (var i = 0; i < tds.length; i++) {
+      var meta = cols[i] || {};
+      if (meta.lead || tds[i].classList.contains("col-lead")) continue;
+      if (isoForColumn(meta, year, month) === iso) return tds[i];
+    }
+    return null;
+  }
+
+  function setCellDisplay(td, code) {
+    if (!td) return;
+    var desired = baseShift(code) || shortToken(code);
+    if (!desired) return;
+    var cell = td.querySelector(".schedule-cell") || td;
+    var cur = cellCode(cell.textContent);
+    if (!tokensMatch(cur, desired)) cell.textContent = desired;
+    cell.classList.add("schedule-cell", classForCode(desired), "cell-swap-applied");
+    ["cell-t6","cell-t7","cell-t8","cell-t9","cell-shift","cell-nd","cell-folga","cell-fs","cell-fa","cell-empty"].forEach(function (cls) {
+      if (cls !== classForCode(desired)) cell.classList.remove(cls);
+    });
+  }
+
+  function applySwapsToDom() {
+    var swaps = lastSwaps.length ? lastSwaps : (lastSchedule && lastSchedule.shiftSwaps) || [];
+    if (!swaps.length) return;
+    var table = document.querySelector(".schedule-table, table.schedule-grid, .schedule-grid table");
+    if (!table) return;
+    var period = currentPeriod();
+    for (var s = 0; s < swaps.length; s++) {
+      var swap = swaps[s];
+      if (!swap || swap.status !== "APPROVED") continue;
+      var srcDates = swap.requesterDates && swap.requesterDates.length
+        ? swap.requesterDates.map(isoDay)
+        : expandIso(swap.date, swap.pairLength || 1);
+      var tgtDates = swap.targetDates && swap.targetDates.length
+        ? swap.targetDates.map(isoDay)
+        : expandIso(swap.targetDate || swap.date, swap.pairLength || 1);
+      var n = Math.min(srcDates.length, tgtDates.length);
+      var self = swap.kind === "SELF";
+      var reqRow = findDataRow(table, swap.requesterName);
+      var tgtRow = findDataRow(table, self ? swap.requesterName : swap.targetName);
+      if (!reqRow || !tgtRow) continue;
+      for (var i = 0; i < n; i++) {
+        var reqTd = tdForIso(table, reqRow, srcDates[i], period.year, period.month);
+        var tgtTd = tdForIso(table, tgtRow, tgtDates[i], period.year, period.month);
+        var origReq = baseShift(partAt(swap.requesterShiftCode, i));
+        var origTgt = baseShift(partAt(swap.targetShiftCode, i));
+        if (origReq && origTgt && origReq !== origTgt) {
+          setCellDisplay(reqTd, origTgt);
+          setCellDisplay(tgtTd, origReq);
+        }
+      }
+    }
+  }
+
   function enhanceDialog() {
     var card = document.querySelector(".alloc-card");
     if (!card || card.querySelector(".apao-extra-options")) return;
@@ -822,12 +900,48 @@
     body.appendChild(status);
   }
 
+  var lastFetchKey = "";
+  var lastFetchAt = 0;
+  function refreshSwapsFromApi() {
+    var period = currentPeriod();
+    var key = period.year + "-" + period.month;
+    var now = Date.now();
+    if (key === lastFetchKey && lastSwaps.length) return;
+    if (key === lastFetchKey && now - lastFetchAt < 8000) return;
+    var tok = token();
+    if (!tok) return;
+    lastFetchKey = key;
+    lastFetchAt = now;
+    var url = "/api/schedules/" + period.year + "/" + period.month + "/executed?_ts=" + now;
+    var run = origFetch || window.fetch;
+    if (!run) return;
+    run.call(window, url, { headers: { Authorization: "Bearer " + tok } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (!data) {
+          lastFetchKey = "";
+          return;
+        }
+        if (Array.isArray(data.shiftSwaps)) lastSwaps = data.shiftSwaps;
+        if (!lastSchedule && Array.isArray(data.employees)) lastSchedule = data;
+        applySwapsToDom();
+      })
+      .catch(function () { lastFetchKey = ""; });
+  }
+
   function sync() {
     var path = (location.pathname || "").replace(/\/+$/, "");
     if (path === "/escala" || path.indexOf("/escala") === 0) paintAlerts();
+    refreshSwapsFromApi();
+    applySwapsToDom();
     enhanceDialog();
   }
 
-  setInterval(sync, 500);
+  setInterval(sync, 400);
   window.addEventListener("popstate", function () { setTimeout(sync, 0); });
+  var obs = new MutationObserver(function () {
+    var path = (location.pathname || "").replace(/\/+$/, "");
+    applySwapsToDom();
+  });
+  obs.observe(document.documentElement, { childList: true, subtree: true });
 })();

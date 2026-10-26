@@ -905,4 +905,43 @@ describe('schedule-cell.mapper — troca aprovada', () => {
     expect(ana.cells[9]!.swapApplied).toBe(true);
     expect(ana.cells[14]!.swapApplied).toBe(true);
   });
+
+  it('realoca bloco de dois dias (1 e 2 de novembro)', () => {
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 11,
+      employees: [empA, empB],
+      assignments: [
+        assignment('a1', 'pao-a', '2026-11-01T12:00:00.000Z', 'T6'),
+        assignment('a2', 'pao-a', '2026-11-02T12:00:00.000Z', 'T7'),
+        assignment('b1', 'pao-b', '2026-11-01T12:00:00.000Z', 'T8'),
+        assignment('b2', 'pao-b', '2026-11-02T12:00:00.000Z', 'T9'),
+      ],
+      preAllocations: [],
+      operationalCadastros: [],
+      shiftSwaps: [
+        {
+          ...approvedPeer,
+          date: '2026-11-01',
+          targetDate: '2026-11-01',
+          pairLength: 2,
+          requesterDates: ['2026-11-01', '2026-11-02'],
+          targetDates: ['2026-11-01', '2026-11-02'],
+          requesterShiftCode: 'T6+T7',
+          targetShiftCode: 'T8+T9',
+        },
+      ],
+    });
+
+    const ana = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-a')!;
+    const beto = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-b')!;
+    expect(ana.cells[0]!.display).toBe('T8');
+    expect(ana.cells[1]!.display).toBe('T9');
+    expect(beto.cells[0]!.display).toBe('T6');
+    expect(beto.cells[1]!.display).toBe('T7');
+    expect(ana.cells[0]!.swapApplied).toBe(true);
+    expect(ana.cells[1]!.swapApplied).toBe(true);
+    expect(beto.cells[0]!.swapApplied).toBe(true);
+    expect(beto.cells[1]!.swapApplied).toBe(true);
+  });
 });

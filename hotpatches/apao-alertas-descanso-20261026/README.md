@@ -6,7 +6,7 @@ O `apply.sh` só:
 
 1. sobe o container existente, se estiver parado (`up -d --no-build`)
 2. copia `apao-alertas.js` para o nginx
-3. coloca o script no `index.html` com `?v=5`
+3. coloca o script no `index.html` com `?v=6`
 
 No VPS, como root:
 

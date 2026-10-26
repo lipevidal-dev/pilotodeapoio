@@ -1055,8 +1055,9 @@ function applyShiftSwapsToRows(
 }
 
 function normalizeSwapToken(value: string | undefined | null): string {
-  const raw = (value ?? '').trim().toUpperCase();
+  let raw = (value ?? '').trim().toUpperCase();
   if (!raw || raw === '·' || raw === '-' || raw === 'EM BRANCO') return '';
+  if (raw.startsWith('TI') && raw.length > 2) raw = `T${raw.slice(2)}`;
   return raw;
 }
 
@@ -1151,10 +1152,8 @@ function applyApprovedSwapMarksToRows(
     if (origL === origR) return false;
     const alreadySwapped =
       swapTokensMatch(leftDisplay, origR) && swapTokensMatch(rightDisplay, origL);
-    if (alreadySwapped) return false;
-    return (
-      swapTokensMatch(leftDisplay, origL) && swapTokensMatch(rightDisplay, origR)
-    );
+    // Se ainda não está no resultado, realoca — não exige match perfeito com a origem.
+    return !alreadySwapped;
   };
 
   const exchangeCells = (
