@@ -82,7 +82,6 @@ import {
   summarizeGenerationPersistenceIssues,
   type GenerationPersistenceValidation,
 } from '../../utils/generation-validation.util';
-import { computeApaoRestAlerts } from '../../utils/apao-rest-alerts.util';
 
 export type ScheduleViewMode = 'planned' | 'executed';
 
@@ -298,11 +297,6 @@ export class ScheduleComponent implements OnInit, OnDestroy {
       shiftSwaps: this.isExecutedView() ? data.shiftSwaps : undefined,
     });
   });
-
-  /** Alertas informativos exclusivos do APAO — não bloqueiam nem alteram alocações. */
-  readonly apaoRestAlerts = computed(() =>
-    computeApaoRestAlerts(this.rawGrid(), this.activeScheduleData()?.shifts ?? []),
-  );
 
   readonly auditViolations = computed((): AuditViolation[] =>
     this.violationList().map((v) => ({

@@ -351,24 +351,49 @@ describe('ScheduleGridComponent — edição interativa 8.1A', () => {
           employeeId: 'apao-1',
           name: 'APAO Test',
           type: 'APAO',
+          cells: [
+            { display: 'T4', kind: 'shift' },
+            { display: 'T1', kind: 'shift' },
+            { display: '', kind: 'empty' },
+          ],
         },
       ],
     });
     fixture.componentRef.setInput('grid', grid);
-    fixture.componentRef.setInput('apaoRestAlerts', [
+    fixture.componentRef.setInput('shifts', [
       {
-        kind: 'SHIFT_REST_11H',
-        count: 2,
-        iconSrc: 'assets/icons/coverage-attention.svg',
-        label: 'Descanso entre turnos menor que 11 horas',
-        tooltip: 'Motivo detalhado',
-        violations: [],
+        id: 't4',
+        code: 'T4',
+        name: 'T4',
+        startTime: '14:00',
+        endTime: '22:00',
+        roleType: 'APAO',
+        active: true,
+        displayOrder: 4,
+        mandatoryCoverage: false,
+        requiresT8PairNd: false,
+        coverageType: 'REQUIRED',
+        durationHours: 8,
+      },
+      {
+        id: 't1',
+        code: 'T1',
+        name: 'T1',
+        startTime: '00:00',
+        endTime: '06:00',
+        roleType: 'APAO',
+        active: true,
+        displayOrder: 1,
+        mandatoryCoverage: false,
+        requiresT8PairNd: false,
+        coverageType: 'REQUIRED',
+        durationHours: 6,
       },
     ]);
     fixture.detectChanges();
 
     const headers = fixture.nativeElement.querySelectorAll('.group-label');
     expect(headers[0]?.querySelector('.apao-rest-alert')).toBeNull();
-    expect(headers[1]?.querySelector('.apao-rest-alert')?.textContent).toContain('2');
+    expect(headers[1]?.querySelector('.apao-rest-alert')?.textContent).toContain('1');
   });
 });

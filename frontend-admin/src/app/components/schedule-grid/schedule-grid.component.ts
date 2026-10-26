@@ -11,7 +11,7 @@ import { TooltipModule } from 'primeng/tooltip';
 import { ScheduleCellComponent } from '../schedule-cell/schedule-cell.component';
 import { EmployeeSummaryComponent } from '../employee-summary/employee-summary.component';
 import { ScheduleLegendComponent } from '../schedule-legend/schedule-legend.component';
-import type { EmployeeType } from '../../models/api.models';
+import type { EmployeeType, Shift } from '../../models/api.models';
 import type {
   EmployeeRowData,
   ScheduleCellData,
@@ -20,7 +20,7 @@ import type {
   ScheduleGridData,
 } from '../../models/schedule-grid.models';
 import type { GridAuditTotals } from '../../utils/operational-audit.util';
-import type { ApaoRestAlert } from '../../utils/apao-rest-alerts.util';
+import { computeApaoRestAlerts } from '../../utils/apao-rest-alerts.util';
 import {
   isDeletableCell as cellIsDeletable,
   isDraggableCell as cellIsDraggable,
@@ -85,7 +85,8 @@ export interface GridDeletionSelectionComplete {
 export class ScheduleGridComponent {
   readonly grid = input.required<ScheduleGridData>();
   readonly auditTotals = input<GridAuditTotals | null>(null);
-  readonly apaoRestAlerts = input<ApaoRestAlert[]>([]);
+  readonly shifts = input<Shift[]>([]);
+  readonly apaoRestAlerts = computed(() => computeApaoRestAlerts(this.grid(), this.shifts()));
   readonly editable = input(false);
   /** Escala realizada: qualquer célula preenchida pode mover/excluir. */
   readonly fullyEditable = input(false);
