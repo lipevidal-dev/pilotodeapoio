@@ -393,13 +393,16 @@ describe('ScheduleGridComponent — edição interativa 8.1A', () => {
     fixture.detectChanges();
 
     const headers = fixture.nativeElement.querySelectorAll('.group-label');
-    const groupRows = fixture.nativeElement.querySelectorAll('.group-row');
-    const paoDays = groupRows[0]?.querySelectorAll('td.col-day');
-    const apaoDays = groupRows[1]?.querySelectorAll('td.col-day');
+    const dayHeads = fixture.nativeElement.querySelectorAll('thead th.col-day');
+    const dataRows = fixture.nativeElement.querySelectorAll('tr.data-row');
+    const paoCells = dataRows[0]?.querySelectorAll('td.col-day');
+    const apaoCells = dataRows[1]?.querySelectorAll('td.col-day');
     expect(headers[0]?.querySelector('.apao-rest-alert')).toBeNull();
     expect(headers[1]?.querySelector('.apao-rest-alert')).toBeNull();
-    expect(paoDays?.[0]?.querySelector('.apao-rest-alert')).toBeNull();
-    expect(apaoDays?.[0]?.querySelector('.apao-rest-alert')).toBeNull();
-    expect(apaoDays?.[1]?.querySelector('.apao-rest-alert')?.textContent).toContain('1');
+    expect(dayHeads[0]?.querySelector('.apao-rest-alert')).toBeNull();
+    expect(dayHeads[1]?.querySelector('.apao-rest-alert')?.textContent).toContain('1');
+    expect(paoCells?.[1]?.querySelector('.apao-rest-alert')).toBeNull();
+    expect(apaoCells?.[0]?.querySelector('.apao-rest-alert')).toBeNull();
+    expect(apaoCells?.[1]?.querySelector('.apao-rest-alert')).toBeTruthy();
   });
 });

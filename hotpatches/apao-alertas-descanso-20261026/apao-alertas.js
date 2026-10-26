@@ -3,8 +3,8 @@
  * Só leitura/informativo: não bloqueia alocação e não mexe no PAO.
  */
 (function () {
-  if (window.__apaoAlertasV2) return;
-  window.__apaoAlertasV2 = true;
+  if (window.__apaoAlertasV3) return;
+  window.__apaoAlertasV3 = true;
 
   var HOUR_MS = 60 * 60 * 1000;
   var DAY_MS = 24 * HOUR_MS;
@@ -32,9 +32,12 @@
   style.id = "apao-alertas-style";
   style.textContent = [
     ".group-row .group-filler.col-day{text-align:center;vertical-align:middle}",
+    ".schedule-grid td.col-day{position:relative}",
     ".apao-rest-alerts{display:inline-flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:.12rem;vertical-align:middle}",
+    ".apao-rest-alerts--cell{position:absolute;top:.05rem;right:.05rem;z-index:3}",
     ".apao-rest-alert{display:inline-flex;align-items:center;gap:.15rem;min-height:1.25rem;padding:.08rem .3rem;border:1px solid #fdba74;border-radius:999px;background:#fff7ed;color:#9a3412;font-size:.65rem;font-weight:800;line-height:1;letter-spacing:normal;text-transform:none;cursor:help}",
     ".apao-rest-alert img{width:.9rem;height:.9rem;object-fit:contain}",
+    ".apao-rest-alerts--cell .apao-rest-alert{min-height:auto;padding:.05rem}",
     ".apao-extra-options{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.7rem}",
     ".apao-extra-options button{min-height:2.1rem;border:1px solid #d7dce2;border-radius:8px;background:#fff;color:#2d2d2d;font:inherit;font-size:.8rem;font-weight:700;padding:.35rem .7rem;cursor:pointer}",
     ".apao-extra-options button:hover{border-color:#f15a22;color:#f15a22;background:#fff4ed}",
@@ -192,7 +195,7 @@
       var th = heads[i];
       var label = compact((th.querySelector(".day-num") || th).textContent || "");
       cols.push({
-        lead: th.classList.contains("col-lead"),
+        lead: th.classList.contains("col-lead") || th.classList.contains("previous-month-cell"),
         label: label,
       });
     }
@@ -248,7 +251,10 @@
       var cells = rows[r].querySelectorAll("td.col-day");
       var sequence = [];
       for (var c = 0; c < cells.length; c++) {
-        var meta = cols[c] || { lead: cells[c].classList.contains("col-lead"), label: String(c + 1) };
+        var meta = cols[c] || {
+          lead: cells[c].classList.contains("col-lead") || cells[c].classList.contains("previous-month-cell"),
+          label: String(c + 1),
+        };
         var iso = isoForColumn(meta, period.year, period.month);
         var display = cellCode((cells[c].querySelector(".schedule-cell") || cells[c]).textContent);
         sequence.push({
@@ -320,9 +326,10 @@
   function renderBadge(kind, count, tip, icon) {
     var el = document.createElement("span");
     el.className = "apao-rest-alert";
-    el.setAttribute("aria-label", kind + ": " + count);
+    el.setAttribute("aria-label", kind + (count ? ": " + count : ""));
     el.title = tip;
-    el.innerHTML = '<img src="' + icon + '" alt="" aria-hidden="true"><span>' + count + "</span>";
+    el.innerHTML = '<img src="' + icon + '" alt="" aria-hidden="true">' +
+      (count ? "<span>" + count + "</span>" : "");
     return el;
   }
 
@@ -336,69 +343,114 @@
     return map;
   }
 
+  function fillWrap(wrap, rest11, rest36, withCount) {
+    wrap.innerHTML = "";
+    if (rest11.length) {
+      wrap.appendChild(renderBadge(
+        "Descanso entre turnos menor que 11 horas",
+        withCount ? rest11.length : "",
+        tooltip("Descanso menor que 11 horas entre turnos", rest11),
+        "assets/icons/coverage-attention.svg"
+      ));
+    }
+    if (rest36.length) {
+      wrap.appendChild(renderBadge(
+        "Descanso pós-folga menor que 36 horas",
+        withCount ? rest36.length : "",
+        tooltip("Descanso menor que 36 horas após turno + folga", rest36),
+        "assets/icons/coverage-attention-warning.svg"
+      ));
+    }
+  }
+
+  function ensureWrap(parent, className) {
+    var wrap = parent.querySelector("." + className.split(" ").join("."));
+    if (!wrap) {
+      wrap = document.createElement("span");
+      wrap.className = className;
+      wrap.setAttribute("aria-label", "Alertas de descanso APAO");
+      parent.appendChild(wrap);
+    }
+    return wrap;
+  }
+
+  function paintHost(parent, className, rest11, rest36, withCount) {
+    var wrap = parent.querySelector("." + className.split(" ").join("."));
+    if (!rest11.length && !rest36.length) {
+      if (wrap) wrap.parentNode.removeChild(wrap);
+      return;
+    }
+    wrap = ensureWrap(parent, className);
+    fillWrap(wrap, rest11, rest36, withCount);
+  }
+
   function paintAlerts() {
     var table = document.querySelector(".schedule-grid");
     if (!table) return;
-    var apaoRow = null;
-    var rows = table.querySelectorAll("tbody tr");
-    for (var r = 0; r < rows.length; r++) {
-      var group = rows[r].querySelector(".group-label");
-      if (group && isApaoTitle(groupTitle(group))) {
-        apaoRow = rows[r];
-        var leftover = group.querySelector(".apao-rest-alerts");
-        if (leftover) leftover.remove();
-        break;
-      }
+    var labels = table.querySelectorAll("tbody .group-label");
+    for (var g = 0; g < labels.length; g++) {
+      var leftover = labels[g].querySelector(".apao-rest-alerts");
+      if (leftover) leftover.parentNode.removeChild(leftover);
     }
-    if (!apaoRow) return;
     var computed = computeAlerts(table);
     var by11 = groupByDay(computed.rest11);
     var by36 = groupByDay(computed.rest36);
     var period = currentPeriod();
     var cols = columnMeta(table);
-    var fillers = apaoRow.querySelectorAll("td.col-day");
-    var keyParts = [];
-    var i;
-    for (i = 0; i < fillers.length; i++) {
-      var meta = cols[i] || { lead: fillers[i].classList.contains("col-lead"), label: "" };
-      var iso = isoForColumn(meta, period.year, period.month);
-      var rest11 = !meta.lead && iso && by11[iso] ? by11[iso] : [];
-      var rest36 = !meta.lead && iso && by36[iso] ? by36[iso] : [];
-      keyParts.push((iso || "") + ":" + rest11.length + ":" + rest36.length);
-    }
-    var key = keyParts.join("|");
-    if (key === lastPaintKey && apaoRow.querySelector(".apao-rest-alerts")) return;
+    var key = computed.rest11.map(function (it) { return it.name + it.to; }).join(",") + "|" +
+      computed.rest36.map(function (it) { return it.name + it.to; }).join(",");
+    if (key === lastPaintKey && table.querySelector(".apao-rest-alerts--head, .apao-rest-alerts--cell")) return;
     lastPaintKey = key;
-    for (i = 0; i < fillers.length; i++) {
-      var cell = fillers[i];
-      var col = cols[i] || { lead: cell.classList.contains("col-lead"), label: "" };
-      var dayIso = isoForColumn(col, period.year, period.month);
-      var wrap = cell.querySelector(".apao-rest-alerts");
-      if (wrap) wrap.parentNode.removeChild(wrap);
-      if (col.lead || !dayIso) continue;
-      var day11 = by11[dayIso] || [];
-      var day36 = by36[dayIso] || [];
-      if (!day11.length && !day36.length) continue;
-      wrap = document.createElement("span");
-      wrap.className = "apao-rest-alerts";
-      wrap.setAttribute("aria-label", "Alertas de descanso APAO");
-      if (day11.length) {
-        wrap.appendChild(renderBadge(
-          "Descanso entre turnos menor que 11 horas",
-          day11.length,
-          tooltip("Descanso menor que 11 horas entre turnos", day11),
-          "assets/icons/coverage-attention.svg"
-        ));
+
+    var heads = table.querySelectorAll("thead th.col-day");
+    var h;
+    for (h = 0; h < heads.length; h++) {
+      var head = heads[h];
+      var headMeta = cols[h] || {
+        lead: head.classList.contains("col-lead") || head.classList.contains("previous-month-cell"),
+        label: "",
+      };
+      var headIso = isoForColumn(headMeta, period.year, period.month);
+      var stack = head.querySelector(".day-head-stack") || head;
+      var head11 = !headMeta.lead && headIso && by11[headIso] ? by11[headIso] : [];
+      var head36 = !headMeta.lead && headIso && by36[headIso] ? by36[headIso] : [];
+      paintHost(stack, "apao-rest-alerts apao-rest-alerts--head", head11, head36, true);
+    }
+
+    var rows = table.querySelectorAll("tbody tr");
+    var inApao = false;
+    for (var r = 0; r < rows.length; r++) {
+      var group = rows[r].querySelector(".group-label");
+      if (group) {
+        inApao = isApaoTitle(groupTitle(group));
+        var fillers = rows[r].querySelectorAll("td.col-day");
+        for (h = 0; h < fillers.length; h++) {
+          var fillerMeta = cols[h] || { lead: fillers[h].classList.contains("col-lead"), label: "" };
+          var fillerIso = isoForColumn(fillerMeta, period.year, period.month);
+          var f11 = inApao && !fillerMeta.lead && fillerIso && by11[fillerIso] ? by11[fillerIso] : [];
+          var f36 = inApao && !fillerMeta.lead && fillerIso && by36[fillerIso] ? by36[fillerIso] : [];
+          paintHost(fillers[h], "apao-rest-alerts", f11, f36, true);
+        }
+        continue;
       }
-      if (day36.length) {
-        wrap.appendChild(renderBadge(
-          "Descanso pós-folga menor que 36 horas",
-          day36.length,
-          tooltip("Descanso menor que 36 horas após turno + folga", day36),
-          "assets/icons/coverage-attention-warning.svg"
-        ));
+      var nameEl = rows[r].querySelector(".emp-name");
+      var dayCells = rows[r].querySelectorAll("td.col-day");
+      if (!nameEl || !dayCells.length) continue;
+      var name = compact(nameEl.textContent);
+      for (h = 0; h < dayCells.length; h++) {
+        var cellMeta = cols[h] || {
+          lead: dayCells[h].classList.contains("col-lead") || dayCells[h].classList.contains("previous-month-cell"),
+          label: "",
+        };
+        var cellIso = isoForColumn(cellMeta, period.year, period.month);
+        var cell11 = [];
+        var cell36 = [];
+        if (inApao && !cellMeta.lead && cellIso) {
+          cell11 = (by11[cellIso] || []).filter(function (it) { return it.name === name; });
+          cell36 = (by36[cellIso] || []).filter(function (it) { return it.name === name; });
+        }
+        paintHost(dayCells[h], "apao-rest-alerts apao-rest-alerts--cell", cell11, cell36, false);
       }
-      cell.appendChild(wrap);
     }
   }
 

@@ -71,6 +71,25 @@
                     [title]="coverageSurplusTooltip(col.day)"
                   />
                 }
+                @if (!col.isLead) {
+                  @let headAlerts = apaoRestAlertsForDate(col.isoDate);
+                  @if (headAlerts.length > 0) {
+                    <span class="apao-rest-alerts apao-rest-alerts--head" aria-label="Alertas de descanso APAO">
+                      @for (alert of headAlerts; track alert.kind) {
+                        <span
+                          class="apao-rest-alert"
+                          [attr.aria-label]="alert.label + ': ' + alert.count"
+                          [pTooltip]="alert.tooltip"
+                          tooltipPosition="top"
+                          [escape]="false"
+                        >
+                          <img [src]="alert.iconSrc" alt="" aria-hidden="true" />
+                          <span>{{ alert.count }}</span>
+                        </span>
+                      }
+                    </span>
+                  }
+                }
                 <span class="day-num">{{ dayHeaderLabel(col) }}</span>
                 <span class="day-wd">{{ col.weekdayLabel }}</span>
               </div>
@@ -210,6 +229,24 @@
                   (drop)="onDrop($event, row.employeeId, col.day, col.isLead)"
                 >
                   <app-schedule-cell [cell]="cell" />
+                  @if (group.type === 'APAO' && !col.isLead) {
+                    @let cellAlerts = apaoRestAlertsForCell(row.employeeId, col.isoDate);
+                    @if (cellAlerts.length > 0) {
+                      <span class="apao-rest-alerts apao-rest-alerts--cell" aria-label="Alerta de descanso APAO">
+                        @for (alert of cellAlerts; track alert.kind) {
+                          <span
+                            class="apao-rest-alert"
+                            [attr.aria-label]="alert.label + ': ' + alert.count"
+                            [pTooltip]="alert.tooltip"
+                            tooltipPosition="top"
+                            [escape]="false"
+                          >
+                            <img [src]="alert.iconSrc" alt="" aria-hidden="true" />
+                          </span>
+                        }
+                      </span>
+                    }
+                  }
                 </td>
               }
               @if (summaryVisible()) {

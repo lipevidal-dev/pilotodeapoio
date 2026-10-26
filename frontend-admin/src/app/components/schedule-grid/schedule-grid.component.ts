@@ -21,6 +21,7 @@ import type {
 } from '../../models/schedule-grid.models';
 import type { GridAuditTotals } from '../../utils/operational-audit.util';
 import {
+  apaoRestAlertsForTarget,
   computeApaoRestAlerts,
   groupApaoRestAlertsByDate,
 } from '../../utils/apao-rest-alerts.util';
@@ -317,6 +318,10 @@ export class ScheduleGridComponent {
 
   apaoRestAlertsForDate(isoDate: string) {
     return this.apaoRestAlertsByDate().get(isoDate) ?? [];
+  }
+
+  apaoRestAlertsForCell(employeeId: string, isoDate: string) {
+    return apaoRestAlertsForTarget(this.apaoRestAlerts(), isoDate, employeeId);
   }
 
   hasCoverageGap(day: number): boolean {

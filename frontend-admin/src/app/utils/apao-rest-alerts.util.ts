@@ -144,6 +144,26 @@ function toAlert(
   };
 }
 
+/** Alertas do próximo turno, opcionalmente de um colaborador. */
+export function apaoRestAlertsForTarget(
+  alerts: readonly ApaoRestAlert[],
+  isoDate: string,
+  employeeId?: string,
+): ApaoRestAlert[] {
+  return alerts
+    .map((alert) =>
+      toAlert(
+        alert.kind,
+        alert.violations.filter(
+          (violation) =>
+            violation.nextDate === isoDate &&
+            (employeeId === undefined || violation.employeeId === employeeId),
+        ),
+      ),
+    )
+    .filter((alert): alert is ApaoRestAlert => alert !== null);
+}
+
 /** Agrupa os alertas no dia do próximo turno — a coluna em que o descanso falhou. */
 export function groupApaoRestAlertsByDate(
   alerts: readonly ApaoRestAlert[],

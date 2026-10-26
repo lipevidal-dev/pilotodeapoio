@@ -585,6 +585,10 @@ $crosshair-focus-bg: #fce1d7;
     vertical-align: middle;
   }
 
+  td.col-day {
+    position: relative;
+  }
+
   .apao-rest-alerts {
     display: inline-flex;
     align-items: center;
@@ -592,6 +596,13 @@ $crosshair-focus-bg: #fce1d7;
     flex-wrap: wrap;
     gap: 0.12rem;
     vertical-align: middle;
+  }
+
+  .apao-rest-alerts--cell {
+    position: absolute;
+    top: 0.05rem;
+    right: 0.05rem;
+    z-index: 3;
   }
 
   .apao-rest-alert {
