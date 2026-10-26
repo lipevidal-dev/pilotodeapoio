@@ -503,6 +503,8 @@
 
           [auditTotals]="gridAuditTotals()"
 
+          [shifts]="activeScheduleData()?.shifts ?? []"
+
           [editable]="gridEditable()"
 
           [fullyEditable]="isExecutedView()"

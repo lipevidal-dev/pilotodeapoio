@@ -13,7 +13,7 @@ const CELL_COLORS: Record<string, [number, number, number]> = {
   'cell-nd': [229, 231, 235],
   'cell-folga': [254, 202, 202],
   'cell-fs': [187, 247, 208],
-  'cell-fa': [20, 83, 45],
+  'cell-fa': [187, 247, 208],
   'cell-fani': [251, 207, 232],
   'cell-fp': [233, 213, 255],
   'cell-fp-weekend': [187, 247, 208],
@@ -28,7 +28,7 @@ const CELL_COLORS: Record<string, [number, number, number]> = {
   'cell-empty': [255, 255, 255],
 };
 
-const DARK_TEXT_KINDS = new Set(['cell-fa', 'cell-voo', 'cell-simulador', 'cell-cma', 'cell-outro', 'cell-other']);
+const DARK_TEXT_KINDS = new Set(['cell-voo', 'cell-simulador', 'cell-cma', 'cell-outro', 'cell-other']);
 
 function cellRgb(cell: ScheduleCellData): [number, number, number] {
   const cls = cellKindClass(cell.kind, cell.display);

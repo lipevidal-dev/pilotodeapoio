@@ -576,6 +576,59 @@ $crosshair-focus-bg: #fce1d7;
     z-index: 1;
   }
 
+  .group-label-text {
+    vertical-align: middle;
+  }
+
+  .group-row .group-filler.col-day {
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  td.col-day {
+    position: relative;
+  }
+
+  .apao-rest-alerts {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.12rem;
+    vertical-align: middle;
+  }
+
+  .apao-rest-alerts--cell {
+    position: absolute;
+    top: 0.05rem;
+    right: 0.05rem;
+    z-index: 3;
+  }
+
+  .apao-rest-alert {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    min-height: 1.25rem;
+    padding: 0.08rem 0.3rem;
+    border: 1px solid #fdba74;
+    border-radius: 999px;
+    background: #fff7ed;
+    color: #9a3412;
+    font-size: 0.65rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    cursor: help;
+
+    img {
+      width: 0.9rem;
+      height: 0.9rem;
+      object-fit: contain;
+    }
+  }
+
   .data-row .col-crosshair {
     background: $crosshair-row-bg !important;
   }

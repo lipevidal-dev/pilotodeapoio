@@ -339,4 +339,70 @@ describe('ScheduleGridComponent — edição interativa 8.1A', () => {
     expect(comp.hasCoverageSurplus(19)).toBe(false);
     expect(comp.coverageSurplusTooltip(13)).toContain('T6');
   });
+
+  it('mostra os alertas de descanso na coluna APAO do dia em conflito', () => {
+    const grid = minimalGrid();
+    grid.groups.push({
+      type: 'APAO',
+      label: 'APAO',
+      rows: [
+        {
+          ...grid.groups[0]!.rows[0]!,
+          employeeId: 'apao-1',
+          name: 'APAO Test',
+          type: 'APAO',
+          cells: [
+            { display: 'T4', kind: 'shift' },
+            { display: 'T1', kind: 'shift' },
+            { display: '', kind: 'empty' },
+          ],
+        },
+      ],
+    });
+    fixture.componentRef.setInput('grid', grid);
+    fixture.componentRef.setInput('shifts', [
+      {
+        id: 't4',
+        code: 'T4',
+        name: 'T4',
+        startTime: '14:00',
+        endTime: '22:00',
+        roleType: 'APAO',
+        active: true,
+        displayOrder: 4,
+        mandatoryCoverage: false,
+        requiresT8PairNd: false,
+        coverageType: 'REQUIRED',
+        durationHours: 8,
+      },
+      {
+        id: 't1',
+        code: 'T1',
+        name: 'T1',
+        startTime: '00:00',
+        endTime: '06:00',
+        roleType: 'APAO',
+        active: true,
+        displayOrder: 1,
+        mandatoryCoverage: false,
+        requiresT8PairNd: false,
+        coverageType: 'REQUIRED',
+        durationHours: 6,
+      },
+    ]);
+    fixture.detectChanges();
+
+    const headers = fixture.nativeElement.querySelectorAll('.group-label');
+    const dayHeads = fixture.nativeElement.querySelectorAll('thead th.col-day');
+    const dataRows = fixture.nativeElement.querySelectorAll('tr.data-row');
+    const paoCells = dataRows[0]?.querySelectorAll('td.col-day');
+    const apaoCells = dataRows[1]?.querySelectorAll('td.col-day');
+    expect(headers[0]?.querySelector('.apao-rest-alert')).toBeNull();
+    expect(headers[1]?.querySelector('.apao-rest-alert')).toBeNull();
+    expect(dayHeads[0]?.querySelector('.apao-rest-alert')).toBeNull();
+    expect(dayHeads[1]?.querySelector('.apao-rest-alert')?.textContent).toContain('1');
+    expect(paoCells?.[1]?.querySelector('.apao-rest-alert')).toBeNull();
+    expect(apaoCells?.[0]?.querySelector('.apao-rest-alert')).toBeNull();
+    expect(apaoCells?.[1]?.querySelector('.apao-rest-alert')).toBeTruthy();
+  });
 });

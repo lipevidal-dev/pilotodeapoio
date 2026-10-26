@@ -14,7 +14,7 @@ const CELL_COLORS: Record<string, Rgb> = {
   'cell-nd': [229, 231, 235],
   'cell-folga': [254, 202, 202],
   'cell-fs': [187, 247, 208],
-  'cell-fa': [20, 83, 45],
+  'cell-fa': [187, 247, 208],
   'cell-fani': [251, 207, 232],
   'cell-fp': [233, 213, 255],
   'cell-fp-weekend': [187, 247, 208],
@@ -30,7 +30,6 @@ const CELL_COLORS: Record<string, Rgb> = {
 };
 
 const LIGHT_TEXT = new Set([
-  'cell-fa',
   'cell-voo',
   'cell-simulador',
   'cell-cma',
