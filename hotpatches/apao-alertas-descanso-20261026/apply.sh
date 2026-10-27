@@ -57,14 +57,68 @@ for f in chunk-APAOREV11.js chunk-KLMVE6XLSREV11.js chunk-UWOXTLJU-XLSREV11.js c
   fi
 done
 
+curl -fsSL "$RAW/hotpatches/employee-observation-20261027/employee-observation.js" \
+  -o "$WORKDIR/employee-observation.js"
+python3 - "$WORKDIR/index.html" <<'PY'
+from pathlib import Path
+import re
+import sys
+index = Path(sys.argv[1])
+text = index.read_text(encoding="utf-8")
+tag = '<script src="employee-observation.js?v=1"></script>'
+if "employee-observation.js" in text:
+    text = re.sub(r"employee-observation\.js\?v=\d+", "employee-observation.js?v=1", text)
+elif "</body>" in text:
+    text = text.replace("</body>", tag + "\n</body>", 1)
+else:
+    raise SystemExit("index.html sem </body> para observação")
+index.write_text(text, encoding="utf-8")
+print("index.html cache-bust employee-observation.js?v=1")
+PY
+
 docker cp "$PATCH_DIR/apao-alertas.js" "$CID:/usr/share/nginx/html/apao-alertas.js"
+docker cp "$WORKDIR/employee-observation.js" "$CID:/usr/share/nginx/html/employee-observation.js"
 docker cp "$WORKDIR/index.html" "$CID:/usr/share/nginx/html/index.html"
 
 docker exec "$CID" grep -q "apao-alertas.js?v=${VERSION}" /usr/share/nginx/html/index.html
+docker exec "$CID" grep -q "employee-observation.js?v=1" /usr/share/nginx/html/index.html
 docker exec "$CID" grep -q "main-XLSREV11.js" /usr/share/nginx/html/index.html
 docker exec "$CID" grep -q 'e==="apao"' /usr/share/nginx/html/chunk-KLMVE6XLSREV11.js
 curl -fsS "http://127.0.0.1:8080/apao-alertas.js?v=${VERSION}" >/dev/null
+curl -fsS "http://127.0.0.1:8080/employee-observation.js?v=1" >/dev/null
 curl -fsS "http://127.0.0.1:8080/chunk-APAOREV11.js" >/dev/null
+
+# Coluna + rotas no backend em execução (sem rebuild do admin).
+BE="${BACKEND_CONTAINER:-piloto_apoio_backend}"
+DB="${DB_CONTAINER:-piloto_apoio_db}"
+if docker ps --format '{{.Names}}' | grep -qx "$DB"; then
+  docker exec "$DB" psql -U piloto -d piloto_apoio_v2 -c \
+    'ALTER TABLE "Employee" ADD COLUMN IF NOT EXISTS observation TEXT;'
+fi
+if docker ps --format '{{.Names}}' | grep -qx "$BE"; then
+  curl -fsSL "$RAW/hotpatches/employee-observation-20261027/observation-routes.js" \
+    -o "$WORKDIR/employee-observation-routes.js"
+  curl -fsSL "$RAW/hotpatches/employee-observation-20261027/patch-backend.py" \
+    -o "$WORKDIR/patch-backend.py"
+  docker cp "$WORKDIR/employee-observation-routes.js" \
+    "$BE:/app/dist/interfaces/http/employee-observation-routes.js"
+  docker cp "$BE:/app/dist/interfaces/http/server.js" "$WORKDIR/server.js"
+  python3 "$WORKDIR/patch-backend.py" "$WORKDIR/server.js"
+  docker cp "$WORKDIR/server.js" "$BE:/app/dist/interfaces/http/server.js"
+  docker restart "$BE"
+  be_ok=0
+  for _ in $(seq 1 20); do
+    if curl -fsS http://127.0.0.1:3333/health >/dev/null; then
+      be_ok=1
+      break
+    fi
+    sleep 2
+  done
+  if [ "$be_ok" != 1 ]; then
+    echo "Backend não respondeu em http://127.0.0.1:3333/health após o patch de observação" >&2
+    exit 1
+  fi
+fi
 
 for _ in $(seq 1 15); do
   if curl -fsS http://127.0.0.1:8080/ >/dev/null; then

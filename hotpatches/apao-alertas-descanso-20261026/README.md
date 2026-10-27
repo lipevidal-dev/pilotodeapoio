@@ -25,3 +25,5 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --no-build 
 Depois rode o `apply.sh` de novo. Hard-refresh em `/escala`.
 
 O Excel Escala de Revezamento some se o container `admin` for recriado a partir da imagem; o `apply.sh` recoloca.
+
+O mesmo `apply.sh` cria o campo **Observação** do colaborador (coluna no banco, rotas no backend e hover no nome da escala).

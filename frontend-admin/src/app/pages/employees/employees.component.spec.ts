@@ -65,6 +65,8 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
     expect(html.textContent).toContain('Ativo');
     expect(html.textContent).toContain('Licenças e Habilitações');
     expect(html.textContent).toContain('Cadastro');
+    expect(html.textContent).toContain('Observação');
+    expect(html.querySelector('#formObservation')).not.toBeNull();
     expect(html.textContent).toContain('Motor de Escala');
     expect(html.querySelector('#formPortalPassword')?.getAttribute('type')).toBe('text');
     expect(html.querySelector('#formPortalLogin')).not.toBeNull();
@@ -209,9 +211,11 @@ describe('EmployeesComponent — preferência de turno e FCF', () => {
       updatedAt: new Date().toISOString(),
     });
     expect(component.formPortalPassword).toBe('senha-vista');
+    component.formObservation = ' Prefere voo manhã ';
     component.save();
     const req = http.expectOne(`${environment.apiBaseUrl}/employees/emp-1`);
     expect(req.request.method).toBe('PUT');
+    expect(req.request.body.observation).toBe('Prefere voo manhã');
     expect(req.request.body.noFlightDates).toBeUndefined();
     expect(req.request.body.preferredShiftIds).toBeUndefined();
     expect(req.request.body.restrictedShiftIds).toBeUndefined();

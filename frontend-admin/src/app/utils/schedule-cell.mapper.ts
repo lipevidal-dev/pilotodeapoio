@@ -755,6 +755,7 @@ function buildEmployeeRow(
     name: employee.name,
     type: employee.type,
     cif: employee.cif ?? null,
+    observation: employee.observation ?? null,
     cells,
     summary,
   };
