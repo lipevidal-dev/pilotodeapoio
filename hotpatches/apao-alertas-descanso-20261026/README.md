@@ -6,7 +6,8 @@ O `apply.sh` só:
 
 1. sobe o container existente, se estiver parado (`up -d --no-build`)
 2. copia `apao-alertas.js` para o nginx
-3. coloca o script no `index.html` com `?v=6`
+3. coloca o script no `index.html` com `?v=7`
+4. recoloca o Excel/PDF **Escala de Revezamento** (`main-XLSREV11.js`)
 
 No VPS, como root:
 
@@ -22,3 +23,5 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --no-build 
 ```
 
 Depois rode o `apply.sh` de novo. Hard-refresh em `/escala`.
+
+O Excel Escala de Revezamento some se o container `admin` for recriado a partir da imagem; o `apply.sh` recoloca.

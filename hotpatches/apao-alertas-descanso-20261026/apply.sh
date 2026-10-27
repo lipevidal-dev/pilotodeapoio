@@ -9,7 +9,7 @@ BRANCH=cursor/trocas-realocar-visual-326e
 RAW="https://raw.githubusercontent.com/lipevidal-dev/pilotodeapoio/${BRANCH}"
 PATCH_DIR="$ROOT/hotpatches/apao-alertas-descanso-20261026"
 CID="${ADMIN_CONTAINER:-piloto_apoio_admin}"
-VERSION=6
+VERSION=7
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
@@ -31,11 +31,40 @@ cp -a "$WORKDIR/index.html" "$ROOT/hotpatch-backup/apao-alertas-descanso-2026102
 
 python3 "$PATCH_DIR/patch-index.py" "$WORKDIR/index.html" "$VERSION"
 
+# O `up -d` / recreate da imagem apaga o Excel Escala de Revezamento.
+# Recoloca em cima do main atual, com nomes novos para furar cache de 7 dias.
+curl -fsSL "$RAW/hotpatches/apao-revezamento-20261007/chunk-APAOREV07.js" \
+  -o "$WORKDIR/chunk-APAOREV07.js"
+curl -fsSL "$RAW/hotpatches/apao-revezamento-20261007/restore-excel.py" \
+  -o "$WORKDIR/restore-excel.py"
+curl -fsSL "$RAW/hotpatches/apao-revezamento-20261007/logo-gol-wordmark.png" \
+  -o "$WORKDIR/logo-gol-wordmark.png" || true
+MAIN_JS=$(python3 -c "import re,pathlib; t=pathlib.Path('$WORKDIR/index.html').read_text(); m=re.search(r'main-[A-Za-z0-9]+\.js', t); print(m.group() if m else '')")
+test -n "$MAIN_JS"
+docker cp "$CID:/usr/share/nginx/html/$MAIN_JS" "$WORKDIR/$MAIN_JS"
+for f in chunk-KLMVE6C7.js chunk-UWOXTLJU.js chunk-LJ446U67.js chunk-KLMVE6XLSREV11.js chunk-UWOXTLJU-XLSREV11.js chunk-LJ446U67-XLSREV11.js main-XLSREV11.js; do
+  docker cp "$CID:/usr/share/nginx/html/$f" "$WORKDIR/$f" 2>/dev/null || true
+done
+python3 "$WORKDIR/restore-excel.py" "$WORKDIR"
+
+docker exec "$CID" mkdir -p /usr/share/nginx/html/assets/brand
+if [ -f "$WORKDIR/logo-gol-wordmark.png" ]; then
+  docker cp "$WORKDIR/logo-gol-wordmark.png" "$CID:/usr/share/nginx/html/assets/brand/logo-gol-wordmark.png"
+fi
+for f in chunk-APAOREV11.js chunk-KLMVE6XLSREV11.js chunk-UWOXTLJU-XLSREV11.js chunk-LJ446U67-XLSREV11.js main-XLSREV11.js; do
+  if [ -f "$WORKDIR/$f" ]; then
+    docker cp "$WORKDIR/$f" "$CID:/usr/share/nginx/html/$f"
+  fi
+done
+
 docker cp "$PATCH_DIR/apao-alertas.js" "$CID:/usr/share/nginx/html/apao-alertas.js"
 docker cp "$WORKDIR/index.html" "$CID:/usr/share/nginx/html/index.html"
 
 docker exec "$CID" grep -q "apao-alertas.js?v=${VERSION}" /usr/share/nginx/html/index.html
+docker exec "$CID" grep -q "main-XLSREV11.js" /usr/share/nginx/html/index.html
+docker exec "$CID" grep -q 'e==="apao"' /usr/share/nginx/html/chunk-KLMVE6XLSREV11.js
 curl -fsS "http://127.0.0.1:8080/apao-alertas.js?v=${VERSION}" >/dev/null
+curl -fsS "http://127.0.0.1:8080/chunk-APAOREV11.js" >/dev/null
 
 for _ in $(seq 1 15); do
   if curl -fsS http://127.0.0.1:8080/ >/dev/null; then
