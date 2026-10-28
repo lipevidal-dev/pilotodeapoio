@@ -11,8 +11,8 @@ function normalizeObservation(value: unknown): string | null {
 }
 
 export async function listEmployeeObservationsController(_req: FastifyRequest, reply: FastifyReply) {
-  const rows = await prisma.$queryRaw<Array<{ employeeId: string; observation: string }>>`
-    SELECT id AS "employeeId", observation
+  const rows = await prisma.$queryRaw<Array<{ employeeId: string; name: string; observation: string }>>`
+    SELECT id AS "employeeId", name, observation
     FROM "Employee"
     WHERE observation IS NOT NULL AND btrim(observation) <> ''
   `;

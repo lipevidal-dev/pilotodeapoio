@@ -1,16 +1,19 @@
 /**
  * Campo Observação no Editar funcionário e hover no nome da escala.
+ * v2: cruza id da observação com o nome do colaborador e usa tooltip visível.
  * Não altera alertas, trocas, Excel nem cores já publicadas.
  */
 (function () {
-  if (window.__empObservationV1) return;
-  window.__empObservationV1 = true;
+  if (window.__empObservationV2) return;
+  window.__empObservationV2 = true;
 
   var MAX = 500;
   var byId = {};
   var byName = {};
+  var namesById = {};
   var lastEmployeeId = "";
   var pendingObservation = "";
+  var lastTipEl = null;
 
   var style = document.getElementById("emp-observation-style") || document.createElement("style");
   style.id = "emp-observation-style";
@@ -20,9 +23,15 @@
     ".emp-observation-field textarea{width:100%;min-height:4.5rem;resize:vertical;box-sizing:border-box;font:inherit;font-size:.9rem;color:#2d2d2d;background:#fff;border:1px solid #d1d5db;border-radius:6px;padding:.5rem .65rem}",
     ".emp-observation-field textarea:focus{outline:none;border-color:#f15a22;box-shadow:0 0 0 1px #f15a22}",
     ".emp-observation-field small{font-size:.75rem;color:#6b7280}",
-    ".emp-name.has-observation{cursor:help;text-decoration:underline dotted;text-underline-offset:.18em}",
+    "td.col-employee.has-observation,.emp-name.has-observation{cursor:help}",
+    ".emp-name.has-observation{text-decoration:underline dotted;text-underline-offset:.18em}",
+    "#emp-observation-tip{position:fixed;z-index:2147483647;display:none;max-width:22rem;white-space:pre-wrap;background:#111827;color:#fff;font:600 .8rem/1.35 system-ui,sans-serif;padding:.5rem .7rem;border-radius:6px;box-shadow:0 10px 28px rgba(0,0,0,.28);pointer-events:none}",
   ].join("");
   (document.head || document.documentElement).appendChild(style);
+
+  var tip = document.getElementById("emp-observation-tip") || document.createElement("div");
+  tip.id = "emp-observation-tip";
+  (document.body || document.documentElement).appendChild(tip);
 
   function token() {
     return sessionStorage.getItem("escala_auth_token") || localStorage.getItem("escala_auth_token") || "";
@@ -34,22 +43,49 @@
     return { Authorization: "Bearer " + t, "Content-Type": "application/json" };
   }
 
+  function fetchOpts() {
+    var headers = authHeaders();
+    return headers ? { headers: headers } : {};
+  }
+
   function normalize(value) {
     var text = String(value || "").trim();
     if (!text) return "";
     return text.length > MAX ? text.slice(0, MAX) : text;
   }
 
-  function rememberRow(row) {
-    if (!row || !row.id) return;
-    var text = normalize(row.observation);
-    if (text) byId[row.id] = text;
-    else delete byId[row.id];
-    var name = String(row.name || "").replace(/\s+/g, " ").trim();
+  function cleanName(value) {
+    return String(value || "")
+      .replace(/\s+/g, " ")
+      .replace(/\s*\([^)]*\)\s*$/, "")
+      .trim();
+  }
+
+  function setObservation(id, name, text) {
+    text = normalize(text);
+    name = cleanName(name);
+    if (id) {
+      if (text) byId[id] = text;
+      else delete byId[id];
+      if (name) namesById[id] = name;
+    }
     if (name) {
       if (text) byName[name] = text;
       else delete byName[name];
     }
+  }
+
+  function rememberRow(row) {
+    if (!row) return;
+    var id = row.id || row.employeeId;
+    var name = row.name || namesById[id] || "";
+    if (id && name) namesById[id] = cleanName(name);
+    if (!id && !name) return;
+    if (!Object.prototype.hasOwnProperty.call(row, "observation")) {
+      if (id && byId[id]) setObservation(id, name || namesById[id], byId[id]);
+      return;
+    }
+    setObservation(id, name, row.observation);
   }
 
   function rememberList(data) {
@@ -58,15 +94,10 @@
       return;
     }
     if (data && Array.isArray(data.items)) {
-      data.items.forEach(function (row) {
-        if (!row) return;
-        if (row.employeeId && row.observation) {
-          byId[row.employeeId] = normalize(row.observation);
-          return;
-        }
-        rememberRow(row);
-      });
+      data.items.forEach(rememberRow);
+      return;
     }
+    if (data && data.id) rememberRow(data);
   }
 
   function pathOf(url) {
@@ -91,52 +122,133 @@
     return match ? decodeURIComponent(match[1]) : "";
   }
 
-  function observationForName(name) {
-    return byName[String(name || "").replace(/\s+/g, " ").trim()] || "";
+  function observationForCell(el) {
+    var raw = cleanName(el && el.textContent);
+    if (!raw) return "";
+    if (byName[raw]) return byName[raw];
+    var best = "";
+    var bestName = "";
+    Object.keys(byName).forEach(function (name) {
+      if (!name) return;
+      if (raw === name || raw.indexOf(name) === 0 || name.indexOf(raw) === 0) {
+        if (name.length > bestName.length) {
+          bestName = name;
+          best = byName[name];
+        }
+      }
+    });
+    return best;
   }
 
   function paintNames() {
-    document.querySelectorAll(".emp-name").forEach(function (el) {
-      if (el.closest(".employees-table, .p-datatable")) return;
-      var text = observationForName(el.textContent);
+    var nodes = document.querySelectorAll("td.col-employee, .emp-name");
+    Array.prototype.forEach.call(nodes, function (el) {
+      if (el.closest(".employees-table, .p-datatable, .p-dialog")) return;
+      var text = observationForCell(el);
       if (text) {
-        el.setAttribute("title", text);
+        el.setAttribute("data-emp-obs", text);
         el.classList.add("has-observation");
       } else {
-        el.removeAttribute("title");
+        el.removeAttribute("data-emp-obs");
         el.classList.remove("has-observation");
       }
     });
   }
 
+  function showTip(el, text) {
+    if (!text) {
+      hideTip();
+      return;
+    }
+    tip.textContent = text;
+    tip.style.display = "block";
+    var r = el.getBoundingClientRect();
+    var left = r.right + 10;
+    var top = r.top;
+    if (left + 360 > window.innerWidth) left = Math.max(8, r.left);
+    if (top + 140 > window.innerHeight) top = Math.max(8, window.innerHeight - 150);
+    tip.style.left = left + "px";
+    tip.style.top = top + "px";
+  }
+
+  function hideTip() {
+    tip.style.display = "none";
+    lastTipEl = null;
+  }
+
+  function hoverTarget(node) {
+    if (!node || !node.closest) return null;
+    return node.closest("td.col-employee") || node.closest(".emp-name");
+  }
+
+  document.addEventListener(
+    "mouseover",
+    function (ev) {
+      var el = hoverTarget(ev.target);
+      if (!el || el.closest(".employees-table, .p-datatable, .p-dialog")) {
+        return;
+      }
+      if (el === lastTipEl) return;
+      lastTipEl = el;
+      var text = el.getAttribute("data-emp-obs") || observationForCell(el);
+      if (text) {
+        el.setAttribute("data-emp-obs", text);
+        el.classList.add("has-observation");
+        showTip(el, text);
+      } else {
+        hideTip();
+      }
+    },
+    true,
+  );
+  document.addEventListener(
+    "mouseout",
+    function (ev) {
+      var el = hoverTarget(ev.target);
+      if (!el) return;
+      var next = ev.relatedTarget;
+      if (next && el.contains(next)) return;
+      if (lastTipEl === el) hideTip();
+    },
+    true,
+  );
+
   function loadObservations() {
-    var headers = authHeaders();
-    if (!headers) return;
-    fetch("/api/employees/observations", { headers: headers })
-      .then(function (res) {
-        if (!res.ok) return null;
-        return res.json();
-      })
-      .then(function (data) {
-        if (!data) return;
-        rememberList(data);
-        paintNames();
-      })
-      .catch(function () {});
+    var opts = fetchOpts();
+    Promise.all([
+      fetch("/api/employees/observations", opts)
+        .then(function (res) {
+          return res.ok ? res.json() : null;
+        })
+        .catch(function () {
+          return null;
+        }),
+      fetch("/api/employees", opts)
+        .then(function (res) {
+          return res.ok ? res.json() : null;
+        })
+        .catch(function () {
+          return null;
+        }),
+    ]).then(function (pair) {
+      rememberList(pair[1]);
+      rememberList(pair[0]);
+      paintNames();
+    });
   }
 
   function saveObservation(id, value) {
     var headers = authHeaders();
     if (!headers || !id) return;
     var observation = normalize(value) || null;
+    var name = namesById[id] || "";
+    setObservation(id, name, observation);
     fetch("/api/employees/" + encodeURIComponent(id) + "/observation", {
       method: "PUT",
       headers: headers,
       body: JSON.stringify({ observation: observation }),
-    }).then(function (res) {
-      if (!res.ok) return;
-      if (observation) byId[id] = observation;
-      else delete byId[id];
+    }).then(function () {
+      paintNames();
     }).catch(function () {});
   }
 
@@ -208,17 +320,10 @@
         var value = area.value;
         pendingObservation = value;
         if (id) {
-          var name = "";
+          var name = namesById[id] || "";
           var cmp = window.__empDlg;
-          if (cmp && cmp.formName) name = String(cmp.formName).replace(/\s+/g, " ").trim();
-          var text = normalize(value);
-          if (text) {
-            byId[id] = text;
-            if (name) byName[name] = text;
-          } else {
-            delete byId[id];
-            if (name) delete byName[name];
-          }
+          if (cmp && cmp.formName) name = String(cmp.formName);
+          setObservation(id, name, value);
           saveObservation(id, value);
           setTimeout(paintNames, 400);
         }
@@ -241,19 +346,11 @@
     return origFetch.apply(this, args).then(function (res) {
       try {
         if (!res || !res.ok) return res;
-        if (method === "GET" && employeesUrl(url)) {
+        if (method === "GET" && (employeesUrl(url) || employeeItemUrl(url))) {
+          if (employeeItemUrl(url)) lastEmployeeId = employeeIdFromUrl(url) || lastEmployeeId;
           res.clone().json().then(function (data) {
             rememberList(data);
-            paintNames();
-          }).catch(function () {});
-        }
-        if (method === "GET" && employeeItemUrl(url)) {
-          lastEmployeeId = employeeIdFromUrl(url) || lastEmployeeId;
-          res.clone().json().then(function (data) {
-            if (data && data.id) {
-              lastEmployeeId = data.id;
-              rememberRow(data);
-            }
+            if (data && data.id) lastEmployeeId = data.id;
             paintNames();
           }).catch(function () {});
         }
@@ -264,12 +361,6 @@
               rememberRow(data);
               if (pendingObservation) saveObservation(data.id, pendingObservation);
             }
-            paintNames();
-          }).catch(function () {});
-        }
-        if (method === "PUT" && employeeItemUrl(url)) {
-          res.clone().json().then(function (data) {
-            if (data && data.id) rememberRow(data);
             paintNames();
           }).catch(function () {});
         }
@@ -286,12 +377,8 @@
         if (!employeesUrl(url) && !employeeItemUrl(url)) return;
         var data = JSON.parse(this.responseText);
         rememberList(data);
-        if (data && !Array.isArray(data) && data.id) {
-          lastEmployeeId = data.id;
-          rememberRow(data);
-        } else if (employeeItemUrl(url)) {
-          lastEmployeeId = employeeIdFromUrl(url) || lastEmployeeId;
-        }
+        if (data && data.id) lastEmployeeId = data.id;
+        else if (employeeItemUrl(url)) lastEmployeeId = employeeIdFromUrl(url) || lastEmployeeId;
         paintNames();
       } catch (err) {}
     });
@@ -305,5 +392,6 @@
   });
   obs.observe(document.documentElement, { childList: true, subtree: true });
   loadObservations();
-  setTimeout(loadObservations, 1500);
+  setTimeout(loadObservations, 800);
+  setTimeout(loadObservations, 2500);
 })();

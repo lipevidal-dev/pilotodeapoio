@@ -15,7 +15,7 @@ export async function registerEmployeeObservationRoutes(app) {
 
   app.get("/employees/observations", async (_req, reply) => {
     const rows = await prisma.$queryRaw`
-      SELECT id AS "employeeId", observation
+      SELECT id AS "employeeId", name, observation
       FROM "Employee"
       WHERE observation IS NOT NULL AND btrim(observation) <> ''
     `;

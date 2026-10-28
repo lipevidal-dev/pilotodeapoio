@@ -65,15 +65,15 @@ import re
 import sys
 index = Path(sys.argv[1])
 text = index.read_text(encoding="utf-8")
-tag = '<script src="employee-observation.js?v=1"></script>'
+tag = '<script src="employee-observation.js?v=2"></script>'
 if "employee-observation.js" in text:
-    text = re.sub(r"employee-observation\.js\?v=\d+", "employee-observation.js?v=1", text)
+    text = re.sub(r"employee-observation\.js\?v=\d+", "employee-observation.js?v=2", text)
 elif "</body>" in text:
     text = text.replace("</body>", tag + "\n</body>", 1)
 else:
     raise SystemExit("index.html sem </body> para observação")
 index.write_text(text, encoding="utf-8")
-print("index.html cache-bust employee-observation.js?v=1")
+print("index.html cache-bust employee-observation.js?v=2")
 PY
 
 docker cp "$PATCH_DIR/apao-alertas.js" "$CID:/usr/share/nginx/html/apao-alertas.js"
@@ -81,11 +81,11 @@ docker cp "$WORKDIR/employee-observation.js" "$CID:/usr/share/nginx/html/employe
 docker cp "$WORKDIR/index.html" "$CID:/usr/share/nginx/html/index.html"
 
 docker exec "$CID" grep -q "apao-alertas.js?v=${VERSION}" /usr/share/nginx/html/index.html
-docker exec "$CID" grep -q "employee-observation.js?v=1" /usr/share/nginx/html/index.html
+docker exec "$CID" grep -q "employee-observation.js?v=2" /usr/share/nginx/html/index.html
 docker exec "$CID" grep -q "main-XLSREV11.js" /usr/share/nginx/html/index.html
 docker exec "$CID" grep -q 'e==="apao"' /usr/share/nginx/html/chunk-KLMVE6XLSREV11.js
 curl -fsS "http://127.0.0.1:8080/apao-alertas.js?v=${VERSION}" >/dev/null
-curl -fsS "http://127.0.0.1:8080/employee-observation.js?v=1" >/dev/null
+curl -fsS "http://127.0.0.1:8080/employee-observation.js?v=2" >/dev/null
 curl -fsS "http://127.0.0.1:8080/chunk-APAOREV11.js" >/dev/null
 
 # Coluna + rotas no backend em execução (sem rebuild do admin).
