@@ -755,6 +755,7 @@ function buildEmployeeRow(
     name: employee.name,
     type: employee.type,
     cif: employee.cif ?? null,
+    observation: employee.observation ?? null,
     cells,
     summary,
   };
@@ -1054,7 +1055,51 @@ function applyShiftSwapsToRows(
   }
 }
 
-/** Marca células de trocas já aprovadas (canto vermelho discreto). */
+function normalizeSwapToken(value: string | undefined | null): string {
+  let raw = (value ?? '').trim().toUpperCase();
+  if (!raw || raw === '·' || raw === '-' || raw === 'EM BRANCO') return '';
+  if (raw.startsWith('TI') && raw.length > 2) raw = `T${raw.slice(2)}`;
+  return raw;
+}
+
+function swapTokensMatch(display: string | undefined, stored: string): boolean {
+  const a = normalizeSwapToken(display);
+  const b = normalizeSwapToken(stored);
+  if (!b) return !a;
+  if (a === b) return true;
+  if (a.startsWith(b) || b.startsWith(a)) return true;
+  return false;
+}
+
+function recountEmployeeRow(row: EmployeeRowData, year: number, month: number): void {
+  applyWeekendFolgaSocialStyle(row.cells, year, month);
+  const summary = emptySummary();
+  for (const cell of row.cells) {
+    countForSummary(cell, summary);
+  }
+  summary.folgaSocialOk = summary.folgaSocial >= 2;
+  summary.diasTrabalhados = computeDisplayWorkDays(summary);
+  row.summary = summary;
+}
+
+function withApprovedSwapMark(
+  cell: ScheduleCellData,
+  hover: string,
+): ScheduleCellData {
+  if (cell.shiftSwap) return cell;
+  return {
+    ...cell,
+    swapApplied: true,
+    title: cell.title ?? 'Troca aceita',
+    hoverDetail: cell.hoverDetail ?? hover,
+  };
+}
+
+/**
+ * Marca o selo vermelho nas trocas aprovadas e, se o backend ainda não
+ * persistiu a realocação, troca o display/cor das células envolvidas.
+ * Não troca de novo quando a grade já mostra o resultado (evita inverter).
+ */
 function applyApprovedSwapMarksToRows(
   rows: EmployeeRowData[],
   year: number,
@@ -1064,18 +1109,87 @@ function applyApprovedSwapMarksToRows(
   if (!shiftSwaps?.length) return;
   const rowById = new Map(rows.map((r) => [r.employeeId, r]));
   const days = daysInMonth(year, month);
+  const touched = new Set<EmployeeRowData>();
+
+  const partAt = (joined: string | undefined, index: number): string => {
+    const parts = (joined ?? '')
+      .split('+')
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return '';
+    return parts[Math.min(index, parts.length - 1)] ?? '';
+  };
+
+  const readCell = (row: EmployeeRowData | undefined, day: number) => {
+    if (!row || day < 1 || day > days) return undefined;
+    return row.cells[day - 1];
+  };
+
+  const writeCell = (
+    row: EmployeeRowData | undefined,
+    day: number,
+    cell: ScheduleCellData,
+  ) => {
+    if (!row || day < 1 || day > days || !row.cells[day - 1]) return;
+    row.cells[day - 1] = cell;
+    touched.add(row);
+  };
 
   const markApplied = (row: EmployeeRowData | undefined, day: number) => {
-    if (!row || day < 1 || day > days || !row.cells[day - 1]) return;
-    const cell = row.cells[day - 1]!;
-    // Não sobrescreve destaque de troca ainda ativa.
-    if (cell.shiftSwap) return;
-    row.cells[day - 1] = {
-      ...cell,
-      swapApplied: true,
-      title: cell.title ?? 'Troca aceita',
-      hoverDetail: cell.hoverDetail ?? 'Turno trocado (troca aceita).',
-    };
+    const cell = readCell(row, day);
+    if (!row || !cell) return;
+    writeCell(row, day, withApprovedSwapMark(cell, 'Turno trocado (troca aceita).'));
+  };
+
+  const shouldSwapVisual = (
+    leftDisplay: string | undefined,
+    rightDisplay: string | undefined,
+    origLeft: string,
+    origRight: string,
+  ): boolean => {
+    const origL = normalizeSwapToken(origLeft);
+    const origR = normalizeSwapToken(origRight);
+    if (!origL && !origR) return false;
+    if (origL === origR) return false;
+    const alreadySwapped =
+      swapTokensMatch(leftDisplay, origR) && swapTokensMatch(rightDisplay, origL);
+    // Se ainda não está no resultado, realoca — não exige match perfeito com a origem.
+    return !alreadySwapped;
+  };
+
+  const exchangeCells = (
+    leftRow: EmployeeRowData | undefined,
+    leftDay: number,
+    rightRow: EmployeeRowData | undefined,
+    rightDay: number,
+    hoverLeft: string,
+    hoverRight: string,
+  ) => {
+    const left = readCell(leftRow, leftDay);
+    const right = readCell(rightRow, rightDay);
+    if (!left || !right) {
+      markApplied(leftRow, leftDay);
+      markApplied(rightRow, rightDay);
+      return;
+    }
+    const leftSwap = left.shiftSwap;
+    const rightSwap = right.shiftSwap;
+    writeCell(
+      leftRow,
+      leftDay,
+      withApprovedSwapMark(
+        { ...right, shiftSwap: leftSwap },
+        hoverLeft,
+      ),
+    );
+    writeCell(
+      rightRow,
+      rightDay,
+      withApprovedSwapMark(
+        { ...left, shiftSwap: rightSwap },
+        hoverRight,
+      ),
+    );
   };
 
   for (const swap of shiftSwaps) {
@@ -1093,12 +1207,28 @@ function applyApprovedSwapMarksToRows(
     );
     if (sourceDays.length < 1 || targetDays.length < 1) continue;
     const n = Math.min(sourceDays.length, targetDays.length);
+    const hover = `Turno trocado (troca aceita): ${swap.requesterName} ${swap.requesterShiftCode} ↔ ${swap.targetName} ${swap.targetShiftCode}`;
 
     if (swap.kind === 'SELF') {
       const row = rowById.get(swap.requesterEmployeeId);
       for (let i = 0; i < n; i++) {
-        markApplied(row, sourceDays[i]!);
-        markApplied(row, targetDays[i]!);
+        const sDay = sourceDays[i]!;
+        const tDay = targetDays[i]!;
+        const origSrc = partAt(swap.requesterShiftCode, i);
+        const origDst = partAt(swap.targetShiftCode, i);
+        if (
+          shouldSwapVisual(
+            readCell(row, sDay)?.display,
+            readCell(row, tDay)?.display,
+            origSrc,
+            origDst,
+          )
+        ) {
+          exchangeCells(row, sDay, row, tDay, hover, hover);
+        } else {
+          markApplied(row, sDay);
+          markApplied(row, tDay);
+        }
       }
       continue;
     }
@@ -1106,9 +1236,28 @@ function applyApprovedSwapMarksToRows(
     const requesterRow = rowById.get(swap.requesterEmployeeId);
     const targetRow = rowById.get(swap.targetEmployeeId);
     for (let i = 0; i < n; i++) {
-      markApplied(requesterRow, sourceDays[i]!);
-      markApplied(targetRow, targetDays[i]!);
+      const sDay = sourceDays[i]!;
+      const tDay = targetDays[i]!;
+      const origReq = partAt(swap.requesterShiftCode, i);
+      const origTgt = partAt(swap.targetShiftCode, i);
+      if (
+        shouldSwapVisual(
+          readCell(requesterRow, sDay)?.display,
+          readCell(targetRow, tDay)?.display,
+          origReq,
+          origTgt,
+        )
+      ) {
+        exchangeCells(requesterRow, sDay, targetRow, tDay, hover, hover);
+      } else {
+        markApplied(requesterRow, sDay);
+        markApplied(targetRow, tDay);
+      }
     }
+  }
+
+  for (const row of touched) {
+    recountEmployeeRow(row, year, month);
   }
 }
 

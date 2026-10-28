@@ -892,8 +892,25 @@ export class ShiftSwapUseCase {
     return scheduleMonth;
   }
 
+  private pairAlreadyApplied(
+    left: DaySnapshot,
+    right: DaySnapshot,
+    origLeft: string,
+    origRight: string,
+  ): boolean {
+    const origL = normalizeCode(origLeft);
+    const origR = normalizeCode(origRight);
+    if (!origL && !origR) return false;
+    const nowL = normalizeCode(displayTokenFromDay(left));
+    const nowR = normalizeCode(displayTokenFromDay(right));
+    if (origL === origR) return nowL === origL && nowR === origR;
+    return nowL === origR && nowR === origL;
+  }
+
   private async applyPeerSwap(tx: Tx, row: ShiftSwapWithParties): Promise<void> {
     const datePairs = resolveSwapDatePairs(row);
+    const origReq = splitClientTokens(row.requesterShiftCode, datePairs.length);
+    const origTgt = splitClientTokens(row.targetShiftCode, datePairs.length);
     const pairs: Array<{
       requesterDay: DaySnapshot;
       targetDay: DaySnapshot;
@@ -901,11 +918,22 @@ export class ShiftSwapUseCase {
       targetDate: Date;
     }> = [];
 
-    for (const pair of datePairs) {
+    for (let i = 0; i < datePairs.length; i++) {
+      const pair = datePairs[i]!;
       const [requesterPack, targetPack] = await Promise.all([
         readExecutedDay(tx, row.scheduleMonthId, row.requesterEmployeeId, pair.sourceIso),
         readExecutedDay(tx, row.scheduleMonthId, row.targetEmployeeId, pair.targetIso),
       ]);
+      if (
+        this.pairAlreadyApplied(
+          requesterPack.day,
+          targetPack.day,
+          origReq[i] ?? "",
+          origTgt[i] ?? "",
+        )
+      ) {
+        continue;
+      }
       pairs.push({
         requesterDay: requesterPack.day,
         targetDay: targetPack.day,
@@ -944,14 +972,20 @@ export class ShiftSwapUseCase {
     }
 
     const employeeId = row.requesterEmployeeId;
+    const origSrc = splitClientTokens(row.requesterShiftCode, datePairs.length);
+    const origDst = splitClientTokens(row.targetShiftCode, datePairs.length);
     const pairs: Array<{ source: DaySnapshot; target: DaySnapshot; sourceDate: Date; targetDate: Date }> =
       [];
 
-    for (const pair of datePairs) {
+    for (let i = 0; i < datePairs.length; i++) {
+      const pair = datePairs[i]!;
       const [sPack, tPack] = await Promise.all([
         readExecutedDay(tx, row.scheduleMonthId, employeeId, pair.sourceIso),
         readExecutedDay(tx, row.scheduleMonthId, employeeId, pair.targetIso),
       ]);
+      if (this.pairAlreadyApplied(sPack.day, tPack.day, origSrc[i] ?? "", origDst[i] ?? "")) {
+        continue;
+      }
       pairs.push({
         source: sPack.day,
         target: tPack.day,

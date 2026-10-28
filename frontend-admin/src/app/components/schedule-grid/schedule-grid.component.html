@@ -193,9 +193,15 @@
               <td
                 class="col-employee sticky-col"
                 [class.col-crosshair]="isRowHovered(row.employeeId)"
+                [class.has-observation]="!!row.observation"
+                [pTooltip]="row.observation || ''"
+                [tooltipDisabled]="!row.observation"
+                tooltipPosition="right"
+                [escape]="true"
+                tooltipStyleClass="emp-observation-tip"
                 (mouseenter)="onRowMouseEnter(row.employeeId)"
               >
-                <span class="emp-name">{{ row.name }}</span>
+                <span class="emp-name" [class.has-observation]="!!row.observation">{{ row.name }}</span>
                 @if (row.preferredShiftCode) {
                   <span class="emp-pref">({{ row.preferredShiftCode }})</span>
                 }

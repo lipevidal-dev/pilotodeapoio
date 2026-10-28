@@ -165,3 +165,20 @@
   color: #fef3c7;
   border-color: #92400e;
 }
+
+.cell-swap-applied {
+  position: relative;
+}
+
+.cell-swap-applied::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 0.55rem 0.55rem 0;
+  border-color: transparent #dc2626 transparent transparent;
+  pointer-events: none;
+}

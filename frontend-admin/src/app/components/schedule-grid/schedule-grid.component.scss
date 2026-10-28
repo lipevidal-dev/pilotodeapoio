@@ -685,6 +685,16 @@ $crosshair-focus-bg: #fce1d7;
     color: var(--gol-gray-dark);
   }
 
+  .col-employee.has-observation,
+  .emp-name.has-observation {
+    cursor: help;
+  }
+
+  .emp-name.has-observation {
+    text-decoration: underline dotted;
+    text-underline-offset: 0.18em;
+  }
+
   .emp-pref {
     margin-left: 0.2rem;
     font-size: 0.72rem;
@@ -692,6 +702,12 @@ $crosshair-focus-bg: #fce1d7;
     color: #dc2626;
     white-space: nowrap;
   }
+}
+
+::ng-deep .emp-observation-tip {
+  white-space: pre-wrap;
+  max-width: 22rem;
+  line-height: 1.35;
 }
 
 .editable-grid .col-day,

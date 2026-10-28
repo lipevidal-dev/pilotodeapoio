@@ -112,6 +112,8 @@ export interface EmployeeRowData {
   type: EmployeeType;
   /** CIF operacional (export Escala de Revezamento / APAOs). */
   cif?: string | null;
+  /** Nota livre do colaborador — hover no nome. */
+  observation?: string | null;
   /** Células do mês corrente (índice = dia - 1). */
   cells: ScheduleCellData[];
   /**
