@@ -9,7 +9,7 @@ BRANCH=cursor/trocas-realocar-visual-326e
 RAW="https://raw.githubusercontent.com/lipevidal-dev/pilotodeapoio/${BRANCH}"
 PATCH_DIR="$ROOT/hotpatches/apao-alertas-descanso-20261026"
 CID="${ADMIN_CONTAINER:-piloto_apoio_admin}"
-VERSION=8
+VERSION=9
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
@@ -170,6 +170,15 @@ if docker ps -a --format '{{.Names}}' | grep -qx "$BE"; then
     fi
     exit 1
   fi
+  echo "Reaplicando trocas aprovadas do mês corrente (orig↔orig, sem duplicar)..."
+  docker exec -w /app "$BE" node --input-type=module -e '
+import { shiftSwapUseCase } from "./dist/application/use-cases/shift-swap.use-case.js";
+const now = new Date();
+const y = now.getUTCFullYear();
+const m = now.getUTCMonth() + 1;
+const n = await shiftSwapUseCase.reapplyApprovedForMonth(y, m);
+console.log("reapply", y + "-" + String(m).padStart(2, "0"), n);
+' || echo "reapply avisou; conferir logs do backend"
 fi
 
 for _ in $(seq 1 15); do

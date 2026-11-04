@@ -801,6 +801,7 @@ export interface BuildGridInput {
     targetName: string;
     targetShiftCode: string;
     status: 'OFFERED' | 'AWAITING_ADMIN' | string;
+    notes?: string | null;
   }>;
 }
 
@@ -1057,7 +1058,17 @@ function applyShiftSwapsToRows(
 
 function normalizeSwapToken(value: string | undefined | null): string {
   let raw = (value ?? '').trim().toUpperCase();
-  if (!raw || raw === '·' || raw === '-' || raw === 'EM BRANCO') return '';
+  if (
+    !raw ||
+    raw === '·' ||
+    raw === '-' ||
+    raw === '—' ||
+    raw === '–' ||
+    raw === '−' ||
+    raw === 'EM BRANCO'
+  ) {
+    return '';
+  }
   if (raw.startsWith('TI') && raw.length > 2) raw = `T${raw.slice(2)}`;
   return raw;
 }
@@ -1182,26 +1193,17 @@ function applyApprovedSwapMarksToRows(
       markApplied(rightRow, rightDay);
       return;
     }
-    const paintedLeft = cellFromSwapToken(origRight);
-    const paintedRight = cellFromSwapToken(origLeft);
-    const leftSwap = left.shiftSwap;
-    const rightSwap = right.shiftSwap;
-    const nextLeft = paintedLeft
-      ? { ...paintedLeft, shiftSwap: leftSwap }
-      : right.display
-        ? { ...right, shiftSwap: leftSwap }
-        : left;
-    const nextRight = paintedRight
-      ? { ...paintedRight, shiftSwap: rightSwap }
-      : left.display
-        ? { ...left, shiftSwap: rightSwap }
-        : right;
+    const paintedLeft = cellFromSwapToken(origRight) ?? emptyCell();
+    const paintedRight = cellFromSwapToken(origLeft) ?? emptyCell();
+    const nextLeft = { ...paintedLeft, shiftSwap: left.shiftSwap };
+    const nextRight = { ...paintedRight, shiftSwap: right.shiftSwap };
     writeCell(leftRow, leftDay, withApprovedSwapMark(nextLeft, hoverLeft));
     writeCell(rightRow, rightDay, withApprovedSwapMark(nextRight, hoverRight));
   };
 
   for (const swap of shiftSwaps) {
     if (swap.status !== 'APPROVED') continue;
+    if ((swap.notes ?? '').includes('__ADMIN_EXECUTED_AUDIT__')) continue;
 
     const sourceDays = daysFromIsoList(
       swap.requesterDates,

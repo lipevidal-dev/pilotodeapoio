@@ -6,16 +6,18 @@ from pathlib import Path
 import re
 import sys
 
-MARKER = "/* SWAP_HYDRATE_V8 */"
+MARKER_V8 = "/* SWAP_HYDRATE_V8 */"
+MARKER_V9 = "/* SWAP_HYDRATE_V9 */"
+APPLY_MARKER = "/* SWAP_APPLY_V9 */"
 
 HELPERS = r'''
-/* SWAP_HYDRATE_V8 */
+/* SWAP_HYDRATE_V9 */
 function __swapIsBlank(code) {
   const raw = String(code ?? "").trim();
   if (!raw) return true;
   return raw.split("+").every((part) => {
     const p = part.trim().toLowerCase();
-    return !p || p === "em branco" || p === "-";
+    return !p || p === "em branco" || p === "-" || p === "—" || p === "–" || p === "−" || p === "·";
   });
 }
 function __swapShort(label) {
@@ -48,6 +50,29 @@ function __swapToken(day) {
   }
   return "";
 }
+function __swapSnapshot(token) {
+  const code = String(token ?? "").trim().toUpperCase();
+  if (!code || __swapIsBlank(code)) return { assignment: null, preAllocation: null };
+  const PRE = {
+    FA: "FOLGA AGRUPADA", F: "FOLGA", FS: "FOLGA SOCIAL", FP: "FOLGA PEDIDA",
+    FANI: "FOLGA ANIVERSARIO", VOO: "VOO", SIM: "SIMULADOR", CRS: "CURSO",
+    CMA: "CMA", FER: "FERIAS", ND: "ND",
+  };
+  if (PRE[code]) {
+    return { assignment: null, preAllocation: { label: PRE[code], notes: null, startTime: null, endTime: null } };
+  }
+  return { assignment: { shiftCode: code, label: null }, preAllocation: null };
+}
+function __swapOrigPart(joined, index) {
+  const parts = String(joined ?? "").split("+").map((p) => p.trim());
+  if (parts.length <= 1) return parts[0] ?? "";
+  return parts[index] ?? "";
+}
+async function __swapOrigToken(tx, scheduleMonthId, employeeId, iso, stored) {
+  if (!__swapIsBlank(stored)) return String(stored).trim();
+  const planned = await __swapReadPlanned(tx, scheduleMonthId, employeeId, iso);
+  return __swapToken(planned);
+}
 async function __swapReadPlanned(tx, scheduleMonthId, employeeId, date) {
   const dbDate = toDbDate(isoDateKey(date));
   const [assignment, preAllocation] = await Promise.all([
@@ -70,6 +95,78 @@ async function readExecutedDay(tx, scheduleMonthId, employeeId, date) {
   return pack;
 }
 """
+
+APPLY_METHODS = r'''    async applyPeerSwap(tx, row) {
+        /* SWAP_APPLY_V9 */
+        if (typeof isAdminExecutedAuditNotes === "function" && isAdminExecutedAuditNotes(row.notes)) return;
+        const datePairs = resolveSwapDatePairs(row);
+        const writes = [];
+        for (let i = 0; i < datePairs.length; i++) {
+            const pair = datePairs[i];
+            let origReq = await __swapOrigToken(tx, row.scheduleMonthId, row.requesterEmployeeId, pair.sourceIso, __swapOrigPart(row.requesterShiftCode, i));
+            let origTgt = await __swapOrigToken(tx, row.scheduleMonthId, row.targetEmployeeId, pair.targetIso, __swapOrigPart(row.targetShiftCode, i));
+            origReq = __swapIsBlank(origReq) ? "" : String(origReq).trim();
+            origTgt = __swapIsBlank(origTgt) ? "" : String(origTgt).trim();
+            if (!origReq && !origTgt) continue;
+            if (origReq && origTgt && origReq.toUpperCase() === origTgt.toUpperCase()) continue;
+            const [requesterPack, targetPack] = await Promise.all([
+                readExecutedDay(tx, row.scheduleMonthId, row.requesterEmployeeId, pair.sourceIso),
+                readExecutedDay(tx, row.scheduleMonthId, row.targetEmployeeId, pair.targetIso),
+            ]);
+            writes.push({
+                requesterDate: requesterPack.dbDate,
+                targetDate: targetPack.dbDate,
+                requesterDay: __swapSnapshot(origTgt),
+                targetDay: __swapSnapshot(origReq),
+            });
+        }
+        for (const p of writes) {
+            await clearExecutedDay(tx, row.scheduleMonthId, row.requesterEmployeeId, p.requesterDate);
+            await clearExecutedDay(tx, row.scheduleMonthId, row.targetEmployeeId, p.targetDate);
+        }
+        for (const p of writes) {
+            await writeExecutedDay(tx, row.scheduleMonthId, row.requesterEmployeeId, p.requesterDate, p.requesterDay);
+            await writeExecutedDay(tx, row.scheduleMonthId, row.targetEmployeeId, p.targetDate, p.targetDay);
+        }
+    }
+    async applySelfSwap(tx, row) {
+        /* SWAP_APPLY_V9 */
+        if (typeof isAdminExecutedAuditNotes === "function" && isAdminExecutedAuditNotes(row.notes)) return;
+        const datePairs = resolveSwapDatePairs(row);
+        if (datePairs.length < 1) {
+            throw new ShiftSwapNotAllowedError("Troca interna sem dias de destino.");
+        }
+        const employeeId = row.requesterEmployeeId;
+        const writes = [];
+        for (let i = 0; i < datePairs.length; i++) {
+            const pair = datePairs[i];
+            let origSrc = await __swapOrigToken(tx, row.scheduleMonthId, employeeId, pair.sourceIso, __swapOrigPart(row.requesterShiftCode, i));
+            let origDst = await __swapOrigToken(tx, row.scheduleMonthId, employeeId, pair.targetIso, __swapOrigPart(row.targetShiftCode, i));
+            origSrc = __swapIsBlank(origSrc) ? "" : String(origSrc).trim();
+            origDst = __swapIsBlank(origDst) ? "" : String(origDst).trim();
+            if (!origSrc && !origDst) continue;
+            if (origSrc && origDst && origSrc.toUpperCase() === origDst.toUpperCase()) continue;
+            const [sPack, tPack] = await Promise.all([
+                readExecutedDay(tx, row.scheduleMonthId, employeeId, pair.sourceIso),
+                readExecutedDay(tx, row.scheduleMonthId, employeeId, pair.targetIso),
+            ]);
+            writes.push({
+                sourceDate: sPack.dbDate,
+                targetDate: tPack.dbDate,
+                source: __swapSnapshot(origDst),
+                target: __swapSnapshot(origSrc),
+            });
+        }
+        for (const p of writes) {
+            await clearExecutedDay(tx, row.scheduleMonthId, employeeId, p.sourceDate);
+            await clearExecutedDay(tx, row.scheduleMonthId, employeeId, p.targetDate);
+        }
+        for (const p of writes) {
+            await writeExecutedDay(tx, row.scheduleMonthId, employeeId, p.sourceDate, p.source);
+            await writeExecutedDay(tx, row.scheduleMonthId, employeeId, p.targetDate, p.target);
+        }
+    }
+'''
 
 
 def _insert_after_imports(text: str, chunk: str) -> str:
@@ -117,9 +214,71 @@ def _balanced(text: str) -> bool:
     return braces == 0 and parens == 0
 
 
+def _method_span(text: str, name: str) -> tuple[int, int] | None:
+    match = re.search(rf"    async {name}\s*\(", text)
+    if not match:
+        return None
+    brace = text.find("{", match.start())
+    if brace < 0:
+        return None
+    depth = 0
+    in_str = None
+    escape = False
+    i = brace
+    while i < len(text):
+        ch = text[i]
+        if in_str:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == in_str:
+                in_str = None
+            i += 1
+            continue
+        if ch in ("'", '"', "`"):
+            in_str = ch
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                if end < len(text) and text[end] == "\n":
+                    end += 1
+                return match.start(), end
+        i += 1
+    return None
+
+
+def _replace_helpers(text: str) -> str:
+    if MARKER_V9 in text and "__swapSnapshot(" in text:
+        return text
+    old = re.search(
+        r"\n/\* SWAP_HYDRATE_V8 \*/[\s\S]*?async function __swapReadPlanned\([\s\S]*?\n\}\n",
+        text,
+    )
+    if old:
+        return text[: old.start()] + "\n" + HELPERS + text[old.end() :]
+    if MARKER_V8 in text or MARKER_V9 in text:
+        raise SystemExit("helpers da troca encontrados, mas o bloco não bateu para atualizar")
+    return _insert_after_imports(text, HELPERS)
+
+
+def _replace_apply_methods(text: str) -> str:
+    if APPLY_MARKER in text and text.count(APPLY_MARKER) >= 2:
+        return text
+    peer = _method_span(text, "applyPeerSwap")
+    self_fn = _method_span(text, "applySelfSwap")
+    if not peer or not self_fn:
+        raise SystemExit("applyPeerSwap/applySelfSwap não encontrados para gravar orig")
+    start = min(peer[0], self_fn[0])
+    end = max(peer[1], self_fn[1])
+    return text[:start] + APPLY_METHODS + text[end:]
+
+
 def patch_shift_swap(text: str) -> str:
-    if MARKER not in text:
-        text = _insert_after_imports(text, HELPERS)
+    text = _replace_helpers(text)
 
     text = text.replace(
         'const shiftCode = (day.assignment?.shiftCode ?? "").trim();',
@@ -151,10 +310,14 @@ def patch_shift_swap(text: str) -> str:
     if needs_admin:
         text = text[: needs_admin.start()] + text[needs_admin.end() :]
 
+    text = _replace_apply_methods(text)
+
     if not _balanced(text):
         raise SystemExit("patch shift-swap gerou JS desbalanceado")
-    if MARKER not in text or "async function __readExecutedDayRaw(" not in text:
+    if MARKER_V9 not in text or "async function __readExecutedDayRaw(" not in text:
         raise SystemExit("patch shift-swap incompleto")
+    if APPLY_MARKER not in text:
+        raise SystemExit("patch apply orig ausente")
     return text
 
 

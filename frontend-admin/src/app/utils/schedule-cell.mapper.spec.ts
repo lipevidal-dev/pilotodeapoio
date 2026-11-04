@@ -980,4 +980,58 @@ describe('schedule-cell.mapper — troca aprovada', () => {
     expect(ana.cells[9]!.display).toBe('T4');
     expect(beto.cells[9]!.display).toBe('T1');
   });
+
+  it('não duplica T8 nos dois quando um orig veio em branco', () => {
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 11,
+      employees: [empA, empB],
+      assignments: [
+        assignment('a1', 'pao-a', '2026-11-10T12:00:00.000Z', 'T8'),
+        assignment('b1', 'pao-b', '2026-11-10T12:00:00.000Z', 'T8'),
+      ],
+      preAllocations: [],
+      operationalCadastros: [],
+      shiftSwaps: [
+        {
+          ...approvedPeer,
+          requesterShiftCode: '',
+          targetShiftCode: 'T8',
+        },
+      ],
+    });
+
+    const ana = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-a')!;
+    const beto = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-b')!;
+    expect(ana.cells[9]!.display).toBe('T8');
+    expect(beto.cells[9]!.display).toBe('');
+    expect(ana.cells[9]!.swapApplied).toBe(true);
+    expect(beto.cells[9]!.swapApplied).toBe(true);
+  });
+
+  it('trata travessão como orig vazio e limpa o outro lado', () => {
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 11,
+      employees: [empA, empB],
+      assignments: [
+        assignment('a1', 'pao-a', '2026-11-10T12:00:00.000Z', 'T8'),
+        assignment('b1', 'pao-b', '2026-11-10T12:00:00.000Z', 'T8'),
+      ],
+      preAllocations: [],
+      operationalCadastros: [],
+      shiftSwaps: [
+        {
+          ...approvedPeer,
+          requesterShiftCode: '—',
+          targetShiftCode: 'T8',
+        },
+      ],
+    });
+
+    const ana = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-a')!;
+    const beto = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-b')!;
+    expect(ana.cells[9]!.display).toBe('T8');
+    expect(beto.cells[9]!.display).toBe('');
+  });
 });

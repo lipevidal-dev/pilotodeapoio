@@ -31,13 +31,12 @@ export function normalizeCode(code: string | null | undefined): string {
   return (code ?? "").trim().toUpperCase();
 }
 
+const BLANK_PARTS = new Set(["", "-", "—", "–", "−", "·", "em branco"]);
+
 export function isBlankDisplayToken(code: string | null | undefined): boolean {
   const raw = (code ?? "").trim();
   if (!raw) return true;
-  return raw.split("+").every((part) => {
-    const p = part.trim().toLowerCase();
-    return !p || p === "em branco" || p === "-";
-  });
+  return raw.split("+").every((part) => BLANK_PARTS.has(part.trim().toLowerCase()));
 }
 
 /** Converte label operacional no token curto da grade (FA, VOO, T1…). */
@@ -149,13 +148,35 @@ export function pairAlreadyApplied(
   origLeft: string,
   origRight: string,
 ): boolean {
-  const origL = normalizeCode(origLeft);
-  const origR = normalizeCode(origRight);
-  if (isBlankDisplayToken(origL) && isBlankDisplayToken(origR)) return false;
-  const nowL = normalizeCode(displayTokenFromDay(left));
-  const nowR = normalizeCode(displayTokenFromDay(right));
+  const origL = isBlankDisplayToken(origLeft) ? "" : normalizeCode(origLeft);
+  const origR = isBlankDisplayToken(origRight) ? "" : normalizeCode(origRight);
+  if (!origL && !origR) return false;
+  const nowL = isBlankDisplayToken(displayTokenFromDay(left))
+    ? ""
+    : normalizeCode(displayTokenFromDay(left));
+  const nowR = isBlankDisplayToken(displayTokenFromDay(right))
+    ? ""
+    : normalizeCode(displayTokenFromDay(right));
   if (origL === origR) return nowL === origL && nowR === origR;
   return nowL === origR && nowR === origL;
+}
+
+/**
+ * Resultado da troca a partir dos tokens originais de cada lado.
+ * Nunca copia um único turno nos dois: orig vazio vira célula vazia.
+ */
+export function swapResultFromOrig(
+  origLeft: string,
+  origRight: string,
+): { left: DaySnapshot; right: DaySnapshot } | null {
+  const leftTok = isBlankDisplayToken(origLeft) ? "" : normalizeCode(origLeft);
+  const rightTok = isBlankDisplayToken(origRight) ? "" : normalizeCode(origRight);
+  if (!leftTok && !rightTok) return null;
+  if (leftTok && rightTok && leftTok === rightTok) return null;
+  return {
+    left: snapshotFromToken(rightTok),
+    right: snapshotFromToken(leftTok),
+  };
 }
 
 /** Assignment a persistir: label-only (folga/FA) vira shiftCode para não sumir. */

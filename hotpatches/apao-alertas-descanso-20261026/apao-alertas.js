@@ -1,11 +1,11 @@
 /**
  * Alertas de descanso APAO + VOO/CURSO/SIMULADOR no popup.
  * Só leitura/informativo: não bloqueia alocação e não mexe no PAO.
- * v8: pinta o resultado da troca APPROVED (nunca apaga célula com token vazio).
+ * v9: troca de verdade — grava/pinta os dois orig; orig vazio limpa o outro lado.
  */
 (function () {
-  if (window.__apaoAlertasV8) return;
-  window.__apaoAlertasV8 = true;
+  if (window.__apaoAlertasV9) return;
+  window.__apaoAlertasV9 = true;
 
   var HOUR_MS = 60 * 60 * 1000;
   var DAY_MS = 24 * HOUR_MS;
@@ -168,15 +168,22 @@
     return n;
   }
 
+  function isBlankTok(value) {
+    var raw = compact(value).toLowerCase();
+    if (!raw) return true;
+    return raw === "·" || raw === "-" || raw === "—" || raw === "–" || raw === "−" || raw === "em branco";
+  }
+
   function normTok(value) {
     var raw = compact(value).toUpperCase();
-    if (!raw || raw === "·" || raw === "-" || raw === "EM BRANCO") return "";
+    if (isBlankTok(raw)) return "";
+    if (raw.indexOf("TI") === 0 && raw.length > 2) return "T" + raw.slice(2);
     return raw;
   }
 
   function tokensMatch(display, stored) {
-    var a = baseShift(display);
-    var b = baseShift(stored);
+    var a = normTok(baseShift(display) || display);
+    var b = normTok(baseShift(stored) || stored);
     if (!a || !b) return !a && !b;
     return a === b || a.indexOf(b) === 0 || b.indexOf(a) === 0;
   }
@@ -213,11 +220,11 @@
   }
 
   function upsertAssignment(list, empId, iso, token) {
-    var desired = baseShift(token) || shortToken(token);
+    var desired = normTok(baseShift(token) || shortToken(token) || token);
     if (!desired) return false;
     var idx = findDayIndex(list, empId, iso);
     if (idx >= 0) {
-      var cur = baseShift(list[idx].shiftCode) || shortToken(list[idx].label);
+      var cur = normTok(baseShift(list[idx].shiftCode) || shortToken(list[idx].label));
       if (tokensMatch(cur, desired)) return false;
       list[idx] = Object.assign({}, list[idx], {
         shiftCode: desired,
@@ -235,6 +242,23 @@
     return true;
   }
 
+  function removeAt(list, empId, iso) {
+    var idx = findDayIndex(list, empId, iso);
+    if (idx < 0) return false;
+    list.splice(idx, 1);
+    return true;
+  }
+
+  function setDayToken(assignments, pres, empId, iso, token) {
+    var desired = normTok(baseShift(token) || shortToken(token) || token);
+    if (!desired) {
+      var removedA = removeAt(assignments, empId, iso);
+      var removedP = removeAt(pres, empId, iso);
+      return removedA || removedP;
+    }
+    return upsertAssignment(assignments, empId, iso, desired);
+  }
+
   function partAt(joined, index) {
     var parts = String(joined || "").split("+").map(function (p) { return p.trim(); }).filter(Boolean);
     if (!parts.length) return "";
@@ -249,6 +273,7 @@
     for (var s = 0; s < data.shiftSwaps.length; s++) {
       var swap = data.shiftSwaps[s];
       if (!swap || swap.status !== "APPROVED") continue;
+      if (String(swap.notes || "").indexOf("__ADMIN_EXECUTED_AUDIT__") >= 0) continue;
       var srcDates = swap.requesterDates && swap.requesterDates.length
         ? swap.requesterDates.map(isoDay)
         : expandIso(swap.date, swap.pairLength || 1);
@@ -263,17 +288,15 @@
       for (var i = 0; i < n; i++) {
         var srcIso = srcDates[i];
         var tgtIso = tgtDates[i];
-        var origReq = partAt(swap.requesterShiftCode, i);
-        var origTgt = partAt(swap.targetShiftCode, i);
-        origReq = baseShift(origReq) || shortToken(origReq);
-        origTgt = baseShift(origTgt) || shortToken(origTgt);
+        var origReq = normTok(baseShift(partAt(swap.requesterShiftCode, i)) || shortToken(partAt(swap.requesterShiftCode, i)) || partAt(swap.requesterShiftCode, i));
+        var origTgt = normTok(baseShift(partAt(swap.targetShiftCode, i)) || shortToken(partAt(swap.targetShiftCode, i)) || partAt(swap.targetShiftCode, i));
         if (!origReq && !origTgt) continue;
-        if (origReq === origTgt) continue;
-        var nowReq = tokenAt(assignments, pres, reqEmp, srcIso);
-        var nowTgt = tokenAt(assignments, pres, tgtEmp, tgtIso);
-        if (origReq && origTgt && tokensMatch(nowReq, origTgt) && tokensMatch(nowTgt, origReq)) continue;
-        if (origTgt) changed = upsertAssignment(assignments, reqEmp, srcIso, origTgt) || changed;
-        if (origReq) changed = upsertAssignment(assignments, tgtEmp, tgtIso, origReq) || changed;
+        if (origReq && origTgt && origReq === origTgt) continue;
+        var nowReq = normTok(tokenAt(assignments, pres, reqEmp, srcIso));
+        var nowTgt = normTok(tokenAt(assignments, pres, tgtEmp, tgtIso));
+        if (tokensMatch(nowReq, origTgt) && tokensMatch(nowTgt, origReq)) continue;
+        changed = setDayToken(assignments, pres, reqEmp, srcIso, origTgt) || changed;
+        changed = setDayToken(assignments, pres, tgtEmp, tgtIso, origReq) || changed;
       }
     }
     if (changed) {
@@ -832,13 +855,21 @@
 
   function setCellDisplay(td, code) {
     if (!td) return;
-    var desired = baseShift(code) || shortToken(code);
-    if (!desired) return;
+    var desired = normTok(baseShift(code) || shortToken(code) || code);
     var cell = td.querySelector(".schedule-cell") || td;
+    var classList = ["cell-t6","cell-t7","cell-t8","cell-t9","cell-shift","cell-nd","cell-folga","cell-fs","cell-fa","cell-empty"];
+    if (!desired) {
+      cell.textContent = "";
+      cell.classList.add("schedule-cell", "cell-empty", "cell-swap-applied");
+      classList.forEach(function (cls) {
+        if (cls !== "cell-empty") cell.classList.remove(cls);
+      });
+      return;
+    }
     var cur = cellCode(cell.textContent);
     if (!tokensMatch(cur, desired)) cell.textContent = desired;
     cell.classList.add("schedule-cell", classForCode(desired), "cell-swap-applied");
-    ["cell-t6","cell-t7","cell-t8","cell-t9","cell-shift","cell-nd","cell-folga","cell-fs","cell-fa","cell-empty"].forEach(function (cls) {
+    classList.forEach(function (cls) {
       if (cls !== classForCode(desired)) cell.classList.remove(cls);
     });
   }
@@ -852,6 +883,7 @@
     for (var s = 0; s < swaps.length; s++) {
       var swap = swaps[s];
       if (!swap || swap.status !== "APPROVED") continue;
+      if (String(swap.notes || "").indexOf("__ADMIN_EXECUTED_AUDIT__") >= 0) continue;
       var srcDates = swap.requesterDates && swap.requesterDates.length
         ? swap.requesterDates.map(isoDay)
         : expandIso(swap.date, swap.pairLength || 1);
@@ -866,11 +898,12 @@
       for (var i = 0; i < n; i++) {
         var reqTd = tdForIso(table, reqRow, srcDates[i], period.year, period.month);
         var tgtTd = tdForIso(table, tgtRow, tgtDates[i], period.year, period.month);
-        var origReq = baseShift(partAt(swap.requesterShiftCode, i)) || shortToken(partAt(swap.requesterShiftCode, i));
-        var origTgt = baseShift(partAt(swap.targetShiftCode, i)) || shortToken(partAt(swap.targetShiftCode, i));
+        var origReq = normTok(baseShift(partAt(swap.requesterShiftCode, i)) || shortToken(partAt(swap.requesterShiftCode, i)) || partAt(swap.requesterShiftCode, i));
+        var origTgt = normTok(baseShift(partAt(swap.targetShiftCode, i)) || shortToken(partAt(swap.targetShiftCode, i)) || partAt(swap.targetShiftCode, i));
+        if (!origReq && !origTgt) continue;
         if (origReq && origTgt && origReq === origTgt) continue;
-        if (origTgt) setCellDisplay(reqTd, origTgt);
-        if (origReq) setCellDisplay(tgtTd, origReq);
+        setCellDisplay(reqTd, origTgt);
+        setCellDisplay(tgtTd, origReq);
       }
     }
   }

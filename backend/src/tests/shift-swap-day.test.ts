@@ -6,6 +6,7 @@ import {
   isBlankDisplayToken,
   pairAlreadyApplied,
   snapshotFromToken,
+  swapResultFromOrig,
   type DaySnapshot,
 } from "../application/use-cases/shift-swap-day.js";
 
@@ -26,6 +27,8 @@ describe("shift-swap-day — hidratação da troca", () => {
     expect(isBlankDisplayToken("")).toBe(true);
     expect(isBlankDisplayToken("em branco")).toBe(true);
     expect(isBlankDisplayToken("-")).toBe(true);
+    expect(isBlankDisplayToken("—")).toBe(true);
+    expect(isBlankDisplayToken("–")).toBe(true);
     expect(isBlankDisplayToken("T8")).toBe(false);
     expect(isBlankDisplayToken("FA")).toBe(false);
   });
@@ -67,5 +70,21 @@ describe("shift-swap-day — hidratação da troca", () => {
     const fa = snapshotFromToken("FA");
     expect(displayTokenFromDay(fa)).toBe("FA");
     expect(fa.preAllocation?.label).toBe("FOLGA AGRUPADA");
+  });
+
+  it("troca vazio↔T8 sem duplicar o turno nos dois lados", () => {
+    const result = swapResultFromOrig("", "T8");
+    expect(result).not.toBeNull();
+    expect(displayTokenFromDay(result!.left)).toBe("T8");
+    expect(displayTokenFromDay(result!.right)).toBe("");
+    expect(swapResultFromOrig("—", "T8") && displayTokenFromDay(swapResultFromOrig("—", "T8")!.right)).toBe(
+      "",
+    );
+    expect(swapResultFromOrig("T8", "T8")).toBeNull();
+  });
+
+  it("reconhece vazio↔T8 já aplicado e recusa o duplicado T8/T8", () => {
+    expect(pairAlreadyApplied(shift("T8"), empty, "", "T8")).toBe(true);
+    expect(pairAlreadyApplied(shift("T8"), shift("T8"), "", "T8")).toBe(false);
   });
 });
