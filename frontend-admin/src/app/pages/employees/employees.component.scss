@@ -34,6 +34,26 @@
   color: var(--gol-gray-medium);
 }
 
+.emp-observation {
+  width: 100%;
+  min-height: 4.5rem;
+  resize: vertical;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--gol-gray-dark, #2d2d2d);
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+}
+
+.emp-observation:focus {
+  outline: none;
+  border-color: var(--gol-orange, #f15a22);
+  box-shadow: 0 0 0 1px var(--gol-orange, #f15a22);
+}
+
 .field-label {
   display: block;
   margin-bottom: 0.35rem;

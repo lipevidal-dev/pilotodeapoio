@@ -65,6 +65,8 @@ export interface EmployeeApiRecord {
 
   cif: string | null;
 
+  observation: string | null;
+
   active: boolean;
 
   birthDate: string | null;
@@ -160,6 +162,8 @@ export function employeeToApi(row: EmployeeWithRole, shiftById?: Map<string, Shi
     seniorityLabel: formatSeniorityLabel(cargoCode, row.seniorityNumber),
 
     cif: (row as { cif?: string | null }).cif ?? null,
+
+    observation: (row as { observation?: string | null }).observation ?? null,
 
     active: row.active,
 

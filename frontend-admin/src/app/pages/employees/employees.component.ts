@@ -38,6 +38,7 @@ import { formatSeniorityLabel, sortEmployeesBySeniority } from '../../utils/empl
 
 import type { CreateEmployeePayload, Employee, JobRole, Shift } from '../../models/api.models';
 import { asRateioShiftCode, isRateioShiftCode, RATEIO_SHIFT_ORDER, type RateioShiftCode } from '../../utils/shift-code.util';
+import { EMPLOYEE_OBSERVATION_MAX, normalizeEmployeeObservation } from '../../utils/employee-observation.util';
 
 
 
@@ -131,6 +132,10 @@ export class EmployeesComponent implements OnInit {
 
   /** CIF operacional (export Escala de Revezamento APAO). */
   formCif = '';
+
+  formObservation = '';
+
+  readonly observationMax = EMPLOYEE_OBSERVATION_MAX;
 
   formActive = true;
 
@@ -430,6 +435,8 @@ export class EmployeesComponent implements OnInit {
 
     this.formCif = '';
 
+    this.formObservation = '';
+
     this.formActive = true;
 
     this.formNoFlightDates = [];
@@ -485,6 +492,8 @@ export class EmployeesComponent implements OnInit {
     this.formSeniorityNumber = emp.seniorityNumber ?? null;
 
     this.formCif = emp.cif ?? '';
+
+    this.formObservation = emp.observation ?? '';
 
     this.formActive = emp.active;
 
@@ -549,6 +558,8 @@ export class EmployeesComponent implements OnInit {
         this.formInInstruction = detail.inInstruction ?? false;
 
         this.formPortalLogin = detail.portalLogin ?? this.formPortalLogin;
+
+        if (detail.observation !== undefined) this.formObservation = detail.observation ?? '';
 
         this.loadingDetail.set(false);
 
@@ -804,6 +815,8 @@ export class EmployeesComponent implements OnInit {
 
         cif: this.formCif.trim() || null,
 
+        observation: normalizeEmployeeObservation(this.formObservation),
+
         active: this.formActive,
 
         isFcf,
@@ -853,6 +866,8 @@ export class EmployeesComponent implements OnInit {
         seniorityNumber: this.formSeniorityNumber,
 
         cif: this.formCif.trim() || null,
+
+        observation: normalizeEmployeeObservation(this.formObservation),
 
         active: this.formActive,
 

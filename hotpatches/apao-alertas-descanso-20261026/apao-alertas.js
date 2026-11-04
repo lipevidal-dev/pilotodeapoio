@@ -1,10 +1,11 @@
 /**
  * Alertas de descanso APAO + VOO/CURSO/SIMULADOR no popup.
  * Só leitura/informativo: não bloqueia alocação e não mexe no PAO.
+ * v10: não copia turno da troca por cima da realizada (evita duplicar T8).
  */
 (function () {
-  if (window.__apaoAlertasV4) return;
-  window.__apaoAlertasV4 = true;
+  if (window.__apaoAlertasV10) return;
+  window.__apaoAlertasV10 = true;
 
   var HOUR_MS = 60 * 60 * 1000;
   var DAY_MS = 24 * HOUR_MS;
@@ -26,9 +27,10 @@
   ];
 
   var lastSchedule = null;
+  var lastSwaps = [];
   var lastPaintKey = "";
 
-  var style = document.createElement("style");
+  var style = document.getElementById("apao-alertas-style") || document.createElement("style");
   style.id = "apao-alertas-style";
   style.textContent = [
     ".group-row .group-filler.col-day{text-align:center;vertical-align:middle}",
@@ -44,6 +46,8 @@
     ".apao-extra-status{margin:.45rem 0 0;font-size:.75rem;color:#6b7280}",
     ".apao-extra-status.err{color:#b91c1c}",
     ".schedule-cell.cell-fa,.legend-chip.cell-fa{background:#bbf7d0!important;color:#166534!important;border-color:#86efac!important}",
+    ".schedule-cell.cell-swap-applied{position:relative}",
+    ".schedule-cell.cell-swap-applied::after{content:'';position:absolute;top:0;right:0;width:0;height:0;border-style:solid;border-width:0 .55rem .55rem 0;border-color:transparent #dc2626 transparent transparent;pointer-events:none}",
   ].join("");
   (document.head || document.documentElement).appendChild(style);
 
@@ -132,12 +136,160 @@
     return !!DAY_OFF[String(text || "").trim().toUpperCase()];
   }
 
+  function isoDay(value) {
+    var s = String(value || "");
+    var m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : s.slice(0, 10);
+  }
+
+  function expandIso(start, length) {
+    var n = Math.max(1, Number(length) || 1);
+    var out = [];
+    var base = isoDay(start);
+    if (!base) return out;
+    for (var i = 0; i < n; i++) out.push(addDays(base, i));
+    return out;
+  }
+
+  function shortToken(label) {
+    var n = compact(label).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (!n) return "";
+    if (n.indexOf("VOO") >= 0) return "VOO";
+    if (n === "ND" || n.indexOf("NAO DISPONIVEL") >= 0) return "ND";
+    if (n.indexOf("FOLGA PEDIDA") >= 0 || n === "FP") return "FP";
+    if (n === "FOLGA SOCIAL" || n === "FS") return "FS";
+    if (n.indexOf("FOLGA AGRUPADA") >= 0 || n === "FA") return "FA";
+    if (n.indexOf("FOLGA ANIVERS") >= 0 || n === "FANI") return "FANI";
+    if (n === "FOLGA" || n === "F") return "F";
+    if (n.indexOf("SIMULADOR") >= 0) return "SIM";
+    if (n.indexOf("CURSO") >= 0) return "CRS";
+    if (n === "CMA") return "CMA";
+    if (n.indexOf("FERIAS") >= 0) return "FER";
+    return n;
+  }
+
+  function isBlankTok(value) {
+    var raw = compact(value).toLowerCase();
+    if (!raw) return true;
+    return raw === "·" || raw === "-" || raw === "—" || raw === "–" || raw === "−" || raw === "em branco";
+  }
+
+  function normTok(value) {
+    var raw = compact(value).toUpperCase();
+    if (isBlankTok(raw)) return "";
+    if (raw.indexOf("TI") === 0 && raw.length > 2) return "T" + raw.slice(2);
+    return raw;
+  }
+
+  function tokensMatch(display, stored) {
+    var a = normTok(baseShift(display) || display);
+    var b = normTok(baseShift(stored) || stored);
+    if (!a || !b) return !a && !b;
+    return a === b || a.indexOf(b) === 0 || b.indexOf(a) === 0;
+  }
+
+  function findDayIndex(list, empId, iso) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].employeeId === empId && isoDay(list[i].date) === iso) return i;
+    }
+    return -1;
+  }
+
+  function retargetDate(prev, iso) {
+    if (!prev) return iso + "T12:00:00.000Z";
+    var s = String(prev);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return iso;
+    if (s.indexOf("T") > 0) return iso + s.slice(10);
+    return iso + "T12:00:00.000Z";
+  }
+
+  function tokenAt(assignments, pres, empId, iso) {
+    var aIdx = findDayIndex(assignments, empId, iso);
+    if (aIdx >= 0) {
+      var shift = baseShift(assignments[aIdx].shiftCode);
+      if (shift) return shift;
+      var fromAssign = shortToken(assignments[aIdx].label);
+      if (fromAssign) return fromAssign;
+    }
+    var pIdx = findDayIndex(pres, empId, iso);
+    if (pIdx >= 0) {
+      var fromPre = shortToken(pres[pIdx].label);
+      if (fromPre) return fromPre;
+    }
+    return "";
+  }
+
+  function upsertAssignment(list, empId, iso, token) {
+    var desired = normTok(baseShift(token) || shortToken(token) || token);
+    if (!desired) return false;
+    var idx = findDayIndex(list, empId, iso);
+    if (idx >= 0) {
+      var cur = normTok(baseShift(list[idx].shiftCode) || shortToken(list[idx].label));
+      if (tokensMatch(cur, desired)) return false;
+      list[idx] = Object.assign({}, list[idx], {
+        shiftCode: desired,
+        date: retargetDate(list[idx].date, iso),
+      });
+      return true;
+    }
+    list.push({
+      employeeId: empId,
+      date: iso + "T12:00:00.000Z",
+      shiftCode: desired,
+      label: null,
+      source: "MANUAL",
+    });
+    return true;
+  }
+
+  function removeAt(list, empId, iso) {
+    var idx = findDayIndex(list, empId, iso);
+    if (idx < 0) return false;
+    list.splice(idx, 1);
+    return true;
+  }
+
+  function setDayToken(assignments, pres, empId, iso, token) {
+    var desired = normTok(baseShift(token) || shortToken(token) || token);
+    if (!desired) {
+      var removedA = removeAt(assignments, empId, iso);
+      var removedP = removeAt(pres, empId, iso);
+      return removedA || removedP;
+    }
+    return upsertAssignment(assignments, empId, iso, desired);
+  }
+
+  function partAt(joined, index) {
+    var parts = String(joined || "").split("+").map(function (p) { return p.trim(); }).filter(Boolean);
+    if (!parts.length) return "";
+    return parts[Math.min(index, parts.length - 1)] || "";
+  }
+
+  function applyApprovedSwapsToPayload() {
+    // A realizada já vem do backend. Copiar orig da troca aqui duplicava T8.
+    return false;
+  }
+
+  function isExecutedScheduleUrl(url) {
+    return /\/(?:portal\/)?schedules\/\d+\/\d+(?:\/executed)?(?:\?|$)/.test(url || "");
+  }
+
+  function patchExecutedBody(url, text) {
+    if (!isExecutedScheduleUrl(url) || !text) return text;
+    try {
+      var data = JSON.parse(text);
+      if (applyApprovedSwapsToPayload(data)) return JSON.stringify(data);
+    } catch (err) {}
+    return text;
+  }
+
   function captureSchedule(url, body) {
     if (!/\/schedules\//.test(url || "")) return;
     try {
-      var data = JSON.parse(body);
+      var data = typeof body === "string" ? JSON.parse(body) : body;
       if (!data || !Array.isArray(data.employees) || !Array.isArray(data.assignments)) return;
       lastSchedule = data;
+      if (Array.isArray(data.shiftSwaps)) lastSwaps = data.shiftSwaps;
       var shifts = data.shifts || [];
       for (var i = 0; i < shifts.length; i++) {
         var code = String(shifts[i].code || "").toUpperCase();
@@ -154,28 +306,57 @@
       var input = arguments[0];
       var url = typeof input === "string" ? input : (input && input.url) || "";
       return origFetch.apply(this, arguments).then(function (res) {
-        try {
-          var clone = res.clone();
-          clone.text().then(function (text) { captureSchedule(url, text); }).catch(function () {});
-        } catch (err) {}
-        return res;
+        if (!isExecutedScheduleUrl(url)) {
+          try {
+            var clone = res.clone();
+            clone.text().then(function (text) { captureSchedule(url, text); }).catch(function () {});
+          } catch (err) {}
+          return res;
+        }
+        return res.text().then(function (text) {
+          var patched = patchExecutedBody(url, text);
+          captureSchedule(url, patched);
+          return new Response(patched, {
+            status: res.status,
+            statusText: res.statusText,
+            headers: res.headers,
+          });
+        });
       });
     };
   }
 
   var xhrOpen = XMLHttpRequest.prototype.open;
-  var xhrSend = XMLHttpRequest.prototype.send;
+  var textDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, "responseText");
+  var respDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, "response");
   XMLHttpRequest.prototype.open = function (method, url) {
-    this.__apaoUrl = url;
+    this.__apaoUrl = String(url || "");
+    var xhr = this;
+    xhr.addEventListener("readystatechange", function () {
+      if (xhr.readyState !== 4) return;
+      try {
+        var value = null;
+        if (respDesc && respDesc.get) {
+          try { value = respDesc.get.call(xhr); } catch (err) { value = null; }
+        }
+        if (value && typeof value === "object") {
+          applyApprovedSwapsToPayload(value);
+          captureSchedule(xhr.__apaoUrl, value);
+          return;
+        }
+        var raw = "";
+        if (textDesc && textDesc.get) {
+          try { raw = textDesc.get.call(xhr); } catch (err) { raw = ""; }
+        }
+        if (!raw) {
+          try { raw = xhr.responseText; } catch (err) { raw = ""; }
+        }
+        var patched = patchExecutedBody(xhr.__apaoUrl, raw);
+        captureSchedule(xhr.__apaoUrl, patched);
+      } catch (err) {}
+    });
     return xhrOpen.apply(this, arguments);
   };
-  XMLHttpRequest.prototype.send = function () {
-    this.addEventListener("load", function () {
-      captureSchedule(this.__apaoUrl, this.responseText);
-    });
-    return xhrSend.apply(this, arguments);
-  };
-
   function groupTitle(group) {
     var textEl = group.querySelector(".group-label-text");
     var raw = compact((textEl || group).textContent || "");
@@ -584,6 +765,94 @@
     });
   }
 
+  function classForCode(code) {
+    var c = baseShift(code);
+    if (c === "T6") return "cell-t6";
+    if (c === "T7") return "cell-t7";
+    if (c === "T8") return "cell-t8";
+    if (c === "T9") return "cell-t9";
+    if (c === "ND") return "cell-nd";
+    if (c === "FS") return "cell-fs";
+    if (c === "FA") return "cell-fa";
+    if (c === "FANI") return "cell-fani";
+    if (c === "FP") return "cell-fp";
+    if (c === "F" || c === "FOLGA") return "cell-folga";
+    if (c === "FER") return "cell-ferias";
+    if (c === "VOO") return "cell-voo";
+    if (c === "SIM") return "cell-simulador";
+    if (c === "CRS") return "cell-curso";
+    if (c === "CMA") return "cell-cma";
+    if (/^TI/.test(normTok(code))) return "cell-instruction";
+    if (/^T/.test(c)) return "cell-shift";
+    return "cell-other";
+  }
+
+  function findDataRow(table, name) {
+    var want = compact(name).toUpperCase();
+    if (!want) return null;
+    var rows = table.querySelectorAll("tbody tr");
+    for (var i = 0; i < rows.length; i++) {
+      var el = rows[i].querySelector(".emp-name");
+      if (!el) continue;
+      if (compact(el.textContent).toUpperCase() === want) return rows[i];
+    }
+    for (var j = 0; j < rows.length; j++) {
+      var el2 = rows[j].querySelector(".emp-name");
+      if (!el2) continue;
+      var got = compact(el2.textContent).toUpperCase();
+      if (got.indexOf(want) >= 0 || want.indexOf(got) >= 0) return rows[j];
+    }
+    return null;
+  }
+
+  function tdForIso(table, row, iso, year, month) {
+    if (!row || !iso) return null;
+    var cols = columnMeta(table);
+    var tds = row.querySelectorAll("td.col-day");
+    for (var i = 0; i < tds.length; i++) {
+      var meta = cols[i] || {};
+      if (meta.lead || tds[i].classList.contains("col-lead")) continue;
+      if (isoForColumn(meta, year, month) === iso) return tds[i];
+    }
+    return null;
+  }
+
+  function markSwapSeal(td) {
+    if (!td) return;
+    var cell = td.querySelector(".schedule-cell") || td;
+    cell.classList.add("schedule-cell", "cell-swap-applied");
+  }
+
+  function applySwapsToDom() {
+    var swaps = lastSwaps.length ? lastSwaps : (lastSchedule && lastSchedule.shiftSwaps) || [];
+    if (!swaps.length) return;
+    var table = document.querySelector(".schedule-table, table.schedule-grid, .schedule-grid table");
+    if (!table) return;
+    var period = currentPeriod();
+    for (var s = 0; s < swaps.length; s++) {
+      var swap = swaps[s];
+      if (!swap || swap.status !== "APPROVED") continue;
+      if (String(swap.notes || "").indexOf("__ADMIN_EXECUTED_AUDIT__") >= 0) continue;
+      var srcDates = swap.requesterDates && swap.requesterDates.length
+        ? swap.requesterDates.map(isoDay)
+        : expandIso(swap.date, swap.pairLength || 1);
+      var tgtDates = swap.targetDates && swap.targetDates.length
+        ? swap.targetDates.map(isoDay)
+        : expandIso(swap.targetDate || swap.date, swap.pairLength || 1);
+      var n = Math.min(srcDates.length, tgtDates.length);
+      var self = swap.kind === "SELF";
+      var reqRow = findDataRow(table, swap.requesterName);
+      var tgtRow = findDataRow(table, self ? swap.requesterName : swap.targetName);
+      if (!reqRow || !tgtRow) continue;
+      for (var i = 0; i < n; i++) {
+        var reqTd = tdForIso(table, reqRow, srcDates[i], period.year, period.month);
+        var tgtTd = tdForIso(table, tgtRow, tgtDates[i], period.year, period.month);
+        markSwapSeal(reqTd);
+        markSwapSeal(tgtTd);
+      }
+    }
+  }
+
   function enhanceDialog() {
     var card = document.querySelector(".alloc-card");
     if (!card || card.querySelector(".apao-extra-options")) return;
@@ -609,12 +878,48 @@
     body.appendChild(status);
   }
 
+  var lastFetchKey = "";
+  var lastFetchAt = 0;
+  function refreshSwapsFromApi() {
+    var period = currentPeriod();
+    var key = period.year + "-" + period.month;
+    var now = Date.now();
+    if (key === lastFetchKey && lastSwaps.length) return;
+    if (key === lastFetchKey && now - lastFetchAt < 8000) return;
+    var tok = token();
+    if (!tok) return;
+    lastFetchKey = key;
+    lastFetchAt = now;
+    var url = "/api/schedules/" + period.year + "/" + period.month + "/executed?_ts=" + now;
+    var run = origFetch || window.fetch;
+    if (!run) return;
+    run.call(window, url, { headers: { Authorization: "Bearer " + tok } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (!data) {
+          lastFetchKey = "";
+          return;
+        }
+        if (Array.isArray(data.shiftSwaps)) lastSwaps = data.shiftSwaps;
+        if (!lastSchedule && Array.isArray(data.employees)) lastSchedule = data;
+        applySwapsToDom();
+      })
+      .catch(function () { lastFetchKey = ""; });
+  }
+
   function sync() {
     var path = (location.pathname || "").replace(/\/+$/, "");
     if (path === "/escala" || path.indexOf("/escala") === 0) paintAlerts();
+    refreshSwapsFromApi();
+    applySwapsToDom();
     enhanceDialog();
   }
 
-  setInterval(sync, 500);
+  setInterval(sync, 400);
   window.addEventListener("popstate", function () { setTimeout(sync, 0); });
+  var obs = new MutationObserver(function () {
+    var path = (location.pathname || "").replace(/\/+$/, "");
+    applySwapsToDom();
+  });
+  obs.observe(document.documentElement, { childList: true, subtree: true });
 })();

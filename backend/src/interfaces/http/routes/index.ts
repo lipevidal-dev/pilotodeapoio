@@ -9,6 +9,10 @@ import {
   updateEmployeeController,
 } from "../controllers/employee.controller.js";
 import {
+  listEmployeeObservationsController,
+  updateEmployeeObservationController,
+} from "../controllers/employee-observation.controller.js";
+import {
   getEmployeeLicensesController,
   listEmployeeLicenseAlertsController,
   replaceEmployeeLicensesController,
@@ -97,6 +101,8 @@ export async function registerRoutes(app: FastifyInstance) {
   app.get("/auth/me", meController);
 
   app.get("/employees", listEmployeesController);
+  app.get("/employees/observations", listEmployeeObservationsController);
+  app.put("/employees/:id/observation", updateEmployeeObservationController);
   app.get("/employees/license-alerts", listEmployeeLicenseAlertsController);
   app.get("/employees/:id/licenses", getEmployeeLicensesController);
   app.put("/employees/:id/licenses", replaceEmployeeLicensesController);

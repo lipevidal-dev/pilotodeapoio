@@ -72,6 +72,7 @@ export class EmployeeRepository {
     active?: boolean;
     seniorityNumber?: number | null;
     cif?: string | null;
+    observation?: string | null;
     noFlightDates?: string[];
     restrictedShiftIds?: string[];
     preferredShiftIds?: string[];
@@ -90,6 +91,7 @@ export class EmployeeRepository {
       birthDate,
       seniorityNumber,
       cif,
+      observation,
       type,
       noFlightDates,
       restrictedShiftIds,
@@ -109,11 +111,12 @@ export class EmployeeRepository {
             type,
             seniorityNumber: position,
             cif: cif?.trim() ? cif.trim() : null,
+            observation: observation?.trim() ? observation.trim() : null,
             birthDate: birthDate ? toDbDate(birthDate) : null,
             isFcf: isFcf ?? false,
             fcfSchedule: isFcf ? (fcfSchedule ?? []) as unknown as Prisma.InputJsonValue : [],
             inInstruction: inInstruction ?? false,
-          },
+          } as Prisma.EmployeeCreateInput,
           include: employeeInclude,
         }),
       );
@@ -142,6 +145,7 @@ export class EmployeeRepository {
       active?: boolean;
       seniorityNumber?: number | null;
       cif?: string | null;
+      observation?: string | null;
       noFlightDates?: string[];
       restrictedShiftIds?: string[];
       preferredShiftIds?: string[];
@@ -164,6 +168,7 @@ export class EmployeeRepository {
       birthDate,
       seniorityNumber,
       cif,
+      observation,
       type,
       noFlightDates,
       restrictedShiftIds,
@@ -201,6 +206,11 @@ export class EmployeeRepository {
       if (type !== undefined) patch.type = type;
       if (cif !== undefined) {
         patch.cif = cif?.trim() ? cif.trim() : null;
+      }
+      if (observation !== undefined) {
+        (patch as { observation?: string | null }).observation = observation?.trim()
+          ? observation.trim()
+          : null;
       }
       if (birthDate !== undefined) {
         patch.birthDate = birthDate ? toDbDate(birthDate) : null;

@@ -7,6 +7,20 @@ import {
 } from "../../infrastructure/repositories/shift-swap.repository.js";
 import { ScheduleRepository } from "../../infrastructure/repositories/schedule.repository.js";
 import { EmployeeNotLinkedError } from "./portal-request.use-case.js";
+import { isAdminExecutedAuditNotes } from "../../domain/schedule/admin-executed-audit.js";
+import {
+  assignmentWriteFromDay,
+  displayTokenFromDay,
+  hydrateDaySnapshot,
+  isBlankDisplayToken,
+  isEmptyDay,
+  isExclusiveShiftCode,
+  pairAlreadyApplied as pairAlreadyAtResult,
+  preferDisplayToken,
+  splitClientTokens,
+  swapResultFromOrig,
+  type DaySnapshot,
+} from "./shift-swap-day.js";
 
 const swapRepo = new ShiftSwapRepository();
 const scheduleRepo = new ScheduleRepository();
@@ -40,23 +54,6 @@ export class ShiftSwapForbiddenError extends Error {
 
 type Tx = Prisma.TransactionClient;
 
-type DaySnapshot = {
-  assignment: {
-    shiftCode: string;
-    label: string | null;
-  } | null;
-  preAllocation: {
-    label: string;
-    notes: string | null;
-    startTime: string | null;
-    endTime: string | null;
-  } | null;
-};
-
-function normalizeCode(code: string | null | undefined): string {
-  return (code ?? "").trim().toUpperCase();
-}
-
 function addDaysIso(iso: string, days: number): string {
   const d = toDbDate(iso);
   d.setUTCDate(d.getUTCDate() + days);
@@ -67,118 +64,14 @@ function isDateInMonth(iso: string, year: number, month: number): boolean {
   return iso.startsWith(`${year}-${String(month).padStart(2, "0")}-`);
 }
 
-/** Converte label operacional no token curto da grade (FA, VOO, T1…). */
-function shortFromLabel(label: string): string | null {
-  const n = label
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .trim();
-  if (!n) return null;
-  if (n.includes("VOO")) return "VOO";
-  if (n === "ND" || n.includes("NAO DISPONIVEL") || n.includes("NAO-DISPONIVEL")) return "ND";
-  if (n.includes("FOLGA PEDIDA") || n === "FP") return "FP";
-  if (n === "FOLGA SOCIAL" || n === "FS") return "FS";
-  if (n.includes("FOLGA AGRUPADA") || n === "FA") return "FA";
-  if (n.includes("FOLGA ANIVERS") || n === "FANI") return "FANI";
-  if (n === "FOLGA" || n === "F") return "F";
-  if (n.includes("SIMULADOR")) return "SIM";
-  if (n.includes("CURSO")) return "CRS";
-  if (n === "CMA") return "CMA";
-  if (n.includes("FERIAS")) return "FER";
-  if (/^T[A-Z0-9]+$/.test(n) || /^TI[A-Z0-9]+$/.test(n)) return n;
-  return n.length > 6 ? `${n.slice(0, 5)}…` : n;
-}
-
-/**
- * Token do que a grade mostra no dia.
- * Prioridade: pré-alocação (FA/VOO/…) → código de turno → label do assignment.
- */
-function displayTokenFromDay(day: DaySnapshot): string {
-  if (day.preAllocation?.label) {
-    const fromPre = shortFromLabel(day.preAllocation.label);
-    if (fromPre) return fromPre;
-  }
-
-  const shift = normalizeCode(day.assignment?.shiftCode);
-  if (shift) return shift;
-
-  if (day.assignment?.label) {
-    const fromAssignLabel = shortFromLabel(day.assignment.label);
-    if (fromAssignLabel) return fromAssignLabel;
-  }
-
-  return "";
-}
-
-/** Prefere token da grade (cliente) quando o banco vier vazio ou genérico. */
-function preferDisplayToken(dbToken: string, clientToken?: string | null): string {
-  const db = (dbToken ?? "").trim();
-  const client = (clientToken ?? "").trim();
-  if (!isBlankDisplayToken(db)) return db;
-  if (!isBlankDisplayToken(client)) return client;
-  return db || client || "";
-}
-
-function splitClientTokens(joined: string | null | undefined, expected: number): string[] {
-  if (!joined?.trim()) return Array.from({ length: expected }, () => "");
-  const parts = joined.split("+").map((p) => p.trim());
-  if (parts.length === expected) return parts;
-  if (parts.length === 1 && expected > 1) {
-    return Array.from({ length: expected }, () => parts[0] ?? "");
-  }
-  while (parts.length < expected) parts.push("");
-  return parts.slice(0, expected);
-}
-
 async function tokenForEmployeeDay(
   tx: Tx | typeof prisma,
   scheduleMonthId: string,
   employeeId: string,
   iso: string,
 ): Promise<string> {
-  const executed = await readExecutedDay(tx, scheduleMonthId, employeeId, iso);
-  const fromExecuted = displayTokenFromDay(executed.day);
-  if (fromExecuted) return fromExecuted;
-
-  // Fallback: escala planejada (caso o espelho executado ainda não tenha o dia).
-  const dbDate = toDbDate(iso);
-  const planned = await tx.scheduleAssignment.findUnique({
-    where: {
-      scheduleMonthId_employeeId_date: { scheduleMonthId, employeeId, date: dbDate },
-    },
-  });
-  if (planned) {
-    const shift = normalizeCode(planned.shiftCode);
-    if (shift) return shift;
-    if (planned.label) {
-      const fromLabel = shortFromLabel(planned.label);
-      if (fromLabel) return fromLabel;
-    }
-  }
-
-  const plannedPre = await tx.preAllocation.findUnique({
-    where: {
-      scheduleMonthId_employeeId_date: { scheduleMonthId, employeeId, date: dbDate },
-    },
-  });
-  if (plannedPre?.label) {
-    const fromPre = shortFromLabel(plannedPre.label);
-    if (fromPre) return fromPre;
-  }
-
-  return "";
-}
-
-function isBlankDisplayToken(code: string | null | undefined): boolean {
-  const raw = (code ?? "").trim();
-  if (!raw) return true;
-  return raw
-    .split("+")
-    .every((part) => {
-      const p = part.trim().toLowerCase();
-      return !p || p === "em branco" || p === "-";
-    });
+  const hydrated = await hydrateExecutedDay(tx, scheduleMonthId, employeeId, iso);
+  return displayTokenFromDay(hydrated.day);
 }
 
 async function readExecutedDay(
@@ -233,6 +126,56 @@ async function clearExecutedDay(
   });
 }
 
+async function readPlannedDay(
+  tx: Tx | typeof prisma,
+  scheduleMonthId: string,
+  employeeId: string,
+  date: Date | string,
+): Promise<DaySnapshot> {
+  const dbDate = toDbDate(isoDateKey(date));
+  const [assignment, preAllocation] = await Promise.all([
+    tx.scheduleAssignment.findUnique({
+      where: {
+        scheduleMonthId_employeeId_date: { scheduleMonthId, employeeId, date: dbDate },
+      },
+    }),
+    tx.preAllocation.findUnique({
+      where: {
+        scheduleMonthId_employeeId_date: { scheduleMonthId, employeeId, date: dbDate },
+      },
+    }),
+  ]);
+  return {
+    assignment: assignment
+      ? { shiftCode: assignment.shiftCode, label: assignment.label }
+      : null,
+    preAllocation: preAllocation
+      ? {
+          label: preAllocation.label,
+          notes: preAllocation.notes,
+          startTime: preAllocation.startTime,
+          endTime: preAllocation.endTime,
+        }
+      : null,
+  };
+}
+
+async function hydrateExecutedDay(
+  tx: Tx | typeof prisma,
+  scheduleMonthId: string,
+  employeeId: string,
+  date: Date | string,
+  storedToken?: string | null,
+): Promise<{ dbDate: Date; day: DaySnapshot }> {
+  const executed = await readExecutedDay(tx, scheduleMonthId, employeeId, date);
+  if (!isEmptyDay(executed.day)) return executed;
+  const planned = await readPlannedDay(tx, scheduleMonthId, employeeId, date);
+  return {
+    dbDate: executed.dbDate,
+    day: hydrateDaySnapshot(executed.day, planned, storedToken),
+  };
+}
+
 async function writeExecutedDay(
   tx: Tx,
   scheduleMonthId: string,
@@ -240,21 +183,21 @@ async function writeExecutedDay(
   dbDate: Date,
   day: DaySnapshot,
 ): Promise<void> {
-  const shiftCode = (day.assignment?.shiftCode ?? "").trim();
-  if (day.assignment && shiftCode) {
+  const assignment = assignmentWriteFromDay(day);
+  if (assignment) {
     await tx.executedScheduleAssignment.create({
       data: {
         scheduleMonthId,
         employeeId,
         date: dbDate,
-        shiftCode: shiftCode.toUpperCase(),
-        label: day.assignment.label,
+        shiftCode: assignment.shiftCode,
+        label: assignment.label,
         source: "MANUAL",
       },
     });
   }
 
-  if (day.preAllocation) {
+  if (day.preAllocation?.label) {
     await tx.executedPreAllocation.create({
       data: {
         scheduleMonthId,
@@ -391,8 +334,9 @@ export class ShiftSwapUseCase {
       swapRepo.listApprovedForMonth(scheduleMonth.id),
     ]);
     const awaitingForMonth = awaitingAdmin.filter((r) => r.scheduleMonthId === scheduleMonth.id);
+    const approvedVisible = approved.filter((row) => !isAdminExecutedAuditNotes(row.notes));
     return Promise.all(
-      [...active, ...awaitingForMonth, ...approved].map((row) => this.toSwapDto(row)),
+      [...active, ...awaitingForMonth, ...approvedVisible].map((row) => this.toSwapDto(row)),
     );
   }
 
@@ -423,13 +367,16 @@ export class ShiftSwapUseCase {
     const scheduleMonth = await scheduleRepo.findMonth(year, month);
     if (!scheduleMonth) return 0;
     const rows = (await swapRepo.listApprovedForMonth(scheduleMonth.id)).reverse();
+    let applied = 0;
     for (const row of rows) {
+      if (isAdminExecutedAuditNotes(row.notes)) continue;
       await prisma.$transaction(async (tx) => {
         if (row.kind === "SELF") await this.applySelfSwap(tx, row);
         else await this.applyPeerSwap(tx, row);
       });
+      applied += 1;
     }
-    return rows.length;
+    return applied;
   }
 
   /** Correção operacional idempotente por chamada controlada; não altera o histórico. */
@@ -443,10 +390,10 @@ export class ShiftSwapUseCase {
     return mapSwap(row);
   }
 
-  /** Mapeia DTO e corrige tokens em branco em trocas ainda ativas. */
+  /** Mapeia DTO e corrige tokens em branco em trocas ainda não aplicadas. */
   private async toSwapDto(row: ShiftSwapWithParties): Promise<ShiftSwapDto> {
     const base = mapSwap(row);
-    const active = row.status === "OFFERED";
+    const active = row.status === "OFFERED" || row.status === "AWAITING_ADMIN";
     if (!active) return base;
     if (!isBlankDisplayToken(row.requesterShiftCode) && !isBlankDisplayToken(row.targetShiftCode)) {
       return base;
@@ -505,6 +452,34 @@ export class ShiftSwapUseCase {
       requesterShiftCode: sourceTokens.join("+"),
       targetShiftCode: targetTokens.join("+"),
     };
+  }
+
+  /** Preenche tokens em branco a partir da realizada/planejada, antes de aplicar. */
+  private async ensureSwapTokens(
+    tx: Tx | typeof prisma,
+    row: ShiftSwapWithParties,
+  ): Promise<ShiftSwapWithParties> {
+    if (!isBlankDisplayToken(row.requesterShiftCode) && !isBlankDisplayToken(row.targetShiftCode)) {
+      return row;
+    }
+    const fixed = await this.computeDisplayTokens(row);
+    const requesterShiftCode = isBlankDisplayToken(fixed.requesterShiftCode)
+      ? row.requesterShiftCode
+      : fixed.requesterShiftCode;
+    const targetShiftCode = isBlankDisplayToken(fixed.targetShiftCode)
+      ? row.targetShiftCode
+      : fixed.targetShiftCode;
+    if (
+      requesterShiftCode === row.requesterShiftCode &&
+      targetShiftCode === row.targetShiftCode
+    ) {
+      return row;
+    }
+    await tx.shiftSwapRequest.update({
+      where: { id: row.id },
+      data: { requesterShiftCode, targetShiftCode },
+    });
+    return { ...row, requesterShiftCode, targetShiftCode };
   }
 
   /**
@@ -788,18 +763,10 @@ export class ShiftSwapUseCase {
     }
 
     const now = new Date();
-    const needsAdmin =
-      isApaoEmployee(row.requester) || isApaoEmployee(row.target);
-
-    if (needsAdmin) {
-      const updated = await swapRepo.updateStatus(swapId, "AWAITING_ADMIN", {
-        respondedAt: now,
-      });
-      return mapSwap(updated);
-    }
 
     await prisma.$transaction(async (tx) => {
-      await this.applyPeerSwap(tx, row);
+      const ready = await this.ensureSwapTokens(tx, row);
+      await this.applyPeerSwap(tx, ready);
       await tx.shiftSwapRequest.update({
         where: { id: swapId },
         data: {
@@ -852,10 +819,11 @@ export class ShiftSwapUseCase {
     if (!row || row.status !== "AWAITING_ADMIN") throw new ShiftSwapNotFoundError();
 
     await prisma.$transaction(async (tx) => {
-      if (row.kind === "SELF") {
-        await this.applySelfSwap(tx, row);
+      const ready = await this.ensureSwapTokens(tx, row);
+      if (ready.kind === "SELF") {
+        await this.applySelfSwap(tx, ready);
       } else {
-        await this.applyPeerSwap(tx, row);
+        await this.applyPeerSwap(tx, ready);
       }
 
       await tx.shiftSwapRequest.update({
@@ -892,82 +860,219 @@ export class ShiftSwapUseCase {
     return scheduleMonth;
   }
 
+  private async origTokenForApply(
+    tx: Tx,
+    scheduleMonthId: string,
+    employeeId: string,
+    iso: string,
+    stored: string,
+  ): Promise<string> {
+    if (!isBlankDisplayToken(stored)) return stored.trim();
+    const planned = await readPlannedDay(tx, scheduleMonthId, employeeId, iso);
+    return displayTokenFromDay(planned);
+  }
+
+  /** Não copia T8/T7/… para um dia em que outro colaborador já tem o mesmo turno. */
+  private async otherHasShift(
+    tx: Tx,
+    scheduleMonthId: string,
+    employeeId: string,
+    iso: string,
+    token: string,
+  ): Promise<boolean> {
+    if (!isExclusiveShiftCode(token)) return false;
+    const code = token.trim().toUpperCase();
+    const dbDate = toDbDate(iso);
+    const executed = await tx.executedScheduleAssignment.findFirst({
+      where: { scheduleMonthId, date: dbDate, employeeId: { not: employeeId }, shiftCode: code },
+      select: { id: true },
+    });
+    if (executed) return true;
+    const planned = await tx.scheduleAssignment.findFirst({
+      where: { scheduleMonthId, date: dbDate, employeeId: { not: employeeId }, shiftCode: code },
+      select: { id: true },
+    });
+    return !!planned;
+  }
+
+  /** Registro histórico de alteração feita pelo admin na escala realizada (não reaplicável). */
+  async recordAdminExecutedAudit(params: {
+    scheduleMonthId: string;
+    kind: "PEER" | "SELF";
+    requesterEmployeeId: string;
+    targetEmployeeId: string;
+    date: string;
+    targetDate: string;
+    requesterShiftCode: string;
+    targetShiftCode: string;
+    notes?: string | null;
+  }): Promise<ShiftSwapDto> {
+    const now = new Date();
+    const dateIso = isoDateKey(params.date);
+    const targetIso = isoDateKey(params.targetDate);
+    const created = await prisma.shiftSwapRequest.create({
+      data: {
+        scheduleMonthId: params.scheduleMonthId,
+        kind: params.kind,
+        date: toDbDate(dateIso),
+        targetDate: toDbDate(targetIso),
+        pairLength: 1,
+        requesterDates: [dateIso],
+        targetDates: [targetIso],
+        requesterEmployeeId: params.requesterEmployeeId,
+        targetEmployeeId: params.targetEmployeeId,
+        requesterShiftCode: params.requesterShiftCode || "—",
+        targetShiftCode: params.targetShiftCode || "—",
+        notes: params.notes?.trim() || null,
+        status: "APPROVED",
+        respondedAt: now,
+        resolvedAt: now,
+      },
+      include: {
+        requester: { include: { role: true } },
+        target: { include: { role: true } },
+        scheduleMonth: true,
+      },
+    });
+    return mapSwap(created);
+  }
+
   private async applyPeerSwap(tx: Tx, row: ShiftSwapWithParties): Promise<void> {
+    if (isAdminExecutedAuditNotes(row.notes)) return;
     const datePairs = resolveSwapDatePairs(row);
-    const pairs: Array<{
+    const storedReq = splitClientTokens(row.requesterShiftCode, datePairs.length);
+    const storedTgt = splitClientTokens(row.targetShiftCode, datePairs.length);
+    const writes: Array<{
       requesterDay: DaySnapshot;
       targetDay: DaySnapshot;
       requesterDate: Date;
       targetDate: Date;
     }> = [];
 
-    for (const pair of datePairs) {
+    for (let i = 0; i < datePairs.length; i++) {
+      const pair = datePairs[i]!;
+      const [origReq, origTgt] = await Promise.all([
+        this.origTokenForApply(
+          tx,
+          row.scheduleMonthId,
+          row.requesterEmployeeId,
+          pair.sourceIso,
+          storedReq[i] ?? "",
+        ),
+        this.origTokenForApply(
+          tx,
+          row.scheduleMonthId,
+          row.targetEmployeeId,
+          pair.targetIso,
+          storedTgt[i] ?? "",
+        ),
+      ]);
+      const result = swapResultFromOrig(origReq, origTgt);
+      if (!result) continue;
+      if (
+        (await this.otherHasShift(
+          tx,
+          row.scheduleMonthId,
+          row.requesterEmployeeId,
+          pair.sourceIso,
+          origTgt,
+        )) ||
+        (await this.otherHasShift(
+          tx,
+          row.scheduleMonthId,
+          row.targetEmployeeId,
+          pair.targetIso,
+          origReq,
+        ))
+      ) {
+        continue;
+      }
       const [requesterPack, targetPack] = await Promise.all([
         readExecutedDay(tx, row.scheduleMonthId, row.requesterEmployeeId, pair.sourceIso),
         readExecutedDay(tx, row.scheduleMonthId, row.targetEmployeeId, pair.targetIso),
       ]);
-      pairs.push({
-        requesterDay: requesterPack.day,
-        targetDay: targetPack.day,
+      if (pairAlreadyAtResult(requesterPack.day, targetPack.day, origReq, origTgt)) {
+        continue;
+      }
+      writes.push({
+        requesterDay: result.left,
+        targetDay: result.right,
         requesterDate: requesterPack.dbDate,
         targetDate: targetPack.dbDate,
       });
     }
 
-    for (const p of pairs) {
+    for (const p of writes) {
       await clearExecutedDay(tx, row.scheduleMonthId, row.requesterEmployeeId, p.requesterDate);
       await clearExecutedDay(tx, row.scheduleMonthId, row.targetEmployeeId, p.targetDate);
     }
 
-    for (const p of pairs) {
+    for (const p of writes) {
       await writeExecutedDay(
         tx,
         row.scheduleMonthId,
         row.requesterEmployeeId,
         p.requesterDate,
-        p.targetDay,
+        p.requesterDay,
       );
       await writeExecutedDay(
         tx,
         row.scheduleMonthId,
         row.targetEmployeeId,
         p.targetDate,
-        p.requesterDay,
+        p.targetDay,
       );
     }
   }
 
   private async applySelfSwap(tx: Tx, row: ShiftSwapWithParties): Promise<void> {
+    if (isAdminExecutedAuditNotes(row.notes)) return;
     const datePairs = resolveSwapDatePairs(row);
     if (datePairs.length < 1) {
       throw new ShiftSwapNotAllowedError("Troca interna sem dias de destino.");
     }
 
     const employeeId = row.requesterEmployeeId;
-    const pairs: Array<{ source: DaySnapshot; target: DaySnapshot; sourceDate: Date; targetDate: Date }> =
-      [];
+    const storedSrc = splitClientTokens(row.requesterShiftCode, datePairs.length);
+    const storedDst = splitClientTokens(row.targetShiftCode, datePairs.length);
+    const writes: Array<{
+      source: DaySnapshot;
+      target: DaySnapshot;
+      sourceDate: Date;
+      targetDate: Date;
+    }> = [];
 
-    for (const pair of datePairs) {
+    for (let i = 0; i < datePairs.length; i++) {
+      const pair = datePairs[i]!;
+      const [origSrc, origDst] = await Promise.all([
+        this.origTokenForApply(tx, row.scheduleMonthId, employeeId, pair.sourceIso, storedSrc[i] ?? ""),
+        this.origTokenForApply(tx, row.scheduleMonthId, employeeId, pair.targetIso, storedDst[i] ?? ""),
+      ]);
+      const result = swapResultFromOrig(origSrc, origDst);
+      if (!result) continue;
       const [sPack, tPack] = await Promise.all([
         readExecutedDay(tx, row.scheduleMonthId, employeeId, pair.sourceIso),
         readExecutedDay(tx, row.scheduleMonthId, employeeId, pair.targetIso),
       ]);
-      pairs.push({
-        source: sPack.day,
-        target: tPack.day,
+      if (pairAlreadyAtResult(sPack.day, tPack.day, origSrc, origDst)) {
+        continue;
+      }
+      writes.push({
+        source: result.left,
+        target: result.right,
         sourceDate: sPack.dbDate,
         targetDate: tPack.dbDate,
       });
     }
 
-    for (const p of pairs) {
+    for (const p of writes) {
       await clearExecutedDay(tx, row.scheduleMonthId, employeeId, p.sourceDate);
       await clearExecutedDay(tx, row.scheduleMonthId, employeeId, p.targetDate);
     }
 
-    for (const p of pairs) {
-      await writeExecutedDay(tx, row.scheduleMonthId, employeeId, p.sourceDate, p.target);
-      await writeExecutedDay(tx, row.scheduleMonthId, employeeId, p.targetDate, p.source);
+    for (const p of writes) {
+      await writeExecutedDay(tx, row.scheduleMonthId, employeeId, p.sourceDate, p.source);
+      await writeExecutedDay(tx, row.scheduleMonthId, employeeId, p.targetDate, p.target);
     }
   }
 }

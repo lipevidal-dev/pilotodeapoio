@@ -21,7 +21,9 @@ export class ScheduleCellComponent implements OnDestroy {
 
   cssClass(): string {
     const c = this.cell();
-    return cellKindClass(c.kind, c.display);
+    const parts = ['schedule-cell', cellKindClass(c.kind, c.display)];
+    if (c.swapApplied) parts.push('cell-swap-applied');
+    return parts.join(' ');
   }
 
   hasHoverDetail(): boolean {

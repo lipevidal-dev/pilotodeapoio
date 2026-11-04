@@ -52,6 +52,8 @@ export interface Employee {
   seniorityLabel?: string;
   /** Código CIF (export Escala de Revezamento APAO). */
   cif?: string | null;
+  /** Nota livre do colaborador — hover no nome da escala. */
+  observation?: string | null;
   active: boolean;
   birthDate?: string | null;
   noFlightDates?: string[];
@@ -91,6 +93,7 @@ export interface CreateEmployeePayload {
   birthDate?: string | null;
   seniorityNumber?: number;
   cif?: string | null;
+  observation?: string | null;
   active?: boolean;
   noFlightDates?: string[];
   restrictedShiftIds?: string[];
@@ -112,6 +115,7 @@ export interface UpdateEmployeePayload {
   birthDate?: string | null;
   seniorityNumber?: number | null;
   cif?: string | null;
+  observation?: string | null;
   active?: boolean;
   noFlightDates?: string[];
   restrictedShiftIds?: string[];
