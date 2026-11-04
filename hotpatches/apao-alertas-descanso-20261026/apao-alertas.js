@@ -1,11 +1,11 @@
 /**
  * Alertas de descanso APAO + VOO/CURSO/SIMULADOR no popup.
  * Só leitura/informativo: não bloqueia alocação e não mexe no PAO.
- * v6: realoca na grade (JSON + DOM) trocas APPROVED, inclusive bloco de 2 dias.
+ * v8: pinta o resultado da troca APPROVED (nunca apaga célula com token vazio).
  */
 (function () {
-  if (window.__apaoAlertasV6) return;
-  window.__apaoAlertasV6 = true;
+  if (window.__apaoAlertasV8) return;
+  window.__apaoAlertasV8 = true;
 
   var HOUR_MS = 60 * 60 * 1000;
   var DAY_MS = 24 * HOUR_MS;
@@ -177,7 +177,7 @@
   function tokensMatch(display, stored) {
     var a = baseShift(display);
     var b = baseShift(stored);
-    if (!b) return !a;
+    if (!a || !b) return !a && !b;
     return a === b || a.indexOf(b) === 0 || b.indexOf(a) === 0;
   }
 
@@ -212,25 +212,27 @@
     return "";
   }
 
-  function relocateDay(list, fromEmp, fromIso, toEmp, toIso) {
-    var fromIdx = findDayIndex(list, fromEmp, fromIso);
-    var fromRow = fromIdx >= 0 ? list[fromIdx] : null;
-    if (fromIdx >= 0) list.splice(fromIdx, 1);
-    var toIdx = findDayIndex(list, toEmp, toIso);
-    var toRow = toIdx >= 0 ? list[toIdx] : null;
-    if (toIdx >= 0) list.splice(toIdx, 1);
-    if (fromRow) {
-      list.push(Object.assign({}, fromRow, {
-        employeeId: toEmp,
-        date: retargetDate(fromRow.date, toIso),
-      }));
+  function upsertAssignment(list, empId, iso, token) {
+    var desired = baseShift(token) || shortToken(token);
+    if (!desired) return false;
+    var idx = findDayIndex(list, empId, iso);
+    if (idx >= 0) {
+      var cur = baseShift(list[idx].shiftCode) || shortToken(list[idx].label);
+      if (tokensMatch(cur, desired)) return false;
+      list[idx] = Object.assign({}, list[idx], {
+        shiftCode: desired,
+        date: retargetDate(list[idx].date, iso),
+      });
+      return true;
     }
-    if (toRow) {
-      list.push(Object.assign({}, toRow, {
-        employeeId: fromEmp,
-        date: retargetDate(toRow.date, fromIso),
-      }));
-    }
+    list.push({
+      employeeId: empId,
+      date: iso + "T12:00:00.000Z",
+      shiftCode: desired,
+      label: null,
+      source: "MANUAL",
+    });
+    return true;
   }
 
   function partAt(joined, index) {
@@ -263,16 +265,15 @@
         var tgtIso = tgtDates[i];
         var origReq = partAt(swap.requesterShiftCode, i);
         var origTgt = partAt(swap.targetShiftCode, i);
-        origReq = baseShift(origReq);
-        origTgt = baseShift(origTgt);
+        origReq = baseShift(origReq) || shortToken(origReq);
+        origTgt = baseShift(origTgt) || shortToken(origTgt);
         if (!origReq && !origTgt) continue;
         if (origReq === origTgt) continue;
         var nowReq = tokenAt(assignments, pres, reqEmp, srcIso);
         var nowTgt = tokenAt(assignments, pres, tgtEmp, tgtIso);
-        if (tokensMatch(nowReq, origTgt) && tokensMatch(nowTgt, origReq)) continue;
-        relocateDay(assignments, reqEmp, srcIso, tgtEmp, tgtIso);
-        relocateDay(pres, reqEmp, srcIso, tgtEmp, tgtIso);
-        changed = true;
+        if (origReq && origTgt && tokensMatch(nowReq, origTgt) && tokensMatch(nowTgt, origReq)) continue;
+        if (origTgt) changed = upsertAssignment(assignments, reqEmp, srcIso, origTgt) || changed;
+        if (origReq) changed = upsertAssignment(assignments, tgtEmp, tgtIso, origReq) || changed;
       }
     }
     if (changed) {
@@ -865,12 +866,11 @@
       for (var i = 0; i < n; i++) {
         var reqTd = tdForIso(table, reqRow, srcDates[i], period.year, period.month);
         var tgtTd = tdForIso(table, tgtRow, tgtDates[i], period.year, period.month);
-        var origReq = baseShift(partAt(swap.requesterShiftCode, i));
-        var origTgt = baseShift(partAt(swap.targetShiftCode, i));
-        if (origReq && origTgt && origReq !== origTgt) {
-          setCellDisplay(reqTd, origTgt);
-          setCellDisplay(tgtTd, origReq);
-        }
+        var origReq = baseShift(partAt(swap.requesterShiftCode, i)) || shortToken(partAt(swap.requesterShiftCode, i));
+        var origTgt = baseShift(partAt(swap.targetShiftCode, i)) || shortToken(partAt(swap.targetShiftCode, i));
+        if (origReq && origTgt && origReq === origTgt) continue;
+        if (origTgt) setCellDisplay(reqTd, origTgt);
+        if (origReq) setCellDisplay(tgtTd, origReq);
       }
     }
   }

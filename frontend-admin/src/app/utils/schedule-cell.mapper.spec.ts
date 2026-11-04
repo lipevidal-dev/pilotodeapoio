@@ -944,4 +944,40 @@ describe('schedule-cell.mapper — troca aprovada', () => {
     expect(beto.cells[0]!.swapApplied).toBe(true);
     expect(beto.cells[1]!.swapApplied).toBe(true);
   });
+
+  it('pinta os turnos da troca quando a realizada veio em branco', () => {
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 11,
+      employees: [empA, empB],
+      assignments: [],
+      preAllocations: [],
+      operationalCadastros: [],
+      shiftSwaps: [approvedPeer],
+    });
+
+    const ana = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-a')!;
+    const beto = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-b')!;
+    expect(ana.cells[9]!.display).toBe('T4');
+    expect(beto.cells[9]!.display).toBe('T1');
+    expect(ana.cells[9]!.swapApplied).toBe(true);
+    expect(beto.cells[9]!.swapApplied).toBe(true);
+  });
+
+  it('não copia célula vazia por cima do turno quando só um lado veio no payload', () => {
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 11,
+      employees: [empA, empB],
+      assignments: [assignment('a1', 'pao-a', '2026-11-10T12:00:00.000Z', 'T1')],
+      preAllocations: [],
+      operationalCadastros: [],
+      shiftSwaps: [approvedPeer],
+    });
+
+    const ana = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-a')!;
+    const beto = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-b')!;
+    expect(ana.cells[9]!.display).toBe('T4');
+    expect(beto.cells[9]!.display).toBe('T1');
+  });
 });

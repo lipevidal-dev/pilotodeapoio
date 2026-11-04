@@ -1065,7 +1065,7 @@ function normalizeSwapToken(value: string | undefined | null): string {
 function swapTokensMatch(display: string | undefined, stored: string): boolean {
   const a = normalizeSwapToken(display);
   const b = normalizeSwapToken(stored);
-  if (!b) return !a;
+  if (!a || !b) return !a && !b;
   if (a === b) return true;
   if (a.startsWith(b) || b.startsWith(a)) return true;
   return false;
@@ -1153,15 +1153,25 @@ function applyApprovedSwapMarksToRows(
     if (origL === origR) return false;
     const alreadySwapped =
       swapTokensMatch(leftDisplay, origR) && swapTokensMatch(rightDisplay, origL);
-    // Se ainda não está no resultado, realoca — não exige match perfeito com a origem.
     return !alreadySwapped;
   };
 
-  const exchangeCells = (
+  const cellFromSwapToken = (token: string): ScheduleCellData | null => {
+    const t = normalizeSwapToken(token);
+    if (!t) return null;
+    if (/^TI?\d+[A-Z]*$/.test(t) || (t.startsWith('T') && t.length <= 4)) {
+      return mapShiftToCell(t);
+    }
+    return mapLabelToCell(t);
+  };
+
+  const paintSwapCells = (
     leftRow: EmployeeRowData | undefined,
     leftDay: number,
     rightRow: EmployeeRowData | undefined,
     rightDay: number,
+    origLeft: string,
+    origRight: string,
     hoverLeft: string,
     hoverRight: string,
   ) => {
@@ -1172,24 +1182,22 @@ function applyApprovedSwapMarksToRows(
       markApplied(rightRow, rightDay);
       return;
     }
+    const paintedLeft = cellFromSwapToken(origRight);
+    const paintedRight = cellFromSwapToken(origLeft);
     const leftSwap = left.shiftSwap;
     const rightSwap = right.shiftSwap;
-    writeCell(
-      leftRow,
-      leftDay,
-      withApprovedSwapMark(
-        { ...right, shiftSwap: leftSwap },
-        hoverLeft,
-      ),
-    );
-    writeCell(
-      rightRow,
-      rightDay,
-      withApprovedSwapMark(
-        { ...left, shiftSwap: rightSwap },
-        hoverRight,
-      ),
-    );
+    const nextLeft = paintedLeft
+      ? { ...paintedLeft, shiftSwap: leftSwap }
+      : right.display
+        ? { ...right, shiftSwap: leftSwap }
+        : left;
+    const nextRight = paintedRight
+      ? { ...paintedRight, shiftSwap: rightSwap }
+      : left.display
+        ? { ...left, shiftSwap: rightSwap }
+        : right;
+    writeCell(leftRow, leftDay, withApprovedSwapMark(nextLeft, hoverLeft));
+    writeCell(rightRow, rightDay, withApprovedSwapMark(nextRight, hoverRight));
   };
 
   for (const swap of shiftSwaps) {
@@ -1224,7 +1232,7 @@ function applyApprovedSwapMarksToRows(
             origDst,
           )
         ) {
-          exchangeCells(row, sDay, row, tDay, hover, hover);
+          paintSwapCells(row, sDay, row, tDay, origSrc, origDst, hover, hover);
         } else {
           markApplied(row, sDay);
           markApplied(row, tDay);
@@ -1248,7 +1256,7 @@ function applyApprovedSwapMarksToRows(
           origTgt,
         )
       ) {
-        exchangeCells(requesterRow, sDay, targetRow, tDay, hover, hover);
+        paintSwapCells(requesterRow, sDay, targetRow, tDay, origReq, origTgt, hover, hover);
       } else {
         markApplied(requesterRow, sDay);
         markApplied(targetRow, tDay);

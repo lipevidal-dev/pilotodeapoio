@@ -9,7 +9,7 @@ BRANCH=cursor/trocas-realocar-visual-326e
 RAW="https://raw.githubusercontent.com/lipevidal-dev/pilotodeapoio/${BRANCH}"
 PATCH_DIR="$ROOT/hotpatches/apao-alertas-descanso-20261026"
 CID="${ADMIN_CONTAINER:-piloto_apoio_admin}"
-VERSION=7
+VERSION=8
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
@@ -100,11 +100,23 @@ if docker ps --format '{{.Names}}' | grep -qx "$BE"; then
     -o "$WORKDIR/employee-observation-routes.js"
   curl -fsSL "$RAW/hotpatches/employee-observation-20261027/patch-backend.py" \
     -o "$WORKDIR/patch-backend.py"
+  curl -fsSL "$RAW/hotpatches/apao-alertas-descanso-20261026/patch-shift-swap.py" \
+    -o "$WORKDIR/patch-shift-swap.py"
   docker cp "$WORKDIR/employee-observation-routes.js" \
     "$BE:/app/dist/interfaces/http/employee-observation-routes.js"
   docker cp "$BE:/app/dist/interfaces/http/server.js" "$WORKDIR/server.js"
   python3 "$WORKDIR/patch-backend.py" "$WORKDIR/server.js"
   docker cp "$WORKDIR/server.js" "$BE:/app/dist/interfaces/http/server.js"
+  docker cp "$BE:/app/dist/application/use-cases/shift-swap.use-case.js" \
+    "$WORKDIR/shift-swap.use-case.js"
+  python3 "$WORKDIR/patch-shift-swap.py" "$WORKDIR/shift-swap.use-case.js" shift-swap
+  docker cp "$WORKDIR/shift-swap.use-case.js" \
+    "$BE:/app/dist/application/use-cases/shift-swap.use-case.js"
+  docker cp "$BE:/app/dist/application/use-cases/executed-schedule.use-case.js" \
+    "$WORKDIR/executed-schedule.use-case.js"
+  python3 "$WORKDIR/patch-shift-swap.py" "$WORKDIR/executed-schedule.use-case.js" executed
+  docker cp "$WORKDIR/executed-schedule.use-case.js" \
+    "$BE:/app/dist/application/use-cases/executed-schedule.use-case.js"
   docker restart "$BE"
   be_ok=0
   for _ in $(seq 1 20); do
