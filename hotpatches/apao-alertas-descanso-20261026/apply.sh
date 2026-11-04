@@ -91,11 +91,37 @@ curl -fsS "http://127.0.0.1:8080/chunk-APAOREV11.js" >/dev/null
 # Coluna + rotas no backend em execução (sem rebuild do admin).
 BE="${BACKEND_CONTAINER:-piloto_apoio_backend}"
 DB="${DB_CONTAINER:-piloto_apoio_db}"
+BE_BACKUP="$ROOT/hotpatch-backup/apao-alertas-descanso-20261026/backend-js"
+mkdir -p "$BE_BACKUP"
+
+wait_backend() {
+  local tries="${1:-30}"
+  local i
+  for i in $(seq 1 "$tries"); do
+    if curl -fsS http://127.0.0.1:3333/health >/dev/null; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
 if docker ps --format '{{.Names}}' | grep -qx "$DB"; then
   docker exec "$DB" psql -U piloto -d piloto_apoio_v2 -c \
     'ALTER TABLE "Employee" ADD COLUMN IF NOT EXISTS observation TEXT;'
 fi
-if docker ps --format '{{.Names}}' | grep -qx "$BE"; then
+if docker ps -a --format '{{.Names}}' | grep -qx "$BE"; then
+  # Patch anterior quebrou o JS: recria da imagem antes de aplicar de novo.
+  if ! curl -fsS http://127.0.0.1:3333/health >/dev/null; then
+    echo "Backend fora do ar; recriando o container da imagem (sem rebuild)."
+    docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate --no-build backend
+    if ! wait_backend 40; then
+      echo "Backend não subiu após recreate. docker logs --tail 80 $BE:" >&2
+      docker logs --tail 80 "$BE" >&2 || true
+      exit 1
+    fi
+  fi
+
   curl -fsSL "$RAW/hotpatches/employee-observation-20261027/observation-routes.js" \
     -o "$WORKDIR/employee-observation-routes.js"
   curl -fsSL "$RAW/hotpatches/employee-observation-20261027/patch-backend.py" \
@@ -105,29 +131,37 @@ if docker ps --format '{{.Names}}' | grep -qx "$BE"; then
   docker cp "$WORKDIR/employee-observation-routes.js" \
     "$BE:/app/dist/interfaces/http/employee-observation-routes.js"
   docker cp "$BE:/app/dist/interfaces/http/server.js" "$WORKDIR/server.js"
+  cp -a "$WORKDIR/server.js" "$BE_BACKUP/server.js"
   python3 "$WORKDIR/patch-backend.py" "$WORKDIR/server.js"
   docker cp "$WORKDIR/server.js" "$BE:/app/dist/interfaces/http/server.js"
   docker cp "$BE:/app/dist/application/use-cases/shift-swap.use-case.js" \
     "$WORKDIR/shift-swap.use-case.js"
+  cp -a "$WORKDIR/shift-swap.use-case.js" "$BE_BACKUP/shift-swap.use-case.js"
   python3 "$WORKDIR/patch-shift-swap.py" "$WORKDIR/shift-swap.use-case.js" shift-swap
+  docker cp "$WORKDIR/shift-swap.use-case.js" "$BE:/tmp/shift-swap.check.js"
+  if ! docker exec "$BE" node --check /tmp/shift-swap.check.js; then
+    echo "JS da troca inválido; não reinicia o backend." >&2
+    exit 1
+  fi
   docker cp "$WORKDIR/shift-swap.use-case.js" \
     "$BE:/app/dist/application/use-cases/shift-swap.use-case.js"
-  docker cp "$BE:/app/dist/application/use-cases/executed-schedule.use-case.js" \
-    "$WORKDIR/executed-schedule.use-case.js"
-  python3 "$WORKDIR/patch-shift-swap.py" "$WORKDIR/executed-schedule.use-case.js" executed
-  docker cp "$WORKDIR/executed-schedule.use-case.js" \
-    "$BE:/app/dist/application/use-cases/executed-schedule.use-case.js"
   docker restart "$BE"
-  be_ok=0
-  for _ in $(seq 1 20); do
-    if curl -fsS http://127.0.0.1:3333/health >/dev/null; then
-      be_ok=1
-      break
+  if ! wait_backend 30; then
+    echo "Backend não respondeu após o patch da troca; restaurando JS original." >&2
+    docker logs --tail 80 "$BE" >&2 || true
+    if [ -f "$BE_BACKUP/shift-swap.use-case.js" ]; then
+      docker cp "$BE_BACKUP/shift-swap.use-case.js" \
+        "$BE:/app/dist/application/use-cases/shift-swap.use-case.js"
     fi
-    sleep 2
-  done
-  if [ "$be_ok" != 1 ]; then
-    echo "Backend não respondeu em http://127.0.0.1:3333/health após o patch de observação" >&2
+    if [ -f "$BE_BACKUP/server.js" ]; then
+      docker cp "$BE_BACKUP/server.js" "$BE:/app/dist/interfaces/http/server.js"
+    fi
+    docker restart "$BE"
+    if ! wait_backend 30; then
+      echo "Restauração falhou; recriando backend da imagem." >&2
+      docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate --no-build backend
+      wait_backend 40 || true
+    fi
     exit 1
   fi
 fi

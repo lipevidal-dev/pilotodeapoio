@@ -29,3 +29,12 @@ O Excel Escala de Revezamento some se o container `admin` for recriado a partir 
 O mesmo `apply.sh` cria o campo **Observação** do colaborador (coluna no banco, rotas no backend e hover no nome da escala).
 
 Também corrige a **troca de turnos** na escala realizada: quando os dois colaboradores aceitam, os turnos são gravados de verdade (não ficam em branco). O backend em execução é recarregado nesse passo; não reconstrua a imagem.
+
+Se o backend ficar fora do ar depois de um patch (`Connection reset` em `:3333/health`), **não reconstrua o admin**. Recrie só o backend da imagem e rode o `apply.sh` de novo:
+
+```bash
+cd /opt/pilotodeapoiov2
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate --no-build backend
+```
+
+O `apply.sh` novo faz isso sozinho se o health estiver baixo, valida o JS com `node --check` e restaura o arquivo original se o restart falhar.

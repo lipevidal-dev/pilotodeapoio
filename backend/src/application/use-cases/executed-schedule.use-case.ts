@@ -150,10 +150,7 @@ export class ExecutedScheduleUseCase {
   }
 
   async getMonth(year: number, month: number) {
-    await this.ensureInitialized(year, month);
-    // Reaplica trocas já aceitas (idempotente): recupera dias que ficaram em branco.
-    await shiftSwapUseCase.reapplyApprovedForMonth(year, month);
-    const record = await this.executedRepo.findMonth(year, month);
+    const record = await this.ensureInitialized(year, month);
     if (!record) {
       throw new ScheduleMonthNotFoundError(`${year}-${month}`);
     }

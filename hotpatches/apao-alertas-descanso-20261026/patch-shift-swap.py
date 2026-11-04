@@ -48,13 +48,6 @@ function __swapToken(day) {
   }
   return "";
 }
-function __swapFromToken(token) {
-  const code = String(token ?? "").trim().toUpperCase();
-  if (!code || __swapIsBlank(code)) return { assignment: null, preAllocation: null };
-  const pre = { FA: "FOLGA AGRUPADA", F: "FOLGA", FS: "FOLGA SOCIAL", FP: "FOLGA PEDIDA", FANI: "FOLGA ANIVERSARIO", VOO: "VOO", SIM: "SIMULADOR", CRS: "CURSO", CMA: "CMA", FER: "FERIAS", ND: "ND" };
-  if (pre[code]) return { assignment: null, preAllocation: { label: pre[code], notes: null, startTime: null, endTime: null } };
-  return { assignment: { shiftCode: code, label: null }, preAllocation: null };
-}
 async function __swapReadPlanned(tx, scheduleMonthId, employeeId, date) {
   const dbDate = toDbDate(isoDateKey(date));
   const [assignment, preAllocation] = await Promise.all([
@@ -68,78 +61,106 @@ async function __swapReadPlanned(tx, scheduleMonthId, employeeId, date) {
 }
 '''
 
+WRAPPER = """
+async function readExecutedDay(tx, scheduleMonthId, employeeId, date) {
+  const pack = await __readExecutedDayRaw(tx, scheduleMonthId, employeeId, date);
+  if (__swapToken(pack && pack.day)) return pack;
+  const planned = await __swapReadPlanned(tx, scheduleMonthId, employeeId, date);
+  if (__swapToken(planned)) return { dbDate: pack.dbDate, day: planned };
+  return pack;
+}
+"""
+
+
+def _insert_after_imports(text: str, chunk: str) -> str:
+    last = None
+    for match in re.finditer(r"^import\s.+?;\s*$", text, re.M):
+        last = match
+    if not last:
+        raise SystemExit("imports não encontrados no use-case compilado")
+    at = last.end()
+    return text[:at] + "\n" + chunk + text[at:]
+
+
+def _balanced(text: str) -> bool:
+    braces = 0
+    parens = 0
+    in_str = None
+    escape = False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if in_str:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == in_str:
+                in_str = None
+            i += 1
+            continue
+        if ch in ("'", '"', "`"):
+            in_str = ch
+        elif ch == "{":
+            braces += 1
+        elif ch == "}":
+            braces -= 1
+            if braces < 0:
+                return False
+        elif ch == "(":
+            parens += 1
+        elif ch == ")":
+            parens -= 1
+            if parens < 0:
+                return False
+        i += 1
+    return braces == 0 and parens == 0
+
 
 def patch_shift_swap(text: str) -> str:
     if MARKER not in text:
-        insert_at = text.find("async function readExecutedDay")
-        if insert_at < 0:
-            insert_at = text.find("function readExecutedDay")
-        if insert_at < 0:
-            raise SystemExit("readExecutedDay não encontrado no use-case compilado")
-        text = text[:insert_at] + HELPERS + "\n" + text[insert_at:]
+        text = _insert_after_imports(text, HELPERS)
 
     text = text.replace(
         'const shiftCode = (day.assignment?.shiftCode ?? "").trim();',
         'const shiftCode = ((day.assignment?.shiftCode ?? "").trim() || __swapShort(day.assignment?.label ?? "") || "").trim();',
     )
     text = text.replace(
-        'if (day.assignment && shiftCode)',
-        'if (shiftCode && !__swapIsBlank(shiftCode))',
+        "if (day.assignment && shiftCode)",
+        "if (shiftCode && !__swapIsBlank(shiftCode))",
     )
 
     if "async function __readExecutedDayRaw(" not in text:
-        if "async function readExecutedDay(" not in text:
-            raise SystemExit("readExecutedDay não encontrado para hidratar")
-        text = text.replace(
-            "async function readExecutedDay(",
+        renamed = re.sub(
+            r"async function readExecutedDay\s*\(",
             "async function __readExecutedDayRaw(",
-            1,
+            text,
+            count=1,
         )
-        wrapper = """
-async function readExecutedDay(tx, scheduleMonthId, employeeId, date) {
-  const pack = await __readExecutedDayRaw(tx, scheduleMonthId, employeeId, date);
-  if (__swapToken(pack.day)) return pack;
-  const planned = await __swapReadPlanned(tx, scheduleMonthId, employeeId, date);
-  if (__swapToken(planned)) return { dbDate: pack.dbDate, day: planned };
-  return pack;
-}
-"""
+        if renamed == text:
+            raise SystemExit("readExecutedDay não encontrado para hidratar")
+        text = renamed
         idx = text.find("async function __readExecutedDayRaw(")
-        text = text[:idx] + wrapper + "\n" + text[idx:]
+        text = text[:idx] + WRAPPER + "\n" + text[idx:]
 
-    # Aceite do colega aplica a troca PEER (PAO e APAO) — não deixa em branco aguardando admin.
     needs_admin = re.search(
-        r"const needsAdmin\s*=\s*isApaoEmployee\(row\.requester\)\s*\|\|\s*isApaoEmployee\(row\.target\);\s*"
-        r"if \(needsAdmin\) \{[\s\S]*?return mapSwap\(updated\);\s*\}",
+        r"const needsAdmin\s*=\s*isApaoEmployee\(row\.requester\)\s*\|\|\s*isApaoEmployee\(row\.target\);?\s*"
+        r"if\s*\(needsAdmin\)\s*\{[\s\S]*?return mapSwap\(updated\);?\s*\}",
         text,
     )
     if needs_admin:
         text = text[: needs_admin.start()] + text[needs_admin.end() :]
 
+    if not _balanced(text):
+        raise SystemExit("patch shift-swap gerou JS desbalanceado")
+    if MARKER not in text or "async function __readExecutedDayRaw(" not in text:
+        raise SystemExit("patch shift-swap incompleto")
     return text
 
 
 def patch_executed_get(text: str) -> str:
-    if "reapplyApprovedForMonth(year, month)" in text and "await this.ensureInitialized(year, month)" in text:
-        if "await this.ensureInitialized(year, month);\n        await shiftSwapUseCase.reapplyApprovedForMonth" in text.replace("\r\n", "\n"):
-            return text
-    old = "const record = await this.ensureInitialized(year, month);"
-    new = (
-        "await this.ensureInitialized(year, month);\n"
-        "        await shiftSwapUseCase.reapplyApprovedForMonth(year, month);\n"
-        "        const record = await this.executedRepo.findMonth(year, month);"
-    )
-    if old not in text:
-        old2 = "const record = await this.ensureInitialized(year, month)"
-        if old2 in text and "reapplyApprovedForMonth" not in text.split("async getMonth", 1)[-1][:600]:
-            text = text.replace(old2, new.rstrip(";"), 1)
-            return text
-        if "reapplyApprovedForMonth" in text:
-            return text
-        raise SystemExit("ensureInitialized em getMonth não encontrado")
-    if "reapplyApprovedForMonth" in text.split("async getMonth", 1)[-1][:800]:
-        return text
-    return text.replace(old, new, 1)
+    """Não altera getMonth. Reaplicar troca em todo GET derrubou o backend em produção."""
+    return text
 
 
 def main() -> None:
