@@ -95,10 +95,12 @@ BE_BACKUP="$ROOT/hotpatch-backup/apao-alertas-descanso-20261026/backend-js"
 mkdir -p "$BE_BACKUP"
 
 wait_backend() {
-  local tries="${1:-30}"
+  # Restart roda migrate+seed; 60s não chega. ~3 min.
+  local tries="${1:-90}"
   local i
   for i in $(seq 1 "$tries"); do
-    if curl -fsS http://127.0.0.1:3333/health >/dev/null; then
+    if curl -fsS -m 3 http://127.0.0.1:3333/health >/dev/null; then
+      echo "backend health OK (tentativa $i)"
       return 0
     fi
     sleep 2
@@ -111,14 +113,17 @@ if docker ps --format '{{.Names}}' | grep -qx "$DB"; then
     'ALTER TABLE "Employee" ADD COLUMN IF NOT EXISTS observation TEXT;'
 fi
 if docker ps -a --format '{{.Names}}' | grep -qx "$BE"; then
-  # Patch anterior quebrou o JS: recria da imagem antes de aplicar de novo.
-  if ! curl -fsS http://127.0.0.1:3333/health >/dev/null; then
-    echo "Backend fora do ar; recriando o container da imagem (sem rebuild)."
-    docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate --no-build backend
-    if ! wait_backend 40; then
-      echo "Backend não subiu após recreate. docker logs --tail 80 $BE:" >&2
-      docker logs --tail 80 "$BE" >&2 || true
-      exit 1
+  # Restart dispara seed; se ainda estiver subindo, espera antes de recriar.
+  if ! curl -fsS -m 3 http://127.0.0.1:3333/health >/dev/null; then
+    echo "Backend sem health; aguardando seed/migrate..."
+    if ! wait_backend 90; then
+      echo "Backend fora do ar; recriando o container da imagem (sem rebuild)."
+      docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate --no-build backend
+      if ! wait_backend 90; then
+        echo "Backend não subiu após recreate. docker logs --tail 80 $BE:" >&2
+        docker logs --tail 80 "$BE" >&2 || true
+        exit 1
+      fi
     fi
   fi
 
@@ -145,8 +150,9 @@ if docker ps -a --format '{{.Names}}' | grep -qx "$BE"; then
   fi
   docker cp "$WORKDIR/shift-swap.use-case.js" \
     "$BE:/app/dist/application/use-cases/shift-swap.use-case.js"
+  echo "Reiniciando backend (migrate+seed ~2 min)..."
   docker restart "$BE"
-  if ! wait_backend 30; then
+  if ! wait_backend 90; then
     echo "Backend não respondeu após o patch da troca; restaurando JS original." >&2
     docker logs --tail 80 "$BE" >&2 || true
     if [ -f "$BE_BACKUP/shift-swap.use-case.js" ]; then
@@ -157,10 +163,10 @@ if docker ps -a --format '{{.Names}}' | grep -qx "$BE"; then
       docker cp "$BE_BACKUP/server.js" "$BE:/app/dist/interfaces/http/server.js"
     fi
     docker restart "$BE"
-    if ! wait_backend 30; then
+    if ! wait_backend 90; then
       echo "Restauração falhou; recriando backend da imagem." >&2
       docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate --no-build backend
-      wait_backend 40 || true
+      wait_backend 90 || true
     fi
     exit 1
   fi
