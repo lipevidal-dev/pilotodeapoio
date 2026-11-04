@@ -1,11 +1,11 @@
 /**
  * Alertas de descanso APAO + VOO/CURSO/SIMULADOR no popup.
  * Só leitura/informativo: não bloqueia alocação e não mexe no PAO.
- * v9: troca de verdade — grava/pinta os dois orig; orig vazio limpa o outro lado.
+ * v10: não copia turno da troca por cima da realizada (evita duplicar T8).
  */
 (function () {
-  if (window.__apaoAlertasV9) return;
-  window.__apaoAlertasV9 = true;
+  if (window.__apaoAlertasV10) return;
+  window.__apaoAlertasV10 = true;
 
   var HOUR_MS = 60 * 60 * 1000;
   var DAY_MS = 24 * HOUR_MS;
@@ -265,45 +265,9 @@
     return parts[Math.min(index, parts.length - 1)] || "";
   }
 
-  function applyApprovedSwapsToPayload(data) {
-    if (!data || !Array.isArray(data.shiftSwaps) || !Array.isArray(data.assignments)) return false;
-    var assignments = data.assignments;
-    var pres = Array.isArray(data.preAllocations) ? data.preAllocations : [];
-    var changed = false;
-    for (var s = 0; s < data.shiftSwaps.length; s++) {
-      var swap = data.shiftSwaps[s];
-      if (!swap || swap.status !== "APPROVED") continue;
-      if (String(swap.notes || "").indexOf("__ADMIN_EXECUTED_AUDIT__") >= 0) continue;
-      var srcDates = swap.requesterDates && swap.requesterDates.length
-        ? swap.requesterDates.map(isoDay)
-        : expandIso(swap.date, swap.pairLength || 1);
-      var tgtDates = swap.targetDates && swap.targetDates.length
-        ? swap.targetDates.map(isoDay)
-        : expandIso(swap.targetDate || swap.date, swap.pairLength || 1);
-      var n = Math.min(srcDates.length, tgtDates.length);
-      var self = swap.kind === "SELF";
-      var reqEmp = swap.requesterEmployeeId;
-      var tgtEmp = self ? reqEmp : swap.targetEmployeeId;
-      if (!reqEmp || !tgtEmp) continue;
-      for (var i = 0; i < n; i++) {
-        var srcIso = srcDates[i];
-        var tgtIso = tgtDates[i];
-        var origReq = normTok(baseShift(partAt(swap.requesterShiftCode, i)) || shortToken(partAt(swap.requesterShiftCode, i)) || partAt(swap.requesterShiftCode, i));
-        var origTgt = normTok(baseShift(partAt(swap.targetShiftCode, i)) || shortToken(partAt(swap.targetShiftCode, i)) || partAt(swap.targetShiftCode, i));
-        if (!origReq && !origTgt) continue;
-        if (origReq && origTgt && origReq === origTgt) continue;
-        var nowReq = normTok(tokenAt(assignments, pres, reqEmp, srcIso));
-        var nowTgt = normTok(tokenAt(assignments, pres, tgtEmp, tgtIso));
-        if (tokensMatch(nowReq, origTgt) && tokensMatch(nowTgt, origReq)) continue;
-        changed = setDayToken(assignments, pres, reqEmp, srcIso, origTgt) || changed;
-        changed = setDayToken(assignments, pres, tgtEmp, tgtIso, origReq) || changed;
-      }
-    }
-    if (changed) {
-      data.assignments = assignments;
-      data.preAllocations = pres;
-    }
-    return changed;
+  function applyApprovedSwapsToPayload() {
+    // A realizada já vem do backend. Copiar orig da troca aqui duplicava T8.
+    return false;
   }
 
   function isExecutedScheduleUrl(url) {
@@ -853,25 +817,10 @@
     return null;
   }
 
-  function setCellDisplay(td, code) {
+  function markSwapSeal(td) {
     if (!td) return;
-    var desired = normTok(baseShift(code) || shortToken(code) || code);
     var cell = td.querySelector(".schedule-cell") || td;
-    var classList = ["cell-t6","cell-t7","cell-t8","cell-t9","cell-shift","cell-nd","cell-folga","cell-fs","cell-fa","cell-empty"];
-    if (!desired) {
-      cell.textContent = "";
-      cell.classList.add("schedule-cell", "cell-empty", "cell-swap-applied");
-      classList.forEach(function (cls) {
-        if (cls !== "cell-empty") cell.classList.remove(cls);
-      });
-      return;
-    }
-    var cur = cellCode(cell.textContent);
-    if (!tokensMatch(cur, desired)) cell.textContent = desired;
-    cell.classList.add("schedule-cell", classForCode(desired), "cell-swap-applied");
-    classList.forEach(function (cls) {
-      if (cls !== classForCode(desired)) cell.classList.remove(cls);
-    });
+    cell.classList.add("schedule-cell", "cell-swap-applied");
   }
 
   function applySwapsToDom() {
@@ -898,12 +847,8 @@
       for (var i = 0; i < n; i++) {
         var reqTd = tdForIso(table, reqRow, srcDates[i], period.year, period.month);
         var tgtTd = tdForIso(table, tgtRow, tgtDates[i], period.year, period.month);
-        var origReq = normTok(baseShift(partAt(swap.requesterShiftCode, i)) || shortToken(partAt(swap.requesterShiftCode, i)) || partAt(swap.requesterShiftCode, i));
-        var origTgt = normTok(baseShift(partAt(swap.targetShiftCode, i)) || shortToken(partAt(swap.targetShiftCode, i)) || partAt(swap.targetShiftCode, i));
-        if (!origReq && !origTgt) continue;
-        if (origReq && origTgt && origReq === origTgt) continue;
-        setCellDisplay(reqTd, origTgt);
-        setCellDisplay(tgtTd, origReq);
+        markSwapSeal(reqTd);
+        markSwapSeal(tgtTd);
       }
     }
   }

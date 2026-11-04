@@ -1176,6 +1176,15 @@ function applyApprovedSwapMarksToRows(
     return mapLabelToCell(t);
   };
 
+  const otherHasSameShift = (employeeId: string, day: number, token: string): boolean => {
+    const code = normalizeSwapToken(token);
+    if (!code || !/^T[A-Z0-9]+$/.test(code)) return false;
+    return rows.some(
+      (row) =>
+        row.employeeId !== employeeId && swapTokensMatch(readCell(row, day)?.display, code),
+    );
+  };
+
   const paintSwapCells = (
     leftRow: EmployeeRowData | undefined,
     leftDay: number,
@@ -1250,6 +1259,14 @@ function applyApprovedSwapMarksToRows(
       const tDay = targetDays[i]!;
       const origReq = partAt(swap.requesterShiftCode, i);
       const origTgt = partAt(swap.targetShiftCode, i);
+      if (
+        otherHasSameShift(swap.requesterEmployeeId, sDay, origTgt) ||
+        otherHasSameShift(swap.targetEmployeeId, tDay, origReq)
+      ) {
+        markApplied(requesterRow, sDay);
+        markApplied(targetRow, tDay);
+        continue;
+      }
       if (
         shouldSwapVisual(
           readCell(requesterRow, sDay)?.display,

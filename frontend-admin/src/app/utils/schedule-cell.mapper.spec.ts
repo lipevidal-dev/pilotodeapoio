@@ -1034,4 +1034,50 @@ describe('schedule-cell.mapper — troca aprovada', () => {
     expect(ana.cells[9]!.display).toBe('T8');
     expect(beto.cells[9]!.display).toBe('');
   });
+
+  it('não copia T8 para o dia em que outro colaborador já tem T8', () => {
+    const empC: Employee = {
+      ...empB,
+      id: 'pao-c',
+      name: 'Carla',
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 11,
+      employees: [empA, empB, empC],
+      assignments: [
+        assignment('b1', 'pao-b', '2026-11-01T12:00:00.000Z', 'T8'),
+        assignment('c1', 'pao-c', '2026-11-28T12:00:00.000Z', 'T8'),
+      ],
+      preAllocations: [
+        {
+          id: 'fs-a',
+          employeeId: 'pao-a',
+          date: '2026-11-28T12:00:00.000Z',
+          label: 'FOLGA SOCIAL',
+        },
+      ],
+      operationalCadastros: [],
+      shiftSwaps: [
+        {
+          ...approvedPeer,
+          date: '2026-11-28',
+          targetDate: '2026-11-01',
+          requesterDates: ['2026-11-28'],
+          targetDates: ['2026-11-01'],
+          requesterShiftCode: 'FS',
+          targetShiftCode: 'T8',
+        },
+      ],
+    });
+
+    const ana = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-a')!;
+    const beto = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-b')!;
+    const carla = grid.groups[0]!.rows.find((r) => r.employeeId === 'pao-c')!;
+    expect(ana.cells[27]!.display).toBe('FS');
+    expect(beto.cells[0]!.display).toBe('T8');
+    expect(carla.cells[27]!.display).toBe('T8');
+    expect(ana.cells[27]!.swapApplied).toBe(true);
+    expect(beto.cells[0]!.swapApplied).toBe(true);
+  });
 });

@@ -14,6 +14,7 @@ import {
   hydrateDaySnapshot,
   isBlankDisplayToken,
   isEmptyDay,
+  isExclusiveShiftCode,
   pairAlreadyApplied as pairAlreadyAtResult,
   preferDisplayToken,
   splitClientTokens,
@@ -871,6 +872,29 @@ export class ShiftSwapUseCase {
     return displayTokenFromDay(planned);
   }
 
+  /** Não copia T8/T7/… para um dia em que outro colaborador já tem o mesmo turno. */
+  private async otherHasShift(
+    tx: Tx,
+    scheduleMonthId: string,
+    employeeId: string,
+    iso: string,
+    token: string,
+  ): Promise<boolean> {
+    if (!isExclusiveShiftCode(token)) return false;
+    const code = token.trim().toUpperCase();
+    const dbDate = toDbDate(iso);
+    const executed = await tx.executedScheduleAssignment.findFirst({
+      where: { scheduleMonthId, date: dbDate, employeeId: { not: employeeId }, shiftCode: code },
+      select: { id: true },
+    });
+    if (executed) return true;
+    const planned = await tx.scheduleAssignment.findFirst({
+      where: { scheduleMonthId, date: dbDate, employeeId: { not: employeeId }, shiftCode: code },
+      select: { id: true },
+    });
+    return !!planned;
+  }
+
   /** Registro histórico de alteração feita pelo admin na escala realizada (não reaplicável). */
   async recordAdminExecutedAudit(params: {
     scheduleMonthId: string;
@@ -945,6 +969,24 @@ export class ShiftSwapUseCase {
       ]);
       const result = swapResultFromOrig(origReq, origTgt);
       if (!result) continue;
+      if (
+        (await this.otherHasShift(
+          tx,
+          row.scheduleMonthId,
+          row.requesterEmployeeId,
+          pair.sourceIso,
+          origTgt,
+        )) ||
+        (await this.otherHasShift(
+          tx,
+          row.scheduleMonthId,
+          row.targetEmployeeId,
+          pair.targetIso,
+          origReq,
+        ))
+      ) {
+        continue;
+      }
       const [requesterPack, targetPack] = await Promise.all([
         readExecutedDay(tx, row.scheduleMonthId, row.requesterEmployeeId, pair.sourceIso),
         readExecutedDay(tx, row.scheduleMonthId, row.targetEmployeeId, pair.targetIso),

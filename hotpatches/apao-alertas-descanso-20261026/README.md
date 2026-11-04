@@ -6,7 +6,7 @@ O `apply.sh` só:
 
 1. sobe o container existente, se estiver parado (`up -d --no-build`)
 2. copia `apao-alertas.js` para o nginx
-3. coloca o script no `index.html` com `?v=9`
+3. coloca o script no `index.html` com `?v=10`
 4. recoloca o Excel/PDF **Escala de Revezamento** (`main-XLSREV11.js`)
 
 No VPS, como root:
@@ -28,7 +28,7 @@ O Excel Escala de Revezamento some se o container `admin` for recriado a partir 
 
 O mesmo `apply.sh` cria o campo **Observação** do colaborador (coluna no banco, rotas no backend e hover no nome da escala).
 
-Também corrige a **troca de turnos** na escala realizada: quando os dois colaboradores aceitam, os turnos originais são **trocados** (não duplicados). Orig em branco/`—` limpa o outro lado. O backend em execução é recarregado nesse passo; não reconstrua a imagem.
+Também corrige a **troca de turnos** na escala realizada: quando os dois colaboradores aceitam, os turnos originais são **trocados** (não duplicados). Orig em branco/`—` limpa o outro lado. Se o turno de destino já existe no mesmo dia em outro colaborador (ex.: T8 do Thielen no 28), a troca **não copia** esse T8. O backend em execução é recarregado nesse passo; não reconstrua a imagem.
 
 Se o backend ficar fora do ar depois de um patch (`Connection reset` em `:3333/health`), **não reconstrua o admin**. Recrie só o backend da imagem e rode o `apply.sh` de novo:
 

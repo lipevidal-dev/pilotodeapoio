@@ -4,6 +4,7 @@ import {
   displayTokenFromDay,
   hydrateDaySnapshot,
   isBlankDisplayToken,
+  isExclusiveShiftCode,
   pairAlreadyApplied,
   snapshotFromToken,
   swapResultFromOrig,
@@ -31,6 +32,9 @@ describe("shift-swap-day — hidratação da troca", () => {
     expect(isBlankDisplayToken("–")).toBe(true);
     expect(isBlankDisplayToken("T8")).toBe(false);
     expect(isBlankDisplayToken("FA")).toBe(false);
+    expect(isExclusiveShiftCode("T8")).toBe(true);
+    expect(isExclusiveShiftCode("FS")).toBe(false);
+    expect(isExclusiveShiftCode("—")).toBe(false);
   });
 
   it("lê FA pelo label quando o shiftCode veio vazio", () => {

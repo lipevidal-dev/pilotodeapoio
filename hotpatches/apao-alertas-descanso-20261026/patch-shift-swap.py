@@ -8,10 +8,11 @@ import sys
 
 MARKER_V8 = "/* SWAP_HYDRATE_V8 */"
 MARKER_V9 = "/* SWAP_HYDRATE_V9 */"
-APPLY_MARKER = "/* SWAP_APPLY_V9 */"
+MARKER_V10 = "/* SWAP_HYDRATE_V10 */"
+APPLY_MARKER = "/* SWAP_APPLY_V10 */"
 
 HELPERS = r'''
-/* SWAP_HYDRATE_V9 */
+/* SWAP_HYDRATE_V10 */
 function __swapIsBlank(code) {
   const raw = String(code ?? "").trim();
   if (!raw) return true;
@@ -73,6 +74,21 @@ async function __swapOrigToken(tx, scheduleMonthId, employeeId, iso, stored) {
   const planned = await __swapReadPlanned(tx, scheduleMonthId, employeeId, iso);
   return __swapToken(planned);
 }
+async function __swapOtherHasShift(tx, scheduleMonthId, employeeId, iso, token) {
+  const code = String(token ?? "").trim().toUpperCase();
+  if (!code || __swapIsBlank(code) || !/^T[A-Z0-9]+$/.test(code)) return false;
+  const dbDate = toDbDate(isoDateKey(iso));
+  const executed = await tx.executedScheduleAssignment.findFirst({
+    where: { scheduleMonthId, date: dbDate, employeeId: { not: employeeId }, shiftCode: code },
+    select: { id: true },
+  });
+  if (executed) return true;
+  const planned = await tx.scheduleAssignment.findFirst({
+    where: { scheduleMonthId, date: dbDate, employeeId: { not: employeeId }, shiftCode: code },
+    select: { id: true },
+  });
+  return !!planned;
+}
 async function __swapReadPlanned(tx, scheduleMonthId, employeeId, date) {
   const dbDate = toDbDate(isoDateKey(date));
   const [assignment, preAllocation] = await Promise.all([
@@ -97,7 +113,7 @@ async function readExecutedDay(tx, scheduleMonthId, employeeId, date) {
 """
 
 APPLY_METHODS = r'''    async applyPeerSwap(tx, row) {
-        /* SWAP_APPLY_V9 */
+        /* SWAP_APPLY_V10 */
         if (typeof isAdminExecutedAuditNotes === "function" && isAdminExecutedAuditNotes(row.notes)) return;
         const datePairs = resolveSwapDatePairs(row);
         const writes = [];
@@ -109,6 +125,8 @@ APPLY_METHODS = r'''    async applyPeerSwap(tx, row) {
             origTgt = __swapIsBlank(origTgt) ? "" : String(origTgt).trim();
             if (!origReq && !origTgt) continue;
             if (origReq && origTgt && origReq.toUpperCase() === origTgt.toUpperCase()) continue;
+            if (await __swapOtherHasShift(tx, row.scheduleMonthId, row.requesterEmployeeId, pair.sourceIso, origTgt)) continue;
+            if (await __swapOtherHasShift(tx, row.scheduleMonthId, row.targetEmployeeId, pair.targetIso, origReq)) continue;
             const [requesterPack, targetPack] = await Promise.all([
                 readExecutedDay(tx, row.scheduleMonthId, row.requesterEmployeeId, pair.sourceIso),
                 readExecutedDay(tx, row.scheduleMonthId, row.targetEmployeeId, pair.targetIso),
@@ -130,7 +148,7 @@ APPLY_METHODS = r'''    async applyPeerSwap(tx, row) {
         }
     }
     async applySelfSwap(tx, row) {
-        /* SWAP_APPLY_V9 */
+        /* SWAP_APPLY_V10 */
         if (typeof isAdminExecutedAuditNotes === "function" && isAdminExecutedAuditNotes(row.notes)) return;
         const datePairs = resolveSwapDatePairs(row);
         if (datePairs.length < 1) {
@@ -252,15 +270,15 @@ def _method_span(text: str, name: str) -> tuple[int, int] | None:
 
 
 def _replace_helpers(text: str) -> str:
-    if MARKER_V9 in text and "__swapSnapshot(" in text:
+    if MARKER_V10 in text and "__swapOtherHasShift(" in text:
         return text
     old = re.search(
-        r"\n/\* SWAP_HYDRATE_V8 \*/[\s\S]*?async function __swapReadPlanned\([\s\S]*?\n\}\n",
+        r"\n/\* SWAP_HYDRATE_V[89] \*/[\s\S]*?async function __swapReadPlanned\([\s\S]*?\n\}\n",
         text,
     )
     if old:
         return text[: old.start()] + "\n" + HELPERS + text[old.end() :]
-    if MARKER_V8 in text or MARKER_V9 in text:
+    if MARKER_V8 in text or MARKER_V9 in text or MARKER_V10 in text:
         raise SystemExit("helpers da troca encontrados, mas o bloco não bateu para atualizar")
     return _insert_after_imports(text, HELPERS)
 
@@ -314,7 +332,7 @@ def patch_shift_swap(text: str) -> str:
 
     if not _balanced(text):
         raise SystemExit("patch shift-swap gerou JS desbalanceado")
-    if MARKER_V9 not in text or "async function __readExecutedDayRaw(" not in text:
+    if MARKER_V10 not in text or "async function __readExecutedDayRaw(" not in text:
         raise SystemExit("patch shift-swap incompleto")
     if APPLY_MARKER not in text:
         raise SystemExit("patch apply orig ausente")

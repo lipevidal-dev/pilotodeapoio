@@ -39,6 +39,12 @@ export function isBlankDisplayToken(code: string | null | undefined): boolean {
   return raw.split("+").every((part) => BLANK_PARTS.has(part.trim().toLowerCase()));
 }
 
+/** T8/T7/… — um código desses não pode ir para um dia em que outro colaborador já o tem. */
+export function isExclusiveShiftCode(token: string | null | undefined): boolean {
+  const code = isBlankDisplayToken(token) ? "" : String(token).trim().toUpperCase();
+  return /^T[A-Z0-9]+$/.test(code);
+}
+
 /** Converte label operacional no token curto da grade (FA, VOO, T1…). */
 export function shortFromLabel(label: string): string | null {
   const n = label
