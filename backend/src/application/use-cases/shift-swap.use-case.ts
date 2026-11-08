@@ -375,7 +375,7 @@ export class ShiftSwapUseCase {
   }
 
   async listActiveForMonth(year: number, month: number): Promise<ShiftSwapDto[]> {
-    const scheduleMonth = await scheduleRepo.findMonth(year, month);
+    const scheduleMonth = await scheduleRepo.findMonthMeta(year, month);
     if (!scheduleMonth) return [];
     const rows = await swapRepo.listActiveForMonth(scheduleMonth.id);
     return Promise.all(rows.map((row) => this.toSwapDto(row)));
@@ -383,7 +383,7 @@ export class ShiftSwapUseCase {
 
   /** Ativas (aguardando aceite/admin) + aprovadas/aceitas do mês (marcação visual). */
   async listVisualForMonth(year: number, month: number): Promise<ShiftSwapDto[]> {
-    const scheduleMonth = await scheduleRepo.findMonth(year, month);
+    const scheduleMonth = await scheduleRepo.findMonthMeta(year, month);
     if (!scheduleMonth) return [];
     const [active, awaitingAdmin, approved] = await Promise.all([
       swapRepo.listActiveForMonth(scheduleMonth.id),
@@ -420,7 +420,7 @@ export class ShiftSwapUseCase {
 
   /** Reaplica trocas aprovadas após uma republicação reconstruir a escala realizada. */
   async reapplyApprovedForMonth(year: number, month: number): Promise<number> {
-    const scheduleMonth = await scheduleRepo.findMonth(year, month);
+    const scheduleMonth = await scheduleRepo.findMonthMeta(year, month);
     if (!scheduleMonth) return 0;
     const rows = (await swapRepo.listApprovedForMonth(scheduleMonth.id)).reverse();
     for (const row of rows) {

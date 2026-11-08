@@ -892,12 +892,11 @@ export class ScheduleComponent implements OnInit, OnDestroy {
     forkJoin({
       schedule: this.scheduleService.getSchedule(year, month),
       prefs: prefs$,
-      // Lead-in espelha a escala REALIZADA do mês anterior (não a planejada).
-      previous: this.scheduleService
-        .getExecutedSchedule(prevYear, prevMonth)
+      executed: this.scheduleService
+        .getExecutedSchedule(year, month)
         .pipe(catchError(() => of(null))),
     }).subscribe({
-      next: ({ schedule: data, prefs, previous }) => {
+      next: ({ schedule: data, prefs, executed }) => {
         this.scheduleData.set(data);
         this.workspace.scheduleMonthId.set(data.scheduleMonth.id);
         if (this.canShowPortalPreferences()) {
@@ -915,27 +914,50 @@ export class ScheduleComponent implements OnInit, OnDestroy {
         const periodKey = `${year}-${month}`;
         const published = data.scheduleMonth.status === 'PUBLISHED';
         const archived = data.scheduleMonth.status === 'ARCHIVED';
-        this.previousScheduleData.set(!published && !archived ? previous : null);
-
         if (!published) {
           this.executedDefaultPeriodKey = null;
           if (this.isExecutedView()) {
             this.scheduleView.set('planned');
             this.executedScheduleData.set(null);
           }
-        } else if (this.executedDefaultPeriodKey !== periodKey) {
-          // Abre em Realizada na primeira carga do mês publicado.
+          this.loadingView.set(false);
+          const grid = this.composeGridFromData(data);
+          this.exportService.prepareExportPayload(grid);
+          if (!archived) {
+            this.scheduleService
+              .getExecutedSchedule(prevYear, prevMonth)
+              .pipe(catchError(() => of(null)))
+              .subscribe((previous) => {
+                this.previousScheduleData.set(previous);
+                const withLead = this.composeGridFromData(data);
+                this.exportService.prepareExportPayload(withLead);
+              });
+          } else {
+            this.previousScheduleData.set(null);
+          }
+          return;
+        }
+
+        this.previousScheduleData.set(null);
+        if (this.executedDefaultPeriodKey !== periodKey) {
           this.executedDefaultPeriodKey = periodKey;
           this.scheduleView.set('executed');
         }
 
-        if (this.isExecutedView() && published) {
+        if (executed && this.isExecutedView()) {
+          this.loadingView.set(false);
+          this.executedScheduleData.set(executed);
+          const grid = this.composeGridFromData(executed, { shiftSwaps: executed.shiftSwaps });
+          this.exportService.prepareExportPayload(grid);
+          return;
+        }
+
+        if (this.isExecutedView()) {
           this.loadExecutedScheduleView(false);
           return;
         }
 
         this.loadingView.set(false);
-
         const grid = this.composeGridFromData(data);
         this.exportService.prepareExportPayload(grid);
       },

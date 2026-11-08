@@ -54,7 +54,7 @@ export class ExecutedScheduleUseCase {
   }
 
   private async requirePublishedMonth(year: number, month: number) {
-    const planned = await this.scheduleRepo.findMonth(year, month);
+    const planned = await this.scheduleRepo.findMonthMeta(year, month);
     if (!planned || planned.status !== "PUBLISHED") {
       throw new ScheduleNotPublishedError(year, month);
     }
@@ -66,7 +66,11 @@ export class ExecutedScheduleUseCase {
    * Chamado na publicação — despublicar + alterar + republicar atualiza a realizada.
    */
   async remirrorFromPublished(year: number, month: number): Promise<void> {
-    const planned = await this.requirePublishedMonth(year, month);
+    await this.requirePublishedMonth(year, month);
+    const planned = await this.scheduleRepo.findMonth(year, month);
+    if (!planned) {
+      throw new ScheduleMonthNotFoundError(`${year}-${month}`);
+    }
 
     let record = await this.executedRepo.findMonth(year, month);
     if (!record) {
@@ -105,7 +109,7 @@ export class ExecutedScheduleUseCase {
   }
 
   private async ensureInitialized(year: number, month: number) {
-    const planned = await this.requirePublishedMonth(year, month);
+    await this.requirePublishedMonth(year, month);
 
     let record = await this.executedRepo.findMonth(year, month);
     if (!record) {
@@ -116,11 +120,11 @@ export class ExecutedScheduleUseCase {
       throw new ScheduleMonthNotFoundError(`${year}-${month}`);
     }
 
-    const employees = await this.scheduleRepo.listActiveEmployees();
-    const employeeTypeById = new Map(employees.map((e) => [e.id, e.type]));
-
     const existing = await this.executedRepo.countExecutedRows(record.id);
     if (existing === 0) {
+      const planned = await this.scheduleRepo.findMonth(year, month);
+      const employees = await this.scheduleRepo.listActiveEmployees();
+      const employeeTypeById = new Map(employees.map((e) => [e.id, e.type]));
       const cadastros = await this.cadastroService.getOperationalCadastrosForMonth(year, month);
       const cadastroMirrorRows = cadastros.map((row) => ({
         employeeId: row.employeeId,
@@ -134,19 +138,18 @@ export class ExecutedScheduleUseCase {
       await this.executedRepo.syncMissingFromPlanned(
         record.id,
         {
-          assignments: planned.assignments ?? [],
-          preAllocations: planned.preAllocations ?? [],
+          assignments: planned?.assignments ?? [],
+          preAllocations: planned?.preAllocations ?? [],
         },
         cadastroMirrorRows,
         employeeTypeById,
       );
       await this.executedRepo.repairVacationConflicts(record.id, cadastroMirrorRows);
-    } else {
-      // Só limpa labels que não deveriam estar no PAO; não reintroduz turnos/folgas.
-      await this.executedRepo.purgeExcludedPreAllocations(record.id, employeeTypeById);
+      return this.executedRepo.findMonth(year, month);
     }
 
-    return this.executedRepo.findMonth(year, month);
+    // GET não reescreve a realizada (purge era I/O em toda abertura da tela).
+    return record;
   }
 
   async getMonth(year: number, month: number) {

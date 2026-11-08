@@ -1,16 +1,11 @@
+import type { PreAllocation } from "@prisma/client";
 import { ScheduleRepository } from "../../infrastructure/repositories/schedule.repository.js";
-import { buildContextFromDbParts } from "../../infrastructure/mappers/schedule-context.mapper.js";
 import { logOperationalCadastroDebug } from "../services/operational-cadastro-debug.js";
 import { operationalCadastroService } from "../services/operational-cadastro.service.js";
-import { validateScheduleService } from "../services/validate-schedule.service.js";
-import type { ValidateScheduleService } from "../services/validate-schedule.service.js";
 import { ScheduleNotPublishedError } from "../errors/schedule.errors.js";
 
 export class ScheduleUseCase {
-  constructor(
-    private readonly validator: ValidateScheduleService = validateScheduleService,
-    private readonly scheduleRepo: ScheduleRepository = new ScheduleRepository(),
-  ) {}
+  constructor(private readonly scheduleRepo: ScheduleRepository = new ScheduleRepository()) {}
 
   async getPublishedMonth(year: number, month: number) {
     const record = await this.scheduleRepo.findPublishedMonth(year, month);
@@ -30,9 +25,17 @@ export class ScheduleUseCase {
     };
   }
 
-  private async loadOperationalCadastros(year: number, month: number) {
-    const operationalCadastros =
-      await operationalCadastroService.getOperationalCadastrosForMonth(year, month);
+  private async loadOperationalCadastros(
+    year: number,
+    month: number,
+    preAllocations?: PreAllocation[],
+  ) {
+    const operationalCadastros = await operationalCadastroService.getOperationalCadastrosForMonth(
+      year,
+      month,
+      undefined,
+      preAllocations,
+    );
     logOperationalCadastroDebug(year, month, operationalCadastros);
     return operationalCadastros;
   }
@@ -65,21 +68,13 @@ export class ScheduleUseCase {
       };
     }
 
-    const shifts = await this.scheduleRepo.listShifts();
-    const employees = await this.scheduleRepo.listActiveEmployees();
+    const [shifts, employees, operationalCadastros] = await Promise.all([
+      this.scheduleRepo.listShifts(),
+      this.scheduleRepo.listActiveEmployees(),
+      this.loadOperationalCadastros(year, month, record.preAllocations),
+    ]);
 
-    const { context: domainContext } = buildContextFromDbParts({
-      year,
-      month,
-      employees,
-      shifts,
-      assignments: record.assignments,
-      preAllocations: record.preAllocations,
-    });
-
-    const validation = this.validator.execute(domainContext);
-    const operationalCadastros = await this.loadOperationalCadastros(year, month);
-
+    // GET não revalida o motor: as violações já estão em ruleViolations.
     return {
       scheduleMonth: record,
       employees,
@@ -88,8 +83,7 @@ export class ScheduleUseCase {
       preAllocations: record.preAllocations,
       operationalCadastros,
       ruleViolations: record.ruleViolations,
-      domainContext,
-      validation,
+      validation: null,
     };
   }
 }
