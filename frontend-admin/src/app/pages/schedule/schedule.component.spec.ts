@@ -83,18 +83,22 @@ describe('ScheduleComponent — geração principal', () => {
     };
     fixture.detectChanges();
     http.expectOne(`${base}/schedules/${year}/${month}`).flush(monthPayload);
-    const prevYear = month === 1 ? year - 1 : year;
-    const prevMonth = month === 1 ? 12 : month - 1;
-    // Lead-in busca a realizada do mês anterior (falha silenciosa → null).
-    const prevReq = http.expectOne(`${base}/schedules/${prevYear}/${prevMonth}/executed`);
-    prevReq.flush({
-      scheduleMonth: { id: 'sm-prev', year: prevYear, month: prevMonth, status: 'PUBLISHED' },
-      employees: [],
-      shifts: [],
-      assignments: [],
-      preAllocations: [],
-      operationalCadastros: [],
-    });
+    const executedReq = http.expectOne(`${base}/schedules/${year}/${month}/executed`);
+    if (status === 'PUBLISHED') {
+      executedReq.flush(monthPayload);
+    } else {
+      executedReq.flush({ error: 'not published' }, { status: 404, statusText: 'Not Found' });
+      const prevYear = month === 1 ? year - 1 : year;
+      const prevMonth = month === 1 ? 12 : month - 1;
+      http.expectOne(`${base}/schedules/${prevYear}/${prevMonth}/executed`).flush({
+        scheduleMonth: { id: 'sm-prev', year: prevYear, month: prevMonth, status: 'PUBLISHED' },
+        employees: [],
+        shifts: [],
+        assignments: [],
+        preAllocations: [],
+        operationalCadastros: [],
+      });
+    }
     http.expectOne(`${base}/config/next-motor`).flush(nextMotorConfig);
   }
 
@@ -131,6 +135,10 @@ describe('ScheduleComponent — geração principal', () => {
       ...emptyMonth,
       scheduleMonth: { id: 'sm-1', year, month, status: 'GENERATED' },
     });
+    http.expectOne(`${base}/schedules/${year}/${month}/executed`).flush(
+      { error: 'not published' },
+      { status: 404, statusText: 'Not Found' },
+    );
     const prevYear = month === 1 ? year - 1 : year;
     const prevMonth = month === 1 ? 12 : month - 1;
     http.expectOne(`${base}/schedules/${prevYear}/${prevMonth}/executed`).flush({
@@ -167,6 +175,10 @@ describe('ScheduleComponent — geração principal', () => {
       ...emptyMonth,
       scheduleMonth: { id: 'sm-1', year, month, status: 'GENERATED' },
     });
+    http.expectOne(`${base}/schedules/${year}/${month}/executed`).flush(
+      { error: 'not published' },
+      { status: 404, statusText: 'Not Found' },
+    );
     const prevYear = month === 1 ? year - 1 : year;
     const prevMonth = month === 1 ? 12 : month - 1;
     http.expectOne(`${base}/schedules/${prevYear}/${prevMonth}/executed`).flush({

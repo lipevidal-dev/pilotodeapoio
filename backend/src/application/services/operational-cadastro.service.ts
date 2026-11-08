@@ -1,3 +1,4 @@
+import type { PreAllocation } from "@prisma/client";
 import { buildOperationalCadastroDisplay } from "../mappers/operational-cadastro-display.mapper.js";
 import type { OperationalCadastroDisplay } from "../mappers/operational-cadastro-display.mapper.js";
 import { operationalLabelPriority } from "../../domain/rules/operational-cadastro-priority.js";
@@ -41,8 +42,9 @@ export class OperationalCadastroService {
     year: number,
     month: number,
     employeeId?: string,
+    preAllocations?: PreAllocation[],
   ): Promise<OperationalCadastroCanonical[]> {
-    const rows = await this.loadRaw(year, month);
+    const rows = await this.loadRaw(year, month, preAllocations);
     const enriched = rows.map((row) => this.enrich(row));
     if (!employeeId) return enriched;
     return enriched.filter((r) => r.employeeId === employeeId);
@@ -109,9 +111,13 @@ export class OperationalCadastroService {
     };
   }
 
-  private async loadRaw(year: number, month: number): Promise<OperationalCadastroDisplay[]> {
-    const record = await this.scheduleRepo.findMonth(year, month);
-    const preAllocations = record?.preAllocations ?? [];
+  private async loadRaw(
+    year: number,
+    month: number,
+    preAllocations?: PreAllocation[],
+  ): Promise<OperationalCadastroDisplay[]> {
+    const resolvedPreAllocations =
+      preAllocations ?? (await this.scheduleRepo.findMonth(year, month))?.preAllocations ?? [];
 
     const [vacationDays, approvedDayOffs, flightDays] = await Promise.all([
       this.calendarRepo.listVacationDaysForMonth(year, month),
@@ -123,7 +129,7 @@ export class OperationalCadastroService {
       vacationDays,
       approvedDayOffs,
       flightDays,
-      preAllocations,
+      preAllocations: resolvedPreAllocations,
     });
   }
 

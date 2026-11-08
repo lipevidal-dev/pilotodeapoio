@@ -14,26 +14,32 @@ import { REGENERATION_CLEAR_LABELS } from "../../domain/schedule/operational-lab
 import { iterDays, addDays } from "../../domain/rules/dates.js";
 import { isoDateKey, toDbDate } from "../../domain/rules/date-keys.js";
 import { prisma } from "../database/prisma-client.js";
+const MONTH_GRID_INCLUDE = {
+  assignments: { orderBy: { date: "asc" as const } },
+  preAllocations: { orderBy: { date: "asc" as const } },
+  ruleViolations: { orderBy: { createdAt: "desc" as const } },
+};
+
 export class ScheduleRepository {
+  /** Só metadados — listagens de troca/status sem carregar a grade. */
+  async findMonthMeta(year: number, month: number) {
+    return prisma.scheduleMonth.findUnique({
+      where: { year_month: { year, month } },
+      select: { id: true, year: true, month: true, status: true, createdAt: true, updatedAt: true },
+    });
+  }
+
   async findMonth(year: number, month: number) {
     return prisma.scheduleMonth.findUnique({
       where: { year_month: { year, month } },
-      include: {
-        assignments: { include: { employee: { include: { role: true } } }, orderBy: { date: "asc" } },
-        preAllocations: { include: { employee: { include: { role: true } } }, orderBy: { date: "asc" } },
-        ruleViolations: { orderBy: { createdAt: "desc" } },
-      },
+      include: MONTH_GRID_INCLUDE,
     });
   }
 
   async findMonthById(id: string) {
     return prisma.scheduleMonth.findUnique({
       where: { id },
-      include: {
-        assignments: { include: { employee: { include: { role: true } } }, orderBy: { date: "asc" } },
-        preAllocations: { include: { employee: { include: { role: true } } }, orderBy: { date: "asc" } },
-        ruleViolations: { orderBy: { createdAt: "desc" } },
-      },
+      include: MONTH_GRID_INCLUDE,
     });
   }
 
@@ -41,8 +47,8 @@ export class ScheduleRepository {
     return prisma.scheduleMonth.findFirst({
       where: { year, month, status: "PUBLISHED" },
       include: {
-        assignments: { include: { employee: { include: { role: true } } }, orderBy: { date: "asc" } },
-        preAllocations: { include: { employee: { include: { role: true } } }, orderBy: { date: "asc" } },
+        assignments: { orderBy: { date: "asc" } },
+        preAllocations: { orderBy: { date: "asc" } },
       },
     });
   }
