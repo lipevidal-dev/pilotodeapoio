@@ -1,6 +1,5 @@
 /**
- * Folga 4 (F4) no popup da escala — fallback se o chunk Angular ainda não tiver a opção.
- * Não reconstrói o admin. Não altera outras alocações.
+ * Folga 4 (F4) no popup da escala e na grade — sem rebuild do admin.
  */
 (function () {
   if (window.__folga4V1) return;
@@ -43,12 +42,20 @@
     return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate());
   }
 
+  function isF4Label(label) {
+    var n = String(label || "").toUpperCase().trim();
+    return n === "F4" || n === "FOLGA 4" || n === "FOLGA4";
+  }
+
   function captureSchedule(url, body) {
     if (!/\/schedules\//.test(url || "")) return;
     try {
       var data = JSON.parse(body);
-      if (!data || !Array.isArray(data.employees)) return;
-      lastSchedule = data;
+      if (!data) return;
+      if (Array.isArray(data.employees)) lastSchedule = data;
+      else if (lastSchedule && Array.isArray(data.preAllocations)) {
+        lastSchedule.preAllocations = data.preAllocations;
+      }
     } catch (err) {}
   }
 
@@ -77,6 +84,34 @@
     if (named) return { year: Number(named[2]), month: MONTHS[named[1]] };
     var now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
+  }
+
+  function columnMeta(table) {
+    var heads = table.querySelectorAll("thead th.col-day");
+    var cols = [];
+    for (var i = 0; i < heads.length; i++) {
+      var th = heads[i];
+      var label = compact((th.querySelector(".day-num") || th).textContent || "");
+      cols.push({
+        lead: th.classList.contains("col-lead") || th.classList.contains("previous-month-cell"),
+        label: label,
+      });
+    }
+    return cols;
+  }
+
+  function isoForColumn(col, year, month) {
+    var label = col.label || "";
+    var parts = label.split("/");
+    if (parts.length === 2) {
+      var day = Number(parts[0]);
+      var leadMonth = Number(parts[1]);
+      var leadYear = leadMonth > month ? year - 1 : year;
+      return isoFromParts(leadYear, leadMonth, day);
+    }
+    var dayOnly = parseInt(label, 10);
+    if (!dayOnly) return null;
+    return isoFromParts(year, month, dayOnly);
   }
 
   function employeeByName(name) {
@@ -207,7 +242,7 @@
   function overlayHasF4(overlay) {
     var items = overlay.querySelectorAll("li, .p-select-option, .p-dropdown-item");
     for (var i = 0; i < items.length; i++) {
-      if (/Folga 4|\bF4\b/.test(compact(items[i].textContent))) return true;
+      if (/Folga 4/.test(compact(items[i].textContent))) return true;
     }
     return false;
   }
@@ -238,9 +273,59 @@
     else parent.appendChild(item);
   }
 
+  function setCellText(cell, text) {
+    var token = cell.querySelector(".schedule-cell span, .schedule-cell, .cell-display, .cell-code") || cell;
+    var current = compact(token.textContent);
+    if (current === "F4") return;
+    if (current === "F" || current === "FOLGA" || current === "") {
+      var leaf = token;
+      var spans = token.querySelectorAll("span");
+      if (spans.length) leaf = spans[spans.length - 1];
+      if (leaf.childNodes.length === 1 && leaf.childNodes[0].nodeType === 3) {
+        leaf.textContent = text;
+      } else {
+        leaf.textContent = text;
+      }
+    }
+  }
+
+  function paintF4Cells() {
+    if (!lastSchedule) return;
+    var names = {};
+    (lastSchedule.employees || []).forEach(function (e) {
+      names[e.id] = compact(e.name);
+    });
+    var wanted = {};
+    (lastSchedule.preAllocations || []).forEach(function (p) {
+      if (!isF4Label(p.label)) return;
+      var iso = String(p.date || "").slice(0, 10);
+      var name = names[p.employeeId];
+      if (name && iso) wanted[name + "|" + iso] = 1;
+    });
+    if (!Object.keys(wanted).length) return;
+    var period = currentPeriod();
+    var table = document.querySelector(".schedule-grid");
+    if (!table) return;
+    var cols = columnMeta(table);
+    var rows = table.querySelectorAll("tbody tr");
+    for (var r = 0; r < rows.length; r++) {
+      var nameEl = rows[r].querySelector(".emp-name");
+      if (!nameEl) continue;
+      var name = compact(nameEl.textContent);
+      var cells = rows[r].querySelectorAll("td.col-day");
+      for (var c = 0; c < cells.length; c++) {
+        var iso = isoForColumn(cols[c] || {}, period.year, period.month);
+        if (!iso || !wanted[name + "|" + iso]) continue;
+        setCellText(cells[c], "F4");
+      }
+    }
+  }
+
   function sync() {
     var path = (location.pathname || "").replace(/\/+$/, "");
-    if (path === "/escala" || path.indexOf("/escala") === 0) injectOverlayOption();
+    if (path !== "/escala" && path.indexOf("/escala") !== 0) return;
+    injectOverlayOption();
+    paintF4Cells();
   }
 
   setInterval(sync, 400);
