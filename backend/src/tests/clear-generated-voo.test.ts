@@ -20,4 +20,10 @@ describe("limpar geração — VOO gerado", () => {
   it("VOO manual na escala usa preAllocation (removível ao limpar geração)", () => {
     expect(manualTypeToPreallocLabel("VOO")).toBe("VOO");
   });
+
+  it("F4 (Folga 4) grava pré-alocação FOLGA 4 e não entra na limpeza do motor", () => {
+    expect(manualTypeToPreallocLabel("F4")).toBe("FOLGA 4");
+    expect(CLEAR_GENERATED_LABELS).not.toContain("FOLGA 4");
+    expect(CLEAR_GENERATED_LABELS).not.toContain("F4");
+  });
 });

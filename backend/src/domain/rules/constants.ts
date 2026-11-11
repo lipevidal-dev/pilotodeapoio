@@ -1,5 +1,7 @@
 export const BLOCK_TYPES = new Set([
   "FOLGA",
+  "FOLGA 4",
+  "F4",
   "FOLGA SOCIAL",
   "FOLGA PEDIDA",
   "FOLGA ESCOLHIDA",
@@ -27,6 +29,8 @@ export const VACATION_TYPES = new Set([
 
 export const PAO_REST_TYPES = [
   "FOLGA",
+  "FOLGA 4",
+  "F4",
   "FOLGA SOCIAL",
   "FOLGA PEDIDA",
   "FOLGA ESCOLHIDA",

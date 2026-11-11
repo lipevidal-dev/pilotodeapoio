@@ -99,7 +99,7 @@ def _schedule_rest_if_six_complete(emp_id, work_day, year, month, planned, block
     if (emp_id, next_d) in manual:
         return False
     rest_kinds = {
-        "FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL",
+        "FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA 4",
         "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO", "FÉRIAS", "DISPENSA MÉDICA",
     }
     if str(blocked.get((emp_id, next_d), "")).upper() in rest_kinds:
@@ -616,7 +616,7 @@ def _reclaim_voo_fortnight_from_auto_folgas(emp_id, year, month):
     if not voo_days:
         return
     protected = {
-        "FOLGA PEDIDA", "FOLGA SOCIAL", "FOLGA ESCOLHIDA", "FOLGA ANIVERSÁRIO",
+        "FOLGA PEDIDA", "FOLGA SOCIAL", "FOLGA 4", "FOLGA ESCOLHIDA", "FOLGA ANIVERSÁRIO",
         "FÉRIAS", "CURSO ONLINE", "DISPENSA MÉDICA", "SIMULADOR", "VOO", "ND",
     }
     start_date, end_date = month_range(year, month)
@@ -790,7 +790,7 @@ def _allocate_voo_pool(emp, emp_id, role, year, month, days_in_month, start_date
                        get_status, append_voo, shift_days_fn):
     """Preenche dias livres com VOO — prioriza quinzena de voo (Grupo A: 16–fim)."""
     rest_kinds = {
-        "FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL",
+        "FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA 4",
         "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO", "FÉRIAS",
     }
     voo_window = set(_fortnight_voo_window(emp_id, year, month))
@@ -856,7 +856,7 @@ def _enforce_max_one_monofolga(emp_id, role, year, month, append_voo):
         return
     start_date, end_date = month_range(year, month)
     rest_kinds = {
-        "FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL",
+        "FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA 4",
         "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO",
     }
     while True:
@@ -966,7 +966,7 @@ def can_work(emp, day, shift_code, blocked, planned, shift_map=None, shift_restr
         if _is_protected_prealloc(block_type):
             return False, f"bloqueado inviolável: {blocked[(emp_id, day)]}"
         if block_type in {
-            "FOLGA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO",
+            "FOLGA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA 4", "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO",
         }:
             if not coverage_emergency:
                 return False, f"bloqueado (folga): {blocked[(emp_id, day)]}"
@@ -2065,7 +2065,7 @@ def current_month_workload(emp_id, planned, blocked, start_date, end_date):
     """Calcula a carga de trabalho do piloto no mês de competência (turnos ativos + voos/simuladores/cursos)."""
     shifts_count = sum(
         1 for (eid, d), sh in planned.items()
-        if int(eid) == int(emp_id) and sh and start_date <= d <= end_date and sh not in ["ND", "FOLGA", "FOLGA SOCIAL", "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO"]
+        if int(eid) == int(emp_id) and sh and start_date <= d <= end_date and sh not in ["ND", "FOLGA", "FOLGA SOCIAL", "FOLGA 4", "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO"]
     )
     active_blocks = sum(
         1 for (eid, d), kind in blocked.items()
@@ -2328,7 +2328,7 @@ def auto_add_apao_6x1_rest(year, month, blocked):
 
     apao_ids = set(int(x) for x in emp_df["id"].tolist())
     blocking_types = {
-        "FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA AGRUPADA",
+        "FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA 4", "FOLGA AGRUPADA",
         "FÉRIAS", "DISPENSA MÉDICA", "CURSO ONLINE", "SIMULADOR", "VOO", "ND"
     }
 
@@ -2416,9 +2416,9 @@ def auto_add_pao_flights(year, month, roles_to_generate, blocked):
             before = blocked.get((emp_id, d - timedelta(days=1)))
             after = blocked.get((emp_id, d + timedelta(days=1)))
             score = 0
-            if before in ["FOLGA", "FOLGA PEDIDA", "FOLGA SOCIAL", "FOLGA AGRUPADA"]:
+            if before in ["FOLGA", "FOLGA PEDIDA", "FOLGA SOCIAL", "FOLGA 4", "FOLGA AGRUPADA"]:
                 score -= 10
-            if after in ["FOLGA", "FOLGA PEDIDA", "FOLGA SOCIAL", "FOLGA AGRUPADA"]:
+            if after in ["FOLGA", "FOLGA PEDIDA", "FOLGA SOCIAL", "FOLGA 4", "FOLGA AGRUPADA"]:
                 score -= 10
             if d.weekday() >= 5:
                 score += 3
@@ -3575,7 +3575,7 @@ def auto_allocate_rests(year, month, roles_to_generate, folgas_only=False):
 
     start_date, end_date = month_range(year, month)
     rest_kinds = [
-        "FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL",
+        "FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA 4",
         "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO", "FÉRIAS",
     ]
 

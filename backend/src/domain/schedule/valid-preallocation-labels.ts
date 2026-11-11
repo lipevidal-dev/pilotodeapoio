@@ -19,6 +19,8 @@ export const INVALID_PREALLOCATION_LABELS = [
   "FOLGA ANIVERSÁRIO",
   "ND",
   "FOLGA",
+  "FOLGA 4",
+  "F4",
   "FOLGA SOCIAL",
   "FOLGA AGRUPADA",
 ] as const;

@@ -18,7 +18,7 @@
     T3: { start: "12:00", end: "18:00" },
     T4: { start: "18:00", end: "00:00" },
   };
-  var DAY_OFF = { F: 1, FS: 1, FA: 1, FANI: 1, FP: 1, FOLGA: 1 };
+  var DAY_OFF = { F: 1, F4: 1, FS: 1, FA: 1, FANI: 1, FP: 1, FOLGA: 1 };
   var EXTRA_OPTIONS = [
     { key: "VOO", label: "VOO" },
     { key: "CURSO", label: "Curso" },

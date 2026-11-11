@@ -260,6 +260,43 @@ describe('schedule-cell.mapper — cores por turno', () => {
     expect(summary.folgas).toBe(1);
   });
 
+  it('Folga 4 exibe F4 e conta em folgas, não em turnos', () => {
+    expect(mapLabelToCell('FOLGA 4').display).toBe('F4');
+    expect(mapLabelToCell('FOLGA 4').kind).toBe('folga');
+    expect(mapLabelToCell('F4').display).toBe('F4');
+
+    const emp: Employee = {
+      id: 'pao-1',
+      name: 'PAO Test',
+      type: 'PAO',
+      roleId: 'role-pao',
+      cargoCode: 'PAO',
+      cargoName: 'Piloto de Apoio Operacional',
+      active: true,
+    };
+    const grid = buildScheduleGrid({
+      year: 2026,
+      month: 6,
+      employees: [emp],
+      assignments: [],
+      preAllocations: [
+        {
+          id: 'f4-1',
+          employeeId: 'pao-1',
+          date: '2026-06-10T12:00:00.000Z',
+          label: 'FOLGA 4',
+        },
+      ],
+    });
+    const cell = grid.groups[0].rows[0].cells[9];
+    const summary = grid.groups[0].rows[0].summary;
+    expect(cell.display).toBe('F4');
+    expect(cell.kind).toBe('folga');
+    expect(summary.folgas).toBe(1);
+    expect(summary.turnos).toBe(0);
+    expect(summary.diasTrabalhados).toBe(0);
+  });
+
   it('exibe VOO do motor em preAllocation na grade visual', () => {
     const emp: Employee = {
       id: 'pao-1',

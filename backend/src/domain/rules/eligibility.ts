@@ -137,6 +137,7 @@ export function canWork(
     const bt = normalizeOperationalLabel(blockType).toUpperCase();
     const folgaTypes = new Set([
       "FOLGA",
+      "FOLGA 4",
       "FOLGA ESCOLHIDA",
       "FOLGA SOCIAL",
       "FOLGA AGRUPADA",

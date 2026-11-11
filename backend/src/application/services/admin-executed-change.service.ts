@@ -45,6 +45,8 @@ function humanLabel(token: string): string {
   switch (t.toUpperCase()) {
     case "F":
       return "folga";
+    case "F4":
+      return "folga 4";
     case "FS":
       return "folga social";
     case "FA":

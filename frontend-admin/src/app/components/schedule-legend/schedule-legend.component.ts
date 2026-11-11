@@ -21,6 +21,7 @@ export class ScheduleLegendComponent {
     { id: 'instruction', label: 'Instrução', cssClass: 'cell-instruction' },
     { id: 'nd', label: 'ND', cssClass: 'cell-nd' },
     { id: 'folga', label: 'F', cssClass: 'cell-folga' },
+    { id: 'f4', label: 'F4', cssClass: 'cell-folga' },
     { id: 'fs', label: 'FS', cssClass: 'cell-fs' },
     { id: 'fa', label: 'FA', cssClass: 'cell-fa' },
     { id: 'fani', label: 'FANI', cssClass: 'cell-fani' },

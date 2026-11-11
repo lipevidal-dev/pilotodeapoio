@@ -12,6 +12,7 @@ from database.repositories import (
 
 BLOCK_TYPES = {
     "FOLGA",
+    "FOLGA 4",
     "FOLGA SOCIAL",
     "FOLGA PEDIDA",
     "DISPENSA MÉDICA",
@@ -317,7 +318,7 @@ def monthly_rest_count(emp_id, blocked):
     """Conta o total de folgas em geral registradas para o funcionário na competência."""
     return sum(
         1 for (eid, _day), kind in blocked.items()
-        if int(eid) == int(emp_id) and kind in ["FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO"]
+        if int(eid) == int(emp_id) and kind in ["FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA 4", "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO"]
     )
 
 VACATION_TYPES = {"FÉRIAS", "FERIAS", "FER", "FÉRIA", "FERIA"}
@@ -449,7 +450,7 @@ def apao_available_count_by_day(year, month):
     if apao.empty:
         return pd.DataFrame(rows)
 
-    rest_types = {"FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA AGRUPADA", "FÉRIAS", "DISPENSA MÉDICA", "CURSO ONLINE", "SIMULADOR", "VOO", "ND"}
+    rest_types = {"FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA 4", "FOLGA AGRUPADA", "FÉRIAS", "DISPENSA MÉDICA", "CURSO ONLINE", "SIMULADOR", "VOO", "ND"}
 
     for d in iter_days(year, month):
         blocked_ids = set()
@@ -479,7 +480,7 @@ def apao_block_count_by_day(year, month):
         return pd.DataFrame(columns=["data", "qtd_apao_bloqueado"])
 
     blocking_types = [
-        "FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA AGRUPADA",
+        "FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA 4", "FOLGA AGRUPADA",
         "FÉRIAS", "DISPENSA MÉDICA", "CURSO ONLINE", "SIMULADOR", "VOO", "ND"
     ]
     blocked = alloc[alloc["tipo"].isin(blocking_types)]
@@ -1001,7 +1002,7 @@ class PaoFcfMetaRule(BaseRule):
             alloc_e = alloc_month[alloc_month["funcionario"] == e.nome] if not alloc_month.empty else pd.DataFrame()
             
             # 1. Meta de exatamente 10 folgas no mês
-            folgas = alloc_e[alloc_e["tipo"].isin(["FOLGA", "FOLGA SOCIAL", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO"])] if not alloc_e.empty else pd.DataFrame()
+            folgas = alloc_e[alloc_e["tipo"].isin(["FOLGA", "FOLGA SOCIAL", "FOLGA 4", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO"])] if not alloc_e.empty else pd.DataFrame()
             total_folgas = len(folgas)
             if total_folgas != 10:
                 issues.append({
@@ -1078,7 +1079,7 @@ class PaoOffLimitRule(BaseRule):
             alloc_month = alloc
 
         rest_types = [
-            "FOLGA", "FOLGA SOCIAL", "FOLGA PEDIDA", "FOLGA ESCOLHIDA",
+            "FOLGA", "FOLGA SOCIAL", "FOLGA 4", "FOLGA PEDIDA", "FOLGA ESCOLHIDA",
             "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO",
         ]
         emp = employees_df()
@@ -1148,7 +1149,7 @@ class MonofolgaRule(BaseRule):
             if not is_employee_planning_active_month(emp_id, year, month):
                 continue
             alloc_e = alloc[alloc["funcionario"] == e.nome] if not alloc.empty else pd.DataFrame()
-            folgas = alloc_e[alloc_e["tipo"].isin(["FOLGA", "FOLGA SOCIAL", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO"])] if not alloc_e.empty else pd.DataFrame()
+            folgas = alloc_e[alloc_e["tipo"].isin(["FOLGA", "FOLGA SOCIAL", "FOLGA 4", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO"])] if not alloc_e.empty else pd.DataFrame()
             if not folgas.empty:
                 rest_dates = sorted(pd.to_datetime(folgas["data"]).dt.date.unique())
                 rest_set = set(rest_dates)

@@ -16,7 +16,7 @@ from database.repositories import schedule_df, allocations_df, employees_df, shi
 
 # Folgas que entram na meta inviolável de 10 (estilo FR/FP/FS da planilha)
 REST_COUNT_TYPES = {
-    "FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL",
+    "FOLGA", "FOLGA PEDIDA", "FOLGA ESCOLHIDA", "FOLGA SOCIAL", "FOLGA 4",
     "FOLGA AGRUPADA", "FOLGA ANIVERSÁRIO",
 }
 

@@ -101,6 +101,7 @@ export class ManualScheduleEditUseCase {
       if (n === "ND") moveType = "ND";
       else if (n.includes("FOLGA PEDIDA")) moveType = "FP";
       else if (n === "FOLGA SOCIAL" || n === "FS") moveType = "FS";
+      else if (n === "FOLGA 4" || n === "FOLGA4" || n === "F4") moveType = "F4";
       else if (n === "FOLGA") moveType = "FOLGA";
       else if (n === "SIMULADOR") moveType = "SIMULADOR";
       else if (n === "CURSO" || n === "CURSO ONLINE") moveType = "CURSO";

@@ -306,6 +306,28 @@ describe("PAO folgas 10 ideal / 11 permitido", () => {
   });
 });
 
+describe("folga 4", () => {
+  it("conta FOLGA 4 nas 10 folgas PAO e não como turno", () => {
+    const ctx = emptyContext();
+    for (let d = 1; d <= 9; d++) {
+      ctx.allocations.push({
+        employeeId: 1,
+        employeeName: "PAO SILVA",
+        allocDate: `2026-06-${String(d).padStart(2, "0")}`,
+        allocType: "FOLGA",
+      });
+    }
+    ctx.allocations.push({
+      employeeId: 1,
+      employeeName: "PAO SILVA",
+      allocDate: "2026-06-14",
+      allocType: "FOLGA 4",
+    });
+    const issues = new PaoOffLimitRule().validate(ctx).filter((i) => i.employee === "PAO SILVA");
+    expect(issues.length).toBe(0);
+  });
+});
+
 describe("folga social", () => {
   it("conta FOLGA SOCIAL nas 10 folgas PAO", () => {
     const ctx = emptyContext();

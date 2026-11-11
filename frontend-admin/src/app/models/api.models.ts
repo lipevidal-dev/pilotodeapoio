@@ -412,6 +412,7 @@ export type ManualAllocationType =
   | 'T8_BLOCK'
   | 'ND'
   | 'FOLGA'
+  | 'F4'
   | 'FS'
   | 'FA'
   | 'FP'

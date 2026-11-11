@@ -173,6 +173,7 @@ export function mapApaoRevezamentoCell(cell: ScheduleCellData | undefined | null
     kind === 'folga' ||
     kind === 'folga-weekend' ||
     display === 'F' ||
+    display === 'F4' ||
     display === 'FR' ||
     display === 'FOLGA'
   ) {

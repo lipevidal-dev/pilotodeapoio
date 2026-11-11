@@ -80,7 +80,7 @@ export function buildCellHoverDetail(
     case 'nd':
       return withNotes('Não disponível', notes);
     case 'folga':
-      return withNotes('Folga', notes);
+      return withNotes(display === 'F4' ? 'Folga 4' : 'Folga', notes);
     case 'fs':
       return withNotes('Folga social', notes);
     case 'fa':

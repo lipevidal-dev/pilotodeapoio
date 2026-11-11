@@ -21,6 +21,8 @@ export function displayTokenFromManualType(type: string | null | undefined): str
   switch (raw) {
     case "FOLGA":
       return "F";
+    case "F4":
+      return "F4";
     case "FS":
       return "FS";
     case "FA":

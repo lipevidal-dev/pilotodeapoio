@@ -72,6 +72,8 @@ function mapOperationalLabel(label: string): TryAssignShiftDetailedResult {
     upper === "OUTRO" ||
     upper === "ND" ||
     upper === "FOLGA" ||
+    upper === "FOLGA 4" ||
+    upper === "F4" ||
     upper === "FOLGA ESCOLHIDA"
   ) {
     return fail("PREALLOCATION_FIXED", label);

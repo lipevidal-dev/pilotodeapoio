@@ -38,6 +38,8 @@ export const MANUAL_PREALLOC_LABELS = new Set([
   "FOLGA ANIVERSÁRIO",
   "FANI",
   "FOLGA ESCOLHIDA",
+  "FOLGA 4",
+  "F4",
   CROSS_MONTH_ND_LABEL,
 ]);
 
@@ -49,6 +51,9 @@ export function normalizeOperationalLabel(label: string): string {
   }
   if (upper === "FP" || upper.includes("FOLGA PEDIDA")) {
     return "FOLGA PEDIDA";
+  }
+  if (upper === "F4" || upper === "FOLGA4" || upper === "FOLGA 4") {
+    return "FOLGA 4";
   }
   if (upper === "FANI" || upper.includes("FOLGA ANIVERS")) {
     return "FOLGA ANIVERSÁRIO";
@@ -73,6 +78,8 @@ export function isOperationalHardBlock(label: string): boolean {
     n === "ND" ||
     n === CROSS_MONTH_ND_LABEL.toUpperCase() ||
     n === "FOLGA" ||
+    n === "FOLGA 4" ||
+    n === "F4" ||
     n === "FOLGA SOCIAL" ||
     n === "FOLGA AGRUPADA"
   ) {

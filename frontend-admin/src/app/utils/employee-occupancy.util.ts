@@ -34,7 +34,7 @@ function isGeneratorPreallocDisplayLabel(label: string): boolean {
     .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
     .trim();
-  if (['ND', 'FOLGA', 'FOLGA SOCIAL', 'FOLGA AGRUPADA', 'FOLGA ANIVERSÁRIO', 'FANI', 'VOO'].includes(n)) {
+  if (['ND', 'FOLGA', 'FOLGA 4', 'F4', 'FOLGA SOCIAL', 'FOLGA AGRUPADA', 'FOLGA ANIVERSÁRIO', 'FANI', 'VOO'].includes(n)) {
     return true;
   }
   if (n.includes('FOLGA ANIVERS')) return true;

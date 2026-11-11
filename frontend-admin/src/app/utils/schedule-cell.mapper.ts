@@ -137,6 +137,10 @@ export function mapLabelToCell(label: string, notes?: string | null): ScheduleCe
     return mapShiftToCell(n);
   }
 
+  if (n === 'F4' || n === 'FOLGA 4' || n === 'FOLGA4') {
+    return { display: 'F4', kind: 'folga', title: 'Folga 4' };
+  }
+
   if (n.includes('FOLGA')) return { display: 'F', kind: 'folga', title: label };
 
   return { display: label.length > 6 ? label.slice(0, 5) + '…' : label, kind: 'other', title: label };
@@ -195,6 +199,8 @@ const GENERATOR_PREALLOC_DISPLAY_LABELS = new Set([
   'ND CONTINUIDADE',
   'T8',
   'FOLGA',
+  'FOLGA 4',
+  'F4',
   'FOLGA SOCIAL',
   'FOLGA AGRUPADA',
   'FOLGA ANIVERSÁRIO',
