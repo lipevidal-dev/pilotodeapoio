@@ -1,9 +1,10 @@
 /**
- * Folga 4 (F4) no popup da escala e na grade — sem rebuild do admin.
+ * Folga 4 (F4) no popup de cartões da escala — sem rebuild do admin.
+ * O menu real é o grid FOLGA/FS/FP; o JS antigo fica em cache imutável 7 dias.
  */
 (function () {
-  if (window.__folga4V1) return;
-  window.__folga4V1 = true;
+  if (window.__folga4V2) return;
+  window.__folga4V2 = true;
 
   var MONTHS = {
     jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6,
@@ -14,8 +15,11 @@
   var style = document.createElement("style");
   style.id = "folga-4-style";
   style.textContent = [
-    ".p-select-option[data-f4-option],.p-dropdown-item[data-f4-option]{font-weight:700}",
-    ".f4-extra-status{margin:.35rem 0 0;font-size:.75rem;color:#6b7280}",
+    ".alloc-option[data-f4-card]{min-height:3.25rem;padding:.4rem .25rem;border:1px solid #fca5a5;border-radius:9px;background:#fef2f2;color:#991b1b;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.12rem;font:inherit}",
+    ".alloc-option[data-f4-card] .alloc-option-code{font-size:.9rem;font-weight:800;line-height:1}",
+    ".alloc-option[data-f4-card] .alloc-option-label{font-size:.62rem;line-height:1.1;text-align:center}",
+    ".alloc-option[data-f4-card].selected{border:2px solid #f15a22;box-shadow:0 0 0 2px #f15a2224}",
+    ".f4-extra-status{margin:.45rem .2rem 0;font-size:.75rem;color:#6b7280}",
     ".f4-extra-status.err{color:#b91c1c}",
   ].join("");
   (document.head || document.documentElement).appendChild(style);
@@ -86,39 +90,16 @@
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
   }
 
-  function columnMeta(table) {
-    var heads = table.querySelectorAll("thead th.col-day");
-    var cols = [];
-    for (var i = 0; i < heads.length; i++) {
-      var th = heads[i];
-      var label = compact((th.querySelector(".day-num") || th).textContent || "");
-      cols.push({
-        lead: th.classList.contains("col-lead") || th.classList.contains("previous-month-cell"),
-        label: label,
-      });
-    }
-    return cols;
-  }
-
-  function isoForColumn(col, year, month) {
-    var label = col.label || "";
-    var parts = label.split("/");
-    if (parts.length === 2) {
-      var day = Number(parts[0]);
-      var leadMonth = Number(parts[1]);
-      var leadYear = leadMonth > month ? year - 1 : year;
-      return isoFromParts(leadYear, leadMonth, day);
-    }
-    var dayOnly = parseInt(label, 10);
-    if (!dayOnly) return null;
-    return isoFromParts(year, month, dayOnly);
-  }
-
   function employeeByName(name) {
     var employees = (lastSchedule && lastSchedule.employees) || [];
     var wanted = compact(name);
     for (var i = 0; i < employees.length; i++) {
       if (compact(employees[i].name) === wanted) return employees[i];
+    }
+    var wantedFold = wanted.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    for (var j = 0; j < employees.length; j++) {
+      var n = compact(employees[j].name).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      if (n === wantedFold) return employees[j];
     }
     return null;
   }
@@ -132,20 +113,20 @@
     if (range) {
       var start = Number(range[1]);
       var end = Number(range[3]);
-      for (var d = start; d <= end; d++) dates.push(isoFromParts(period.year, period.month, d));
-      return { name: name, dates: dates };
-    }
-    var multi = text.match(/dias\s+(.+)$/i);
-    if (multi) {
-      var bits = multi[1].replace("/" + pad(period.month), "").split(",");
-      for (var i = 0; i < bits.length; i++) {
-        var day = parseInt(bits[i], 10);
-        if (day) dates.push(isoFromParts(period.year, period.month, day));
-      }
+      var month = Number(range[2]) || period.month;
+      var year = period.year;
+      if (month === 1 && period.month === 12) year += 1;
+      for (var d = start; d <= end; d++) dates.push(isoFromParts(year, month, d));
       return { name: name, dates: dates };
     }
     var one = text.match(/(\d{2})\/(\d{2})/);
-    if (one) dates.push(isoFromParts(period.year, period.month, Number(one[1])));
+    if (one) {
+      var day = Number(one[1]);
+      var subMonth = Number(one[2]) || period.month;
+      var y = period.year;
+      if (subMonth === 1 && period.month === 12) y += 1;
+      dates.push(isoFromParts(y, subMonth, day));
+    }
     return { name: name, dates: dates };
   }
 
@@ -239,38 +220,105 @@
     });
   }
 
-  function overlayHasF4(overlay) {
-    var items = overlay.querySelectorAll("li, .p-select-option, .p-dropdown-item");
-    for (var i = 0; i < items.length; i++) {
-      if (/Folga 4/.test(compact(items[i].textContent))) return true;
+  function gridHasF4(grid) {
+    var nodes = grid.querySelectorAll(".alloc-option, .alloc-option-code, button");
+    for (var i = 0; i < nodes.length; i++) {
+      var txt = compact(nodes[i].textContent).toUpperCase();
+      if (txt === "F4" || txt.indexOf("FOLGA 4") === 0 || /^F4\b/.test(txt)) return true;
     }
     return false;
   }
 
-  function injectOverlayOption() {
-    var overlay = document.querySelector(".p-select-overlay, .p-dropdown-panel, .p-select-list-container");
-    if (!overlay || overlay.querySelector("[data-f4-option]")) return;
-    if (overlayHasF4(overlay)) return;
-    var items = overlay.querySelectorAll("li, .p-select-option, .p-dropdown-item");
-    var template = null;
-    var afterFolga = null;
-    for (var i = 0; i < items.length; i++) {
-      var label = compact(items[i].textContent);
-      if (!template) template = items[i];
-      if (label === "Folga") afterFolga = items[i];
+  function preallocGrid(card) {
+    var headings = card.querySelectorAll("h3, .alloc-section-title");
+    for (var i = 0; i < headings.length; i++) {
+      if (/pr[eé]-aloca/i.test(compact(headings[i].textContent))) {
+        return headings[i].parentElement.querySelector(".alloc-options-grid") || headings[i].nextElementSibling;
+      }
     }
-    if (!template) return;
-    var item = template.cloneNode(true);
-    item.setAttribute("data-f4-option", "1");
-    item.textContent = "Folga 4";
-    item.addEventListener("click", function (ev) {
+    var grids = card.querySelectorAll(".alloc-options-grid");
+    return grids.length > 1 ? grids[1] : grids[0];
+  }
+
+  function injectF4Card() {
+    var card = document.querySelector(".alloc-card");
+    if (!card) return;
+    if (card.querySelector("[data-f4-card]")) return;
+    var grid = preallocGrid(card);
+    if (!grid) return;
+    if (gridHasF4(grid)) return;
+
+    var template = grid.querySelector(".alloc-option--folga") || grid.querySelector(".alloc-option");
+    var btn;
+    if (template) {
+      btn = template.cloneNode(true);
+      btn.classList.remove("selected");
+      var code = btn.querySelector(".alloc-option-code");
+      var label = btn.querySelector(".alloc-option-label");
+      if (code) code.textContent = "F4";
+      if (label) label.textContent = "Folga 4";
+      if (!code && !label) {
+        btn.innerHTML = '<span class="alloc-option-code">F4</span><span class="alloc-option-label">Folga 4</span>';
+      }
+    } else {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "alloc-option alloc-option--folga";
+      btn.innerHTML = '<span class="alloc-option-code">F4</span><span class="alloc-option-label">Folga 4</span>';
+    }
+    btn.setAttribute("data-f4-card", "1");
+    btn.type = "button";
+    btn.title = "Folga 4 — conta como folga, não como turno";
+    btn.addEventListener("click", function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
+      card.querySelectorAll(".alloc-option.selected, .alloc-clear.selected").forEach(function (el) {
+        el.classList.remove("selected");
+      });
+      btn.classList.add("selected");
       applyF4();
     });
-    var parent = (afterFolga && afterFolga.parentNode) || template.parentNode;
-    if (afterFolga && afterFolga.nextSibling) parent.insertBefore(item, afterFolga.nextSibling);
-    else parent.appendChild(item);
+
+    var afterFolga = null;
+    var options = grid.querySelectorAll(".alloc-option");
+    for (var i = 0; i < options.length; i++) {
+      var txt = compact(options[i].textContent).toUpperCase();
+      if (txt.indexOf("FOLGA") === 0 && txt.indexOf("FOLGA SOCIAL") !== 0 && txt.indexOf("F4") !== 0) {
+        afterFolga = options[i];
+        break;
+      }
+    }
+    if (afterFolga && afterFolga.nextSibling) grid.insertBefore(btn, afterFolga.nextSibling);
+    else if (afterFolga) grid.appendChild(btn);
+    else grid.insertBefore(btn, grid.firstChild);
+  }
+
+  function columnMeta(table) {
+    var heads = table.querySelectorAll("thead th.col-day");
+    var cols = [];
+    for (var i = 0; i < heads.length; i++) {
+      var th = heads[i];
+      var label = compact((th.querySelector(".day-num") || th).textContent || "");
+      cols.push({
+        lead: th.classList.contains("col-lead") || th.classList.contains("previous-month-cell"),
+        label: label,
+      });
+    }
+    return cols;
+  }
+
+  function isoForColumn(col, year, month) {
+    var label = col.label || "";
+    var parts = label.split("/");
+    if (parts.length === 2) {
+      var day = Number(parts[0]);
+      var leadMonth = Number(parts[1]);
+      var leadYear = leadMonth > month ? year - 1 : year;
+      return isoFromParts(leadYear, leadMonth, day);
+    }
+    var dayOnly = parseInt(label, 10);
+    if (!dayOnly) return null;
+    return isoFromParts(year, month, dayOnly);
   }
 
   function setCellText(cell, text) {
@@ -281,11 +329,7 @@
       var leaf = token;
       var spans = token.querySelectorAll("span");
       if (spans.length) leaf = spans[spans.length - 1];
-      if (leaf.childNodes.length === 1 && leaf.childNodes[0].nodeType === 3) {
-        leaf.textContent = text;
-      } else {
-        leaf.textContent = text;
-      }
+      leaf.textContent = text;
     }
   }
 
@@ -324,10 +368,10 @@
   function sync() {
     var path = (location.pathname || "").replace(/\/+$/, "");
     if (path !== "/escala" && path.indexOf("/escala") !== 0) return;
-    injectOverlayOption();
+    injectF4Card();
     paintF4Cells();
   }
 
-  setInterval(sync, 400);
+  setInterval(sync, 300);
   window.addEventListener("popstate", function () { setTimeout(sync, 0); });
 })();
