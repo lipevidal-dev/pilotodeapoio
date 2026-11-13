@@ -89,7 +89,12 @@
           <p>Nenhuma solicitação enviada.</p>
         } @else {
           @for (request of selectedRequests(); track request.createdAt + selectedId) {
-            <p class="request-when">Enviado em {{ formatSentAt(request.createdAt) }}</p>
+            <p class="request-when">
+              Enviado em {{ formatSentAt(request.createdAt) }}
+              @if (request.updatedAt && request.updatedAt !== request.createdAt) {
+                · Atualizado em {{ formatSentAt(request.updatedAt) }}
+              }
+            </p>
             <ul>
               @for (line of request.lines; track line.date + line.description) {
                 <li>

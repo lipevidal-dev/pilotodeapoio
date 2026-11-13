@@ -7,14 +7,14 @@ BACKUP_DIR="$ROOT/hotpatch-backup/voos-planejamento-20261014"
 ADMIN_CID="${ADMIN_CONTAINER:-piloto_apoio_admin}"
 BACKEND_CID="${BACKEND_CONTAINER:-piloto_apoio_backend}"
 DB_CID="${DB_CONTAINER:-piloto_apoio_db}"
-VERSION="${VERSION:-5}"
+VERSION="${VERSION:-6}"
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
 mkdir -p "$PATCH_DIR" "$BACKUP_DIR"
 
 if docker ps --format '{{.Names}}' | grep -qx "$DB_CID"; then
-  docker exec "$DB_CID" psql -U piloto -d piloto_apoio_v2 <<'SQL' >/dev/null
+  docker exec -i "$DB_CID" psql -U piloto -d piloto_apoio_v2 -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
 CREATE TABLE IF NOT EXISTS "flight_planning_periods" (
     "id" TEXT NOT NULL,
     "starts_on" DATE NOT NULL,
@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS "flight_planning_requests" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "flight_planning_requests_pkey" PRIMARY KEY ("id")
 );
+ALTER TABLE "flight_planning_requests" ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP(3);
 CREATE TABLE IF NOT EXISTS "flight_planning_request_lines" (
     "id" TEXT NOT NULL,
     "request_id" TEXT NOT NULL,

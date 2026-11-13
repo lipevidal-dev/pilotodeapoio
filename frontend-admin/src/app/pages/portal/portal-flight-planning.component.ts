@@ -27,6 +27,7 @@ export class PortalFlightPlanningComponent implements OnInit {
   readonly confirmOpen = signal(false);
   readonly successMessage = signal<string | null>(null);
   readonly errorMessage = signal<string | null>(null);
+  readonly editing = signal(false);
 
   lines: DraftLine[] = [{ date: '', description: '' }];
 
@@ -34,6 +35,11 @@ export class PortalFlightPlanningComponent implements OnInit {
     this.flightPlanning.status().subscribe({
       next: (status) => {
         this.enabled.set(status.enabled);
+        const request = status.request;
+        if (request?.lines?.length) {
+          this.lines = request.lines.map((line) => ({ date: line.date, description: line.description }));
+          this.editing.set(true);
+        }
         this.loading.set(false);
       },
       error: () => {
@@ -80,8 +86,13 @@ export class PortalFlightPlanningComponent implements OnInit {
         next: () => {
           this.submitting.set(false);
           this.confirmOpen.set(false);
-          this.lines = [{ date: '', description: '' }];
-          this.successMessage.set('Solicitação enviada. Ela será avaliada pelo planejamento.');
+          const wasEditing = this.editing();
+          this.editing.set(true);
+          this.successMessage.set(
+            wasEditing
+              ? 'Solicitação atualizada. O administrador já vê a alteração.'
+              : 'Solicitação enviada. Ela será avaliada pelo planejamento.',
+          );
         },
         error: (err: { error?: { error?: string } }) => {
           this.submitting.set(false);

@@ -89,6 +89,7 @@ type RequestHeadRow = {
   employeeId: string;
   employeeName: string;
   createdAt: Date;
+  updatedAt: Date | null;
   packageId: string | null;
 };
 
@@ -98,14 +99,24 @@ type RequestLineRow = {
   description: string;
 };
 
+function asIso(value: Date | string | null | undefined): string {
+  if (!value) return new Date(0).toISOString();
+  if (value instanceof Date) return value.toISOString();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString();
+}
+
 function mapRequestRow(
   row: RequestHeadRow,
   lines: Array<{ date: string; description: string }>,
 ): FlightPlanningEmailRequest {
+  const updatedAt = row.updatedAt ?? row.createdAt;
   return {
+    id: row.id,
     employeeId: row.employeeId,
     employeeName: row.employeeName,
-    createdAt: row.createdAt.toISOString(),
+    createdAt: asIso(row.createdAt),
+    updatedAt: asIso(updatedAt),
     lines,
   };
 }
@@ -123,6 +134,21 @@ export class FlightPlanningUseCase {
   async isEnabled(): Promise<boolean> {
     const period = await this.currentPeriod();
     return period?.status === "open";
+  }
+
+  async portalStatus(userId: string): Promise<{
+    enabled: boolean;
+    request: FlightPlanningEmailRequest | null;
+  }> {
+    const enabled = await this.isEnabled();
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { employeeId: true },
+    });
+    if (!user?.employeeId) {
+      return { enabled, request: null };
+    }
+    return { enabled, request: enabled ? await this.findCurrentRequest(user.employeeId) : null };
   }
 
   async setEnabled(
@@ -207,6 +233,7 @@ export class FlightPlanningUseCase {
                req.employee_id AS "employeeId",
                emp.name AS "employeeName",
                req.created_at AS "createdAt",
+               COALESCE(req.updated_at, req.created_at) AS "updatedAt",
                req.package_id AS "packageId"
         FROM flight_planning_requests req
         JOIN "Employee" emp ON emp.id = req.employee_id
@@ -285,8 +312,7 @@ export class FlightPlanningUseCase {
     }
 
     const normalized = normalizeLines(lines);
-    const requestId = randomUUID();
-    const createdAt = new Date();
+    const now = new Date();
     const empRows = await prisma.$queryRaw<Array<{ id: string; name: string }>>`
       SELECT id, name FROM "Employee" WHERE id = ${user.employeeId} LIMIT 1
     `;
@@ -295,10 +321,44 @@ export class FlightPlanningUseCase {
       throw new FlightPlanningNotLinkedError();
     }
 
+    const existing = await this.findCurrentRequestHeads(employee.id);
+    const keep = existing[0];
+    const extras = existing.slice(1).map((row) => row.id);
+
+    if (keep) {
+      await prisma.$transaction(async (tx) => {
+        for (const extraId of extras) {
+          await tx.$executeRaw`DELETE FROM flight_planning_requests WHERE id = ${extraId}`;
+        }
+        await tx.$executeRaw`DELETE FROM flight_planning_request_lines WHERE request_id = ${keep.id}`;
+        for (let index = 0; index < normalized.length; index++) {
+          const line = normalized[index];
+          await tx.$executeRaw`
+            INSERT INTO flight_planning_request_lines (id, request_id, date, description, sort_order)
+            VALUES (${randomUUID()}, ${keep.id}, CAST(${line.date} AS date), ${line.description}, ${index})
+          `;
+        }
+        await tx.$executeRaw`
+          UPDATE flight_planning_requests
+          SET updated_at = ${now}
+          WHERE id = ${keep.id}
+        `;
+      });
+      return {
+        id: keep.id,
+        employeeId: employee.id,
+        employeeName: employee.name,
+        createdAt: keep.createdAt.toISOString(),
+        updatedAt: now.toISOString(),
+        lines: normalized,
+      };
+    }
+
+    const requestId = randomUUID();
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`
-        INSERT INTO flight_planning_requests (id, employee_id, created_at)
-        VALUES (${requestId}, ${employee.id}, ${createdAt})
+        INSERT INTO flight_planning_requests (id, employee_id, created_at, updated_at)
+        VALUES (${requestId}, ${employee.id}, ${now}, ${now})
       `;
       for (let index = 0; index < normalized.length; index++) {
         const line = normalized[index];
@@ -309,17 +369,60 @@ export class FlightPlanningUseCase {
       }
     });
     try {
-      await this.attachToMonthPackage(requestId, createdAt);
+      await this.attachToMonthPackage(requestId, now);
     } catch (err) {
       await prisma.$executeRaw`DELETE FROM flight_planning_requests WHERE id = ${requestId}`;
       throw err;
     }
     return {
+      id: requestId,
       employeeId: employee.id,
       employeeName: employee.name,
-      createdAt: createdAt.toISOString(),
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
       lines: normalized,
     };
+  }
+
+  private async findCurrentRequest(employeeId: string): Promise<FlightPlanningEmailRequest | null> {
+    const heads = await this.findCurrentRequestHeads(employeeId);
+    const keep = heads[0];
+    if (!keep) return null;
+    const lineRows = await prisma.$queryRaw<RequestLineRow[]>`
+      SELECT request_id AS "requestId",
+             to_char(date, 'YYYY-MM-DD') AS date,
+             description
+      FROM flight_planning_request_lines
+      WHERE request_id = ${keep.id}
+      ORDER BY sort_order ASC
+    `;
+    return mapRequestRow(
+      keep,
+      lineRows.map((line) => ({ date: line.date, description: line.description })),
+    );
+  }
+
+  private async findCurrentRequestHeads(employeeId: string): Promise<RequestHeadRow[]> {
+    const today = saoPauloDateKey(new Date());
+    const month = monthOfIsoDate(today);
+    return prisma.$queryRaw<RequestHeadRow[]>`
+      SELECT req.id,
+             req.employee_id AS "employeeId",
+             emp.name AS "employeeName",
+             req.created_at AS "createdAt",
+             COALESCE(req.updated_at, req.created_at) AS "updatedAt",
+             req.package_id AS "packageId"
+      FROM flight_planning_requests req
+      JOIN "Employee" emp ON emp.id = req.employee_id
+      JOIN flight_planning_packages pkg ON pkg.id = req.package_id
+      JOIN flight_planning_periods period ON period.id = pkg.period_id
+      WHERE req.employee_id = ${employeeId}
+        AND period.closed_at IS NULL
+        AND pkg.year = ${month.year}
+        AND pkg.month = ${month.month}
+        AND CAST(${today} AS date) BETWEEN period.starts_on AND period.ends_on
+      ORDER BY COALESCE(req.updated_at, req.created_at) DESC, req.created_at DESC
+    `;
   }
 
   private async currentPeriod(): Promise<FlightPlanningPeriodView | null> {

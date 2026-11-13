@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
@@ -21,9 +21,11 @@ import {
   templateUrl: './flight-planning-admin.component.html',
   styleUrls: ['../cadastros-shared.scss', './flight-planning-admin.component.scss'],
 })
-export class FlightPlanningAdminComponent implements OnInit {
+export class FlightPlanningAdminComponent implements OnInit, OnDestroy {
   private readonly flightPlanning = inject(FlightPlanningService);
   private readonly messages = inject(MessageService);
+  private pollId: ReturnType<typeof setInterval> | null = null;
+  private lastSnapshot = '';
 
   readonly loading = signal(true);
   readonly saving = signal(false);
@@ -44,12 +46,31 @@ export class FlightPlanningAdminComponent implements OnInit {
 
   ngOnInit(): void {
     this.reload();
+    this.pollId = setInterval(() => this.reload(this.selectedPackageId(), true), 4000);
   }
 
-  reload(packageId = this.selectedPackageId()): void {
-    this.loading.set(true);
+  ngOnDestroy(): void {
+    if (this.pollId) clearInterval(this.pollId);
+  }
+
+  reload(packageId = this.selectedPackageId(), quiet = false): void {
+    if (!quiet) this.loading.set(true);
     this.flightPlanning.adminView(packageId).subscribe({
       next: (view) => {
+        const snapshot = JSON.stringify({
+          enabled: view.enabled,
+          period: view.period,
+          packages: view.packages,
+          selectedPackageId: view.selectedPackageId,
+          requests: view.requests,
+          roster: view.roster,
+          emailText: view.emailText,
+        });
+        if (quiet && snapshot === this.lastSnapshot) {
+          this.loading.set(false);
+          return;
+        }
+        this.lastSnapshot = snapshot;
         this.enabled.set(view.enabled);
         this.period.set(view.period ?? null);
         this.packages.set(view.packages ?? []);
@@ -66,7 +87,9 @@ export class FlightPlanningAdminComponent implements OnInit {
       },
       error: () => {
         this.loading.set(false);
-        this.messages.add({ severity: 'error', summary: 'Erro', detail: 'Não foi possível carregar as solicitações.' });
+        if (!quiet) {
+          this.messages.add({ severity: 'error', summary: 'Erro', detail: 'Não foi possível carregar as solicitações.' });
+        }
       },
     });
   }

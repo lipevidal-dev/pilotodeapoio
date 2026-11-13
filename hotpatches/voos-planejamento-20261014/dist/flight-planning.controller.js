@@ -30,8 +30,9 @@ function authError(err, reply) {
     return null;
 }
 export async function getPortalFlightPlanningStatusController(req, reply) {
+    let user;
     try {
-        await requireAuthUser(req);
+        user = await requireAuthUser(req);
     }
     catch (err) {
         const response = authError(err, reply);
@@ -39,8 +40,7 @@ export async function getPortalFlightPlanningStatusController(req, reply) {
             return response;
         throw err;
     }
-    const enabled = await flightPlanningUseCase.isEnabled();
-    return reply.send({ enabled });
+    return reply.send(await flightPlanningUseCase.portalStatus(user.id));
 }
 export async function submitPortalFlightPlanningController(req, reply) {
     let user;

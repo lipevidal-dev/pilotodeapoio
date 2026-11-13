@@ -43,15 +43,15 @@ function authError(err: unknown, reply: FastifyReply) {
 }
 
 export async function getPortalFlightPlanningStatusController(req: FastifyRequest, reply: FastifyReply) {
+  let user;
   try {
-    await requireAuthUser(req);
+    user = await requireAuthUser(req);
   } catch (err) {
     const response = authError(err, reply);
     if (response) return response;
     throw err;
   }
-  const enabled = await flightPlanningUseCase.isEnabled();
-  return reply.send({ enabled });
+  return reply.send(await flightPlanningUseCase.portalStatus(user.id));
 }
 
 export async function submitPortalFlightPlanningController(req: FastifyRequest, reply: FastifyReply) {

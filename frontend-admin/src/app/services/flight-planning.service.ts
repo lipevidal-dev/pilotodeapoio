@@ -9,9 +9,11 @@ export interface FlightPlanningLine {
 }
 
 export interface FlightPlanningRequest {
+  id?: string;
   employeeId: string;
   employeeName: string;
   createdAt: string;
+  updatedAt?: string;
   lines: FlightPlanningLine[];
 }
 
@@ -53,8 +55,10 @@ export class FlightPlanningService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiBaseUrl;
 
-  status(): Observable<{ enabled: boolean }> {
-    return this.http.get<{ enabled: boolean }>(`${this.base}/portal/flight-planning`);
+  status(): Observable<{ enabled: boolean; request?: FlightPlanningRequest | null }> {
+    return this.http.get<{ enabled: boolean; request?: FlightPlanningRequest | null }>(
+      `${this.base}/portal/flight-planning`,
+    );
   }
 
   submit(lines: FlightPlanningLine[]): Observable<FlightPlanningRequest> {

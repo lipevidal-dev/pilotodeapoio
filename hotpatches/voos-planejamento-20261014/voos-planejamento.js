@@ -31,6 +31,8 @@
 
   var enabled = false;
   var portalLines = [{ date: "", description: "" }];
+  var portalDirty = false;
+  var editing = false;
   var confirmOpen = false;
   var submitting = false;
   var adminView = null;
@@ -40,8 +42,11 @@
   var periodStart = "";
   var periodEnd = "";
   var adminLoading = false;
+  var lastAdminJson = "";
   var mode = null;
   var notice = "";
+  var adminPollId = null;
+  var adminWs = null;
 
   function ensureStyles() {
     if (document.getElementById("vp-styles")) return;
@@ -49,8 +54,15 @@
     style.id = "vp-styles";
     style.textContent =
       ".vp-disabled{opacity:.45!important;cursor:not-allowed!important;pointer-events:none!important}" +
+      ".mobile-tabbar{overflow-x:auto!important;flex-wrap:nowrap!important;-webkit-overflow-scrolling:touch}" +
+      ".mobile-tab[data-vp-menu]{flex:0 0 auto;min-width:3.4rem}" +
       ".mobile-tab[data-vp-menu] span{font-size:.62rem!important;line-height:1.05!important;white-space:normal!important;text-align:center}" +
-      "#vp-root{position:fixed;inset:0;z-index:4000;background:rgba(17,24,39,.45);display:flex;align-items:flex-start;justify-content:center;padding:1.25rem;overflow:auto}" +
+      ".mobile-header{position:relative}" +
+      ".vp-header-btn{margin-left:auto;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:.1rem;min-width:2.8rem;border:0;background:transparent;color:#f15a22;font:inherit;font-size:.62rem;font-weight:700;cursor:pointer;padding:.15rem .35rem}" +
+      ".vp-header-btn i{font-size:1.05rem;color:#f15a22}" +
+      ".admin-shell .vp-header-btn,.employee-shell .vp-header-btn{display:none}" +
+      "@media(max-width:900px){.admin-shell .vp-header-btn,.employee-shell .vp-header-btn{display:inline-flex}}" +
+      "#vp-root{position:fixed;inset:0;z-index:5000;background:rgba(17,24,39,.45);display:flex;align-items:flex-start;justify-content:center;padding:1.25rem;overflow:auto}" +
       "#vp-root[hidden]{display:none!important}" +
       ".vp-panel{width:min(920px,100%);margin:2vh auto 4vh;background:#fff;color:#2d2d2d;border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.22);padding:1.25rem 1.35rem 1.4rem}" +
       ".vp-head{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;margin-bottom:1rem}" +
@@ -96,23 +108,19 @@
       ".vp-card li{margin:.2rem 0}" +
       ".vp-card li span{display:inline-block;min-width:6.2rem;font-weight:600}" +
       ".vp-email{width:100%;min-height:12rem;box-sizing:border-box;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;border:1px solid #d1d5db;border-radius:8px;padding:.75rem;white-space:pre}" +
-      "#vp-confirm{position:fixed;inset:0;z-index:4100;background:rgba(17,24,39,.55);display:flex;align-items:center;justify-content:center;padding:1rem}" +
+      "#vp-confirm{position:fixed;inset:0;z-index:5100;background:rgba(17,24,39,.55);display:flex;align-items:center;justify-content:center;padding:1rem}" +
       "#vp-confirm[hidden]{display:none!important}" +
       ".vp-dialog{width:min(640px,100%);background:#fff;border-radius:12px;padding:1.2rem 1.25rem 1.15rem;box-shadow:0 16px 48px rgba(0,0,0,.25)}" +
       ".vp-dialog h2{margin:0 0 .75rem;font-size:1.15rem}" +
       ".vp-dialog p{margin:0 0 .75rem;line-height:1.45}" +
       ".vp-dialog .vp-actions{justify-content:flex-end}" +
-      "@media(max-width:700px){.vp-row{grid-template-columns:1fr}.vp-row--head{display:none}}";
+      "@media(max-width:700px){.vp-row{grid-template-columns:1fr}.vp-row--head{display:none}#vp-root{padding:.55rem;align-items:stretch}.vp-panel{margin:0 auto 5rem;width:100%;border-radius:14px}}";
     document.head.appendChild(style);
-  }
-
-  function labelFor(sample) {
-    return sample.classList.contains("mobile-tab") ? "Voos Planejamento" : "Voos Planejamento";
   }
 
   function bindMenu(node, kind) {
     node.setAttribute("data-vp-menu", kind);
-    node.setAttribute("href", "#");
+    if (node.tagName === "A") node.setAttribute("href", "#");
     node.addEventListener("click", function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
@@ -121,22 +129,24 @@
     });
   }
 
-  function placeAfter(sample, kind) {
+  function placeAfter(sample, kind, label) {
     var parent = sample.parentElement;
     if (!parent || parent.querySelector("[data-vp-menu='" + kind + "']")) return;
     var node = sample.cloneNode(true);
-    node.classList.remove("active", "mobile-tab--active");
+    node.classList.remove("active", "mobile-tab--active", "mobile-drawer__link--active");
     var icon = node.querySelector("i");
     if (icon) icon.className = "pi pi-map";
     var span = node.querySelector("span");
-    if (span) span.textContent = labelFor(sample);
-    else node.textContent = labelFor(sample);
+    var text = label || (sample.classList.contains("mobile-tab") ? "Voos" : "Voos Planejamento");
+    if (span) span.textContent = text;
+    else node.textContent = text;
     bindMenu(node, kind);
     if (kind === "portal") syncOne(node);
     sample.insertAdjacentElement("afterend", node);
   }
 
   function syncOne(node) {
+    if (node.getAttribute("data-vp-menu") !== "portal") return;
     node.classList.toggle("vp-disabled", !enabled);
     if (!enabled) {
       node.setAttribute("title", "O administrador ainda não habilitou Voos Planejamento.");
@@ -148,7 +158,7 @@
   }
 
   function syncPortal() {
-    document.querySelectorAll(".employee-shell [data-vp-menu='portal']").forEach(syncOne);
+    document.querySelectorAll("[data-vp-menu='portal']").forEach(syncOne);
   }
 
   function removeInjected() {
@@ -158,31 +168,68 @@
   }
 
   function links(root, label) {
-    return Array.prototype.filter.call(root.querySelectorAll("a"), function (a) {
+    return Array.prototype.filter.call(root.querySelectorAll("a, button"), function (a) {
       return !a.hasAttribute("data-vp-menu") && textOf(a) === label;
     });
+  }
+
+  function ensureHeaderButton(shell, kind) {
+    var header = shell.querySelector(".mobile-header");
+    if (!header || header.querySelector("[data-vp-menu]")) return;
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "vp-header-btn";
+    btn.innerHTML = '<i class="pi pi-map" aria-hidden="true"></i><span>Voos</span>';
+    bindMenu(btn, kind);
+    if (kind === "portal") syncOne(btn);
+    header.appendChild(btn);
   }
 
   function ensureMenus() {
     if (angularMenuExists()) {
       removeInjected();
+      document.querySelectorAll(".employee-shell, .admin-shell").forEach(function (shell) {
+        ensureHeaderButton(shell, shell.classList.contains("admin-shell") ? "admin" : "portal");
+      });
       return;
     }
     document.querySelectorAll(".employee-shell").forEach(function (shell) {
       var anchors = links(shell, "Férias");
       if (!anchors.length) anchors = links(shell, "Troca de Turno").concat(links(shell, "Troca"));
       anchors.forEach(function (anchor) {
-        var kind = "portal";
-        if (anchor.parentElement && anchor.parentElement.querySelector("[data-vp-menu='portal']")) return;
-        placeAfter(anchor, kind);
+        placeAfter(anchor, "portal");
       });
+      ensureHeaderButton(shell, "portal");
     });
     document.querySelectorAll(".admin-shell").forEach(function (shell) {
       links(shell, "Voos").forEach(function (anchor) {
         placeAfter(anchor, "admin");
       });
+      var tabbar = shell.querySelector(".mobile-tabbar");
+      if (tabbar && !tabbar.querySelector("[data-vp-menu='admin']")) {
+        var escala = links(tabbar, "Escala")[0] || tabbar.querySelector("a.mobile-tab, button.mobile-tab");
+        if (escala) placeAfter(escala, "admin", "Voos");
+      }
+      ensureHeaderButton(shell, "admin");
+    });
+    document.querySelectorAll(".mobile-drawer").forEach(function (drawer) {
+      if (drawer.querySelector("[data-vp-menu='admin']")) return;
+      var sample = links(drawer, "Voos")[0] || links(drawer, "Férias")[0] || drawer.querySelector(".mobile-drawer__link");
+      if (sample) placeAfter(sample, "admin");
     });
     syncPortal();
+  }
+
+  function applyPortalRequest(request) {
+    if (portalDirty) return;
+    if (request && Array.isArray(request.lines) && request.lines.length) {
+      portalLines = request.lines.map(function (line) {
+        return { date: line.date || "", description: line.description || "" };
+      });
+      editing = true;
+    } else if (!editing) {
+      portalLines = [{ date: "", description: "" }];
+    }
   }
 
   function refreshStatus() {
@@ -196,7 +243,11 @@
         var was = enabled;
         enabled = !!data.enabled;
         syncPortal();
-        if (mode === "portal" && was !== enabled) render();
+        if (mode === "portal") {
+          applyPortalRequest(data.request);
+          if (was !== enabled) render();
+          else if (!portalDirty && data.request) render();
+        }
       })
       .catch(function () {});
   }
@@ -238,10 +289,47 @@
     return root;
   }
 
+  function stopAdminLive() {
+    if (adminPollId) {
+      clearInterval(adminPollId);
+      adminPollId = null;
+    }
+    if (adminWs) {
+      try {
+        adminWs.close();
+      } catch (e) {}
+      adminWs = null;
+    }
+  }
+
+  function startAdminLive() {
+    stopAdminLive();
+    adminPollId = setInterval(function () {
+      if (mode === "admin") loadAdmin(true);
+    }, 4000);
+    var t = token();
+    if (!t || adminWs) return;
+    try {
+      var proto = location.protocol === "https:" ? "wss:" : "ws:";
+      adminWs = new WebSocket(proto + "//" + location.host + "/api/ws/admin", ["escala-auth", t]);
+      adminWs.onmessage = function (ev) {
+        try {
+          var msg = JSON.parse(ev.data);
+          var path = String((msg.payload && msg.payload.path) || "");
+          if (msg.type === "data.changed" && path.indexOf("flight-planning") >= 0 && mode === "admin") {
+            loadAdmin(true);
+          }
+        } catch (e) {}
+      };
+      adminWs.onerror = function () {};
+    } catch (e) {}
+  }
+
   function close() {
     if (submitting) return;
     confirmOpen = false;
     mode = null;
+    stopAdminLive();
     var root = document.getElementById("vp-root");
     var confirm = document.getElementById("vp-confirm");
     if (root) root.hidden = true;
@@ -260,8 +348,11 @@
     mode = next;
     notice = "";
     rootEl().hidden = false;
-    if (next === "admin") loadAdmin();
-    else {
+    if (next === "admin") {
+      startAdminLive();
+      loadAdmin();
+    } else {
+      portalDirty = false;
       refreshStatus();
       render();
     }
@@ -302,7 +393,9 @@
       renderAdmin(body);
       return;
     }
-    sub.textContent = "Uma linha para cada solicitação de voo.";
+    sub.textContent = editing
+      ? "Você já enviou. Edite as linhas e salve a alteração."
+      : "Uma linha para cada solicitação de voo.";
     renderPortal(body);
   }
 
@@ -332,6 +425,7 @@
       date.setAttribute("aria-label", "Data da linha " + (index + 1));
       date.addEventListener("input", function () {
         portalLines[index].date = date.value;
+        portalDirty = true;
       });
       var desc = document.createElement("input");
       desc.type = "text";
@@ -341,12 +435,14 @@
       desc.setAttribute("aria-label", "Solicitação do voo da linha " + (index + 1));
       desc.addEventListener("input", function () {
         portalLines[index].description = desc.value;
+        portalDirty = true;
       });
       var remove = el("button", "vp-icon");
       remove.type = "button";
       remove.setAttribute("aria-label", "Remover linha " + (index + 1));
       remove.innerHTML = '<i class="pi pi-trash"></i>';
       remove.addEventListener("click", function () {
+        portalDirty = true;
         if (portalLines.length === 1) portalLines = [{ date: "", description: "" }];
         else portalLines = portalLines.filter(function (_, i) { return i !== index; });
         render();
@@ -365,10 +461,11 @@
     add.disabled = portalLines.length >= 40;
     add.addEventListener("click", function () {
       if (portalLines.length >= 40) return;
+      portalDirty = true;
       portalLines = portalLines.concat([{ date: "", description: "" }]);
       render();
     });
-    var send = el("button", "vp-btn", "Enviar solicitação");
+    var send = el("button", "vp-btn", editing ? "Salvar alteração" : "Enviar solicitação");
     send.type = "button";
     send.addEventListener("click", askConfirm);
     actions.appendChild(add);
@@ -390,6 +487,8 @@
     }
     confirmOpen = true;
     var confirm = document.getElementById("vp-confirm");
+    confirm.querySelector("#vp-confirm-title").textContent = editing ? "Confirmar alteração" : "Confirmar envio";
+    confirm.querySelector("#vp-send").textContent = editing ? "Li e confirmo a alteração" : "Li e confirmo o envio";
     confirm.hidden = false;
     confirm.querySelector("#vp-send").disabled = false;
   }
@@ -402,6 +501,7 @@
     var lines = portalLines.map(function (line) {
       return { date: line.date, description: String(line.description || "").trim() };
     });
+    var wasEditing = editing;
     fetch(API + "/portal/flight-planning/requests", {
       method: "POST",
       headers: authHeaders(),
@@ -416,8 +516,14 @@
       .then(function () {
         submitting = false;
         closeConfirm();
-        portalLines = [{ date: "", description: "" }];
-        notice = { ok: true, text: "Solicitação enviada. Ela será avaliada pelo planejamento." };
+        editing = true;
+        portalDirty = false;
+        notice = {
+          ok: true,
+          text: wasEditing
+            ? "Solicitação atualizada. O administrador já vê a alteração."
+            : "Solicitação enviada. Ela será avaliada pelo planejamento.",
+        };
         render();
       })
       .catch(function (err) {
@@ -428,9 +534,11 @@
       });
   }
 
-  function loadAdmin() {
-    adminLoading = true;
-    render();
+  function loadAdmin(quiet) {
+    if (!quiet) {
+      adminLoading = true;
+      render();
+    }
     var url = API + "/flight-planning";
     if (selectedPackageId) url += "?packageId=" + encodeURIComponent(selectedPackageId);
     fetch(url, { headers: authHeaders() })
@@ -441,6 +549,9 @@
         });
       })
       .then(function (view) {
+        var snap = JSON.stringify(view);
+        if (quiet && snap === lastAdminJson) return;
+        lastAdminJson = snap;
         adminView = view;
         enabled = !!view.enabled;
         if (view.selectedPackageId) selectedPackageId = view.selectedPackageId;
@@ -450,8 +561,10 @@
       })
       .catch(function (err) {
         adminLoading = false;
-        adminView = { enabled: enabled, requests: [], emailText: "", error: err.message };
-        render();
+        if (!quiet) {
+          adminView = { enabled: enabled, requests: [], emailText: "", error: err.message };
+          render();
+        }
       });
   }
 
@@ -503,7 +616,11 @@
       card.appendChild(el("p", "", "Nenhuma solicitação enviada."));
     } else {
       own.forEach(function (request) {
-        card.appendChild(el("p", "", "Enviado em " + formatSent(request.createdAt)));
+        var when = "Enviado em " + formatSent(request.createdAt);
+        if (request.updatedAt && request.updatedAt !== request.createdAt) {
+          when += " · Atualizado em " + formatSent(request.updatedAt);
+        }
+        card.appendChild(el("p", "", when));
         var lines = document.createElement("ul");
         (request.lines || []).forEach(function (line) {
           var item = document.createElement("li");
@@ -547,6 +664,7 @@
         periodFormOpen = false;
         selectedPackageId = null;
         selectedEmployeeId = null;
+        lastAdminJson = "";
         if (!turnOn) {
           notice = { ok: true, text: "O menu do colaborador ficou bloqueado. Os pacotes mensais continuam disponíveis." };
         } else if (result.period && result.period.status === "scheduled") {
@@ -613,6 +731,7 @@
         if (selectedPackageId === pkg.id) return;
         selectedPackageId = pkg.id;
         selectedEmployeeId = null;
+        lastAdminJson = "";
         loadAdmin();
       });
       row.appendChild(button);

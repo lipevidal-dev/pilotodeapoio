@@ -472,6 +472,7 @@ model FlightPlanningRequest {
   periodId   String?  @map("period_id")
   packageId  String?  @map("package_id")
   createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
 
   employee Employee                    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   period   FlightPlanningPeriod?       @relation(fields: [periodId], references: [id], onDelete: SetNull)

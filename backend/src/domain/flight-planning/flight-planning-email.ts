@@ -4,9 +4,11 @@ export type FlightPlanningEmailLine = {
 };
 
 export type FlightPlanningEmailRequest = {
+  id?: string;
   employeeId: string;
   employeeName: string;
   createdAt: string;
+  updatedAt?: string;
   lines: FlightPlanningEmailLine[];
 };
 

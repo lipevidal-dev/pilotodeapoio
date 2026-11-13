@@ -3,7 +3,7 @@
     <span class="flight-planning-icon"><i class="pi pi-send"></i></span>
     <div>
       <h1>Voos Planejamento</h1>
-      <p>Uma linha para cada solicitação de voo.</p>
+      <p>Uma linha para cada solicitação de voo. Você pode editar e salvar de novo se precisar corrigir.</p>
     </div>
   </header>
 
@@ -57,8 +57,8 @@
           <i class="pi pi-plus" aria-hidden="true"></i>
         </button>
         <p-button
-          label="Enviar solicitação"
-          icon="pi pi-send"
+          [label]="editing() ? 'Salvar alteração' : 'Enviar solicitação'"
+          [icon]="editing() ? 'pi pi-save' : 'pi pi-send'"
           styleClass="btn-gol-primary"
           (onClick)="askConfirm()"
         />
@@ -69,14 +69,14 @@
   @if (confirmOpen()) {
     <div class="confirm-backdrop" (click)="closeConfirm()">
       <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="flight-planning-confirm-title" (click)="$event.stopPropagation()">
-        <h2 id="flight-planning-confirm-title">Confirmar envio</h2>
+        <h2 id="flight-planning-confirm-title">{{ editing() ? 'Confirmar alteração' : 'Confirmar envio' }}</h2>
         <p>Ao clicar em enviar, o colaborador confirma que somente um voo nobre está sendo pedido, lembrando que a moderação das solicitações será avaliada mês a mês.</p>
         <p>O usuário tem ciência de que os voos solicitados não podem quebrar pairings, e que não se pode pedir um voo somente de ida a um destino. Voos com solicitação para ir a um único destino são feitos para o Recovery no decorrer do mês.</p>
         <p>Solicitações para o planejamento são cabíveis de avaliação antes da aprovação.</p>
         <div class="confirm-actions">
           <button type="button" class="confirm-back" (click)="closeConfirm()" [disabled]="submitting()">Voltar</button>
           <p-button
-            label="Li e confirmo o envio"
+            [label]="editing() ? 'Li e confirmo a alteração' : 'Li e confirmo o envio'"
             icon="pi pi-check"
             styleClass="btn-gol-primary"
             [loading]="submitting()"

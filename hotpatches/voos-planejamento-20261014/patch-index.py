@@ -4,7 +4,7 @@ import re
 import sys
 
 index = Path(sys.argv[1] if len(sys.argv) > 1 else "/usr/share/nginx/html/index.html")
-version = sys.argv[2] if len(sys.argv) > 2 else "5"
+version = sys.argv[2] if len(sys.argv) > 2 else "6"
 
 text = index.read_text(encoding="utf-8")
 tag = f'<script src="voos-planejamento.js?v={version}"></script>'
