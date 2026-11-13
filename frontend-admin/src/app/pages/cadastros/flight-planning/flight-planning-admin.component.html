@@ -12,14 +12,33 @@
       {{ periodText() }}
     </span>
     <div class="toolbar-actions">
-      <p-button
-        [label]="canClosePeriod ? 'Desabilitar' : 'Habilitar'"
-        [icon]="canClosePeriod ? 'pi pi-lock' : 'pi pi-lock-open'"
-        styleClass="btn-gol-primary"
-        [loading]="saving()"
-        [disabled]="loading()"
-        (onClick)="canClosePeriod ? disable() : askEnable()"
-      />
+      @if (canClosePeriod) {
+        <p-button
+          label="Alterar datas"
+          icon="pi pi-calendar"
+          [outlined]="true"
+          [loading]="saving()"
+          [disabled]="loading()"
+          (onClick)="askEditDates()"
+        />
+        <p-button
+          label="Desabilitar"
+          icon="pi pi-lock"
+          styleClass="btn-gol-primary"
+          [loading]="saving()"
+          [disabled]="loading()"
+          (onClick)="disable()"
+        />
+      } @else {
+        <p-button
+          label="Habilitar"
+          icon="pi pi-lock-open"
+          styleClass="btn-gol-primary"
+          [loading]="saving()"
+          [disabled]="loading()"
+          (onClick)="askEnable()"
+        />
+      }
       <p-button
         label="Copiar solicitações"
         icon="pi pi-copy"
@@ -35,10 +54,18 @@
     <div class="period-form">
       <label>De <input type="date" name="period-start" [(ngModel)]="periodStart" /></label>
       <label>Até <input type="date" name="period-end" [(ngModel)]="periodEnd" /></label>
-      <button type="button" class="period-confirm" (click)="confirmPeriod()" [disabled]="saving()">Habilitar período</button>
-      <button type="button" class="period-cancel" (click)="periodForm.set(false)">Cancelar</button>
+      <button type="button" class="period-confirm" (click)="confirmPeriod()" [disabled]="saving()">
+        {{ editingDates() ? 'Salvar datas' : 'Habilitar período' }}
+      </button>
+      <button type="button" class="period-cancel" (click)="cancelPeriod()">Cancelar</button>
     </div>
-    <p class="period-hint">Cada mês deste intervalo vira um pacote com as solicitações enviadas naquele mês.</p>
+    <p class="period-hint">
+      @if (editingDates()) {
+        As datas mudam no mesmo período. Solicitações e pacotes já gerados continuam.
+      } @else {
+        Cada mês deste intervalo vira um pacote com as solicitações enviadas naquele mês.
+      }
+    </p>
   }
 
   @if (packages().length) {
@@ -103,6 +130,22 @@
                 </li>
               }
             </ul>
+          }
+        }
+        @if (selectedRecords().length) {
+          <h3 class="records-title">Registros da solicitação</h3>
+          @for (record of selectedRecords(); track record.id) {
+            <section class="record-entry">
+              <p class="request-when">Concluído em {{ formatSentAt(record.createdAt) }}</p>
+              <ul>
+                @for (line of record.lines; track line.date + line.description + record.id) {
+                  <li>
+                    <span>{{ formatDate(line.date) }}</span>
+                    {{ line.description }}
+                  </li>
+                }
+              </ul>
+            </section>
           }
         }
       </article>

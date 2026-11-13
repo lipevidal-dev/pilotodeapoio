@@ -8,6 +8,7 @@ import { ToastModule } from 'primeng/toast';
 import {
   FlightPlanningPackage,
   FlightPlanningPeriod,
+  FlightPlanningRecord,
   FlightPlanningRequest,
   FlightPlanningRosterEntry,
   FlightPlanningService,
@@ -35,9 +36,11 @@ export class FlightPlanningAdminComponent implements OnInit, OnDestroy {
   readonly packages = signal<FlightPlanningPackage[]>([]);
   readonly selectedPackageId = signal<string | null>(null);
   readonly periodForm = signal(false);
+  readonly editingDates = signal(false);
   periodStart = '';
   periodEnd = '';
   readonly requests = signal<FlightPlanningRequest[]>([]);
+  readonly records = signal<FlightPlanningRecord[]>([]);
   readonly roster = signal<FlightPlanningRosterEntry[]>([]);
   readonly requestedCount = signal(0);
   readonly pendingCount = signal(0);
@@ -63,6 +66,7 @@ export class FlightPlanningAdminComponent implements OnInit, OnDestroy {
           packages: view.packages,
           selectedPackageId: view.selectedPackageId,
           requests: view.requests,
+          records: view.records,
           roster: view.roster,
           emailText: view.emailText,
         });
@@ -76,6 +80,7 @@ export class FlightPlanningAdminComponent implements OnInit, OnDestroy {
         this.packages.set(view.packages ?? []);
         this.selectedPackageId.set(view.selectedPackageId ?? null);
         this.requests.set(view.requests);
+        this.records.set(view.records ?? []);
         this.roster.set(view.roster ?? []);
         this.requestedCount.set(view.requestedCount ?? 0);
         this.pendingCount.set(view.pendingCount ?? 0);
@@ -95,8 +100,7 @@ export class FlightPlanningAdminComponent implements OnInit, OnDestroy {
   }
 
   get canClosePeriod(): boolean {
-    const status = this.period()?.status;
-    return status === 'open' || status === 'scheduled';
+    return this.period() != null;
   }
 
   periodText(): string {
@@ -105,27 +109,47 @@ export class FlightPlanningAdminComponent implements OnInit, OnDestroy {
     const range = `${this.formatDate(period.startsOn)} até ${this.formatDate(period.endsOn)}`;
     if (period.status === 'open') return `Portal aberto de ${range}.`;
     if (period.status === 'scheduled') return `Período agendado de ${range}. O portal abre na data inicial.`;
-    return `Período encerrado: ${range}.`;
+    return `Janela de datas encerrada: ${range}. Altere as datas para reabrir sem desabilitar.`;
   }
 
   askEnable(): void {
+    this.editingDates.set(false);
+    this.periodStart = '';
+    this.periodEnd = '';
     this.periodForm.set(true);
+  }
+
+  askEditDates(): void {
+    const period = this.period();
+    this.editingDates.set(true);
+    this.periodStart = period?.startsOn ?? '';
+    this.periodEnd = period?.endsOn ?? '';
+    this.periodForm.set(true);
+  }
+
+  cancelPeriod(): void {
+    this.periodForm.set(false);
+    this.editingDates.set(false);
   }
 
   confirmPeriod(): void {
     this.saving.set(true);
+    const editing = this.editingDates();
     this.flightPlanning.setEnabled(true, { startsOn: this.periodStart, endsOn: this.periodEnd }).subscribe({
       next: (result) => {
         this.enabled.set(result.enabled);
         this.periodForm.set(false);
+        this.editingDates.set(false);
         this.saving.set(false);
         this.selectedPackageId.set(null);
         this.messages.add({
           severity: 'success',
-          summary: 'Período habilitado',
-          detail: result.period?.status === 'scheduled'
-            ? 'O portal abre na data inicial. Cada mês vira um pacote.'
-            : 'As solicitações de cada mês ficam num pacote para consulta.',
+          summary: editing ? 'Datas atualizadas' : 'Período habilitado',
+          detail: editing
+            ? 'O período foi alterado sem desabilitar o menu. As solicitações já enviadas continuam no pacote.'
+            : result.period?.status === 'scheduled'
+              ? 'O portal abre na data inicial. Cada mês vira um pacote.'
+              : 'As solicitações de cada mês ficam num pacote para consulta.',
         });
         this.reload(null);
       },
@@ -199,6 +223,12 @@ export class FlightPlanningAdminComponent implements OnInit, OnDestroy {
 
   selectedName(): string {
     return this.roster().find((row) => row.employeeId === this.selectedEmployeeId())?.name ?? '';
+  }
+
+  selectedRecords(): FlightPlanningRecord[] {
+    const id = this.selectedEmployeeId();
+    if (!id) return [];
+    return this.records().filter((record) => record.employeeId === id);
   }
 
   formatDate(iso: string): string {

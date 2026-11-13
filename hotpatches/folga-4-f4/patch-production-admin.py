@@ -45,7 +45,7 @@ if index.exists():
     elif "</body>" in html:
         html = html.replace("</body>", tag + "\n</body>", 1)
     if (ROOT / "voos-planejamento.js").exists() and "voos-planejamento.js" not in html and "</body>" in html:
-        html = html.replace("</body>", '<script src="voos-planejamento.js?v=6"></script>\n</body>', 1)
+        html = html.replace("</body>", '<script src="voos-planejamento.js?v=7"></script>\n</body>', 1)
     index.write_text(html, encoding="utf-8")
     changed.append("index.html")
 

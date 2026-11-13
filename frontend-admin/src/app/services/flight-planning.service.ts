@@ -38,6 +38,16 @@ export interface FlightPlanningPackage {
   requestCount: number;
 }
 
+export interface FlightPlanningRecord {
+  id: string;
+  requestId: string;
+  employeeId: string;
+  employeeName: string;
+  createdAt: string;
+  emailText: string;
+  lines: FlightPlanningLine[];
+}
+
 export interface FlightPlanningAdminView {
   enabled: boolean;
   period: FlightPlanningPeriod | null;
@@ -48,6 +58,7 @@ export interface FlightPlanningAdminView {
   roster: FlightPlanningRosterEntry[];
   requestedCount: number;
   pendingCount: number;
+  records: FlightPlanningRecord[];
 }
 
 @Injectable({ providedIn: 'root' })

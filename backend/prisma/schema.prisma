@@ -460,6 +460,7 @@ model FlightPlanningPackage {
 
   period   FlightPlanningPeriod    @relation(fields: [periodId], references: [id], onDelete: Cascade)
   requests FlightPlanningRequest[]
+  records  FlightPlanningRecord[]
 
   @@unique([periodId, year, month])
   @@map("flight_planning_packages")
@@ -478,10 +479,29 @@ model FlightPlanningRequest {
   period   FlightPlanningPeriod?       @relation(fields: [periodId], references: [id], onDelete: SetNull)
   package  FlightPlanningPackage?      @relation(fields: [packageId], references: [id], onDelete: SetNull)
   lines    FlightPlanningRequestLine[]
+  records  FlightPlanningRecord[]
 
   @@index([employeeId, createdAt])
   @@index([packageId])
   @@map("flight_planning_requests")
+}
+
+/** Registro permanente gerado cada vez que o colaborador conclui ou altera a solicitação. */
+model FlightPlanningRecord {
+  id         String   @id @default(uuid())
+  requestId  String   @map("request_id")
+  employeeId String   @map("employee_id")
+  packageId  String?  @map("package_id")
+  emailText  String   @map("email_text")
+  linesJson  String   @map("lines_json")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  request  FlightPlanningRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  package  FlightPlanningPackage? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+
+  @@index([requestId, createdAt])
+  @@index([packageId])
+  @@map("flight_planning_records")
 }
 
 model FlightPlanningRequestLine {

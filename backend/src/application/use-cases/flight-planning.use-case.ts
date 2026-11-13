@@ -84,6 +84,16 @@ export type FlightPlanningPackageView = {
   requestCount: number;
 };
 
+export type FlightPlanningRecordView = {
+  id: string;
+  requestId: string;
+  employeeId: string;
+  employeeName: string;
+  createdAt: string;
+  emailText: string;
+  lines: Array<{ date: string; description: string }>;
+};
+
 type RequestHeadRow = {
   id: string;
   employeeId: string;
@@ -174,20 +184,24 @@ export class FlightPlanningUseCase {
       throw new FlightPlanningInvalidError(`O período pode ter no máximo ${MAX_FLIGHT_PLANNING_MONTHS} meses.`);
     }
 
-    const periodId = randomUUID();
-    await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`UPDATE flight_planning_periods SET closed_at = NOW() WHERE closed_at IS NULL`;
-      await tx.$executeRaw`
-        INSERT INTO flight_planning_periods (id, starts_on, ends_on)
-        VALUES (${periodId}, CAST(${startsOn} AS date), CAST(${endsOn} AS date))
-      `;
-      for (const month of months) {
+    const existing = await this.unclosedPeriodRow();
+    if (existing) {
+      await this.updatePeriodRange(existing.id, startsOn, endsOn, months);
+    } else {
+      const periodId = randomUUID();
+      await prisma.$transaction(async (tx) => {
         await tx.$executeRaw`
-          INSERT INTO flight_planning_packages (id, period_id, year, month)
-          VALUES (${randomUUID()}, ${periodId}, ${month.year}, ${month.month})
+          INSERT INTO flight_planning_periods (id, starts_on, ends_on)
+          VALUES (${periodId}, CAST(${startsOn} AS date), CAST(${endsOn} AS date))
         `;
-      }
-    });
+        for (const month of months) {
+          await tx.$executeRaw`
+            INSERT INTO flight_planning_packages (id, period_id, year, month)
+            VALUES (${randomUUID()}, ${periodId}, ${month.year}, ${month.month})
+          `;
+        }
+      });
+    }
 
     const period = await this.currentPeriod();
     const open = period?.status === "open";
@@ -205,9 +219,10 @@ export class FlightPlanningUseCase {
     roster: FlightPlanningRosterEntry[];
     requestedCount: number;
     pendingCount: number;
+    records: FlightPlanningRecordView[];
   }> {
     const today = saoPauloDateKey(new Date());
-    const [periods, packages, rows, lineRows, employees] = await Promise.all([
+    const [periods, packages, rows, lineRows, employees, recordRows] = await Promise.all([
       prisma.$queryRaw<PeriodRow[]>`
         SELECT id,
                to_char(starts_on, 'YYYY-MM-DD') AS "startsOn",
@@ -250,6 +265,30 @@ export class FlightPlanningUseCase {
         SELECT id, name, active, type::text AS type, is_fcf AS "isFcf", is_cmte AS "isCmte"
         FROM "Employee"
       `,
+      prisma.$queryRaw<
+        Array<{
+          id: string;
+          requestId: string;
+          employeeId: string;
+          employeeName: string;
+          createdAt: Date;
+          emailText: string;
+          linesJson: string;
+          packageId: string | null;
+        }>
+      >`
+        SELECT rec.id,
+               rec.request_id AS "requestId",
+               rec.employee_id AS "employeeId",
+               emp.name AS "employeeName",
+               rec.created_at AS "createdAt",
+               rec.email_text AS "emailText",
+               rec.lines_json AS "linesJson",
+               rec.package_id AS "packageId"
+        FROM flight_planning_records rec
+        JOIN "Employee" emp ON emp.id = rec.employee_id
+        ORDER BY rec.created_at DESC
+      `,
     ]);
 
     const linesByRequest = new Map<string, Array<{ date: string; description: string }>>();
@@ -285,6 +324,17 @@ export class FlightPlanningUseCase {
     );
     const requestedCount = roster.filter((row) => row.requested).length;
     const period = active ? periodView(active, today) : null;
+    const records = recordRows
+      .filter((row) => !selected || row.packageId === selected.id)
+      .map((row) => ({
+        id: row.id,
+        requestId: row.requestId,
+        employeeId: row.employeeId,
+        employeeName: row.employeeName,
+        createdAt: asIso(row.createdAt),
+        emailText: row.emailText,
+        lines: parseRecordLines(row.linesJson),
+      }));
     return {
       enabled: period?.status === "open",
       period,
@@ -295,6 +345,7 @@ export class FlightPlanningUseCase {
       roster,
       requestedCount,
       pendingCount: roster.length - requestedCount,
+      records,
     };
   }
 
@@ -344,14 +395,16 @@ export class FlightPlanningUseCase {
           WHERE id = ${keep.id}
         `;
       });
-      return {
+      const updated = {
         id: keep.id,
         employeeId: employee.id,
         employeeName: employee.name,
-        createdAt: keep.createdAt.toISOString(),
+        createdAt: asIso(keep.createdAt),
         updatedAt: now.toISOString(),
         lines: normalized,
       };
+      await this.insertCompletionRecord(updated, keep.packageId);
+      return updated;
     }
 
     const requestId = randomUUID();
@@ -374,7 +427,7 @@ export class FlightPlanningUseCase {
       await prisma.$executeRaw`DELETE FROM flight_planning_requests WHERE id = ${requestId}`;
       throw err;
     }
-    return {
+    const created = {
       id: requestId,
       employeeId: employee.id,
       employeeName: employee.name,
@@ -382,6 +435,9 @@ export class FlightPlanningUseCase {
       updatedAt: now.toISOString(),
       lines: normalized,
     };
+    const attached = await this.findCurrentRequestHeads(employee.id);
+    await this.insertCompletionRecord(created, attached[0]?.packageId ?? null);
+    return created;
   }
 
   private async findCurrentRequest(employeeId: string): Promise<FlightPlanningEmailRequest | null> {
@@ -425,7 +481,7 @@ export class FlightPlanningUseCase {
     `;
   }
 
-  private async currentPeriod(): Promise<FlightPlanningPeriodView | null> {
+  private async unclosedPeriodRow(): Promise<PeriodRow | null> {
     const rows = await prisma.$queryRaw<PeriodRow[]>`
       SELECT id,
              to_char(starts_on, 'YYYY-MM-DD') AS "startsOn",
@@ -436,7 +492,55 @@ export class FlightPlanningUseCase {
       ORDER BY created_at DESC
       LIMIT 1
     `;
-    const row = rows[0];
+    return rows[0] ?? null;
+  }
+
+  private async updatePeriodRange(
+    periodId: string,
+    startsOn: string,
+    endsOn: string,
+    months: Array<{ year: number; month: number }>,
+  ): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        UPDATE flight_planning_periods
+        SET starts_on = CAST(${startsOn} AS date),
+            ends_on = CAST(${endsOn} AS date)
+        WHERE id = ${periodId} AND closed_at IS NULL
+      `;
+      for (const month of months) {
+        await tx.$executeRaw`
+          INSERT INTO flight_planning_packages (id, period_id, year, month)
+          VALUES (${randomUUID()}, ${periodId}, ${month.year}, ${month.month})
+          ON CONFLICT (period_id, year, month) DO NOTHING
+        `;
+      }
+    });
+  }
+
+  private async insertCompletionRecord(
+    request: FlightPlanningEmailRequest & { id?: string },
+    packageId: string | null,
+  ): Promise<void> {
+    if (!request.id) return;
+    const emailText = formatFlightPlanningEmail([request]);
+    await prisma.$executeRaw`
+      INSERT INTO flight_planning_records
+        (id, request_id, employee_id, package_id, email_text, lines_json, created_at)
+      VALUES (
+        ${randomUUID()},
+        ${request.id},
+        ${request.employeeId},
+        ${packageId},
+        ${emailText},
+        ${JSON.stringify(request.lines)},
+        NOW()
+      )
+    `;
+  }
+
+  private async currentPeriod(): Promise<FlightPlanningPeriodView | null> {
+    const row = await this.unclosedPeriodRow();
     if (!row) return null;
     return periodView(row, saoPauloDateKey(new Date()));
   }
@@ -487,6 +591,21 @@ export class FlightPlanningUseCase {
           period_id = (SELECT period_id FROM flight_planning_packages WHERE id = ${packageId})
       WHERE id = ${requestId}
     `;
+  }
+}
+
+function parseRecordLines(raw: string): Array<{ date: string; description: string }> {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((line) => ({
+        date: String((line as { date?: string }).date ?? ""),
+        description: String((line as { description?: string }).description ?? ""),
+      }))
+      .filter((line) => line.date || line.description);
+  } catch {
+    return [];
   }
 }
 

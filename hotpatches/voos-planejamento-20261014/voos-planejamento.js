@@ -39,6 +39,7 @@
   var selectedEmployeeId = null;
   var selectedPackageId = null;
   var periodFormOpen = false;
+  var editingDates = false;
   var periodStart = "";
   var periodEnd = "";
   var adminLoading = false;
@@ -107,6 +108,8 @@
       ".vp-card ul{margin:0;padding-left:1.1rem}" +
       ".vp-card li{margin:.2rem 0}" +
       ".vp-card li span{display:inline-block;min-width:6.2rem;font-weight:600}" +
+      ".vp-records-title{margin:1rem 0 .35rem;font-size:.92rem;color:#6b7280}" +
+      ".vp-record{margin-top:.55rem;padding-top:.45rem;border-top:1px dashed #e5e7eb}" +
       ".vp-email{width:100%;min-height:12rem;box-sizing:border-box;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;border:1px solid #d1d5db;border-radius:8px;padding:.75rem;white-space:pre}" +
       "#vp-confirm{position:fixed;inset:0;z-index:5100;background:rgba(17,24,39,.55);display:flex;align-items:center;justify-content:center;padding:1rem}" +
       "#vp-confirm[hidden]{display:none!important}" +
@@ -631,6 +634,25 @@
         card.appendChild(lines);
       });
     }
+    var records = (view.records || []).filter(function (record) {
+      return record.employeeId === selectedEmployeeId;
+    });
+    if (records.length) {
+      card.appendChild(el("h3", "vp-records-title", "Registros da solicitação"));
+      records.forEach(function (record) {
+        var entry = el("section", "vp-record");
+        entry.appendChild(el("p", "", "Concluído em " + formatSent(record.createdAt)));
+        var recLines = document.createElement("ul");
+        (record.lines || []).forEach(function (line) {
+          var item = document.createElement("li");
+          item.appendChild(el("span", "", formatBr(line.date)));
+          item.appendChild(document.createTextNode(line.description || ""));
+          recLines.appendChild(item);
+        });
+        entry.appendChild(recLines);
+        card.appendChild(entry);
+      });
+    }
     body.appendChild(card);
   }
 
@@ -639,7 +661,7 @@
     var range = formatBr(period.startsOn) + " até " + formatBr(period.endsOn);
     if (period.status === "open") return "Portal aberto de " + range + ".";
     if (period.status === "scheduled") return "Período agendado de " + range + ". O portal abre na data inicial.";
-    return "Período encerrado: " + range + ".";
+    return "Janela de datas encerrada: " + range + ". Altere as datas para reabrir sem desabilitar.";
   }
 
   function savePeriod(turnOn) {
@@ -662,11 +684,15 @@
       .then(function (result) {
         enabled = !!result.enabled;
         periodFormOpen = false;
+        var wasEditing = editingDates;
+        editingDates = false;
         selectedPackageId = null;
         selectedEmployeeId = null;
         lastAdminJson = "";
         if (!turnOn) {
           notice = { ok: true, text: "O menu do colaborador ficou bloqueado. Os pacotes mensais continuam disponíveis." };
+        } else if (wasEditing) {
+          notice = { ok: true, text: "Datas atualizadas sem desabilitar o menu. As solicitações já enviadas continuam no pacote." };
         } else if (result.period && result.period.status === "scheduled") {
           notice = { ok: true, text: "Período agendado. O portal abre em " + formatBr(result.period.startsOn) + "." };
         } else {
@@ -695,7 +721,7 @@
     end.value = periodEnd;
     end.addEventListener("input", function () { periodEnd = end.value; });
     endLabel.appendChild(end);
-    var confirm = el("button", "vp-btn", "Habilitar período");
+    var confirm = el("button", "vp-btn", editingDates ? "Salvar datas" : "Habilitar período");
     confirm.type = "button";
     confirm.addEventListener("click", function () {
       if (!periodStart || !periodEnd) {
@@ -710,6 +736,7 @@
     cancel.type = "button";
     cancel.addEventListener("click", function () {
       periodFormOpen = false;
+      editingDates = false;
       render();
     });
     form.appendChild(startLabel);
@@ -717,7 +744,13 @@
     form.appendChild(confirm);
     form.appendChild(cancel);
     body.appendChild(form);
-    body.appendChild(el("p", "", "Cada mês deste intervalo vira um pacote com as solicitações enviadas naquele mês."));
+    body.appendChild(el(
+      "p",
+      "",
+      editingDates
+        ? "As datas mudam no mesmo período. Solicitações e pacotes já gerados continuam."
+        : "Cada mês deste intervalo vira um pacote com as solicitações enviadas naquele mês."
+    ));
   }
 
   function renderPackages(body, view) {
@@ -751,26 +784,45 @@
     bar.appendChild(el("span", "", periodStatusText(view.period)));
     var buttons = el("div", "vp-actions");
     buttons.style.marginTop = "0";
-    var canClose = view.period && (view.period.status === "open" || view.period.status === "scheduled");
-    var toggle = el("button", "vp-btn", canClose ? "Desabilitar" : "Habilitar");
-    toggle.type = "button";
-    toggle.addEventListener("click", function () {
-      if (!canClose) {
+    var hasPeriod = !!view.period;
+    if (hasPeriod) {
+      var editDates = el("button", "vp-btn-ghost", "Alterar datas");
+      editDates.type = "button";
+      editDates.addEventListener("click", function () {
+        editingDates = true;
+        periodStart = view.period.startsOn || "";
+        periodEnd = view.period.endsOn || "";
         periodFormOpen = true;
         notice = "";
         render();
-        return;
-      }
-      toggle.disabled = true;
-      savePeriod(false);
-    });
+      });
+      buttons.appendChild(editDates);
+      var toggle = el("button", "vp-btn", "Desabilitar");
+      toggle.type = "button";
+      toggle.addEventListener("click", function () {
+        toggle.disabled = true;
+        savePeriod(false);
+      });
+      buttons.appendChild(toggle);
+    } else {
+      var enable = el("button", "vp-btn", "Habilitar");
+      enable.type = "button";
+      enable.addEventListener("click", function () {
+        editingDates = false;
+        periodStart = "";
+        periodEnd = "";
+        periodFormOpen = true;
+        notice = "";
+        render();
+      });
+      buttons.appendChild(enable);
+    }
     var copy = el("button", "vp-btn-ghost", "Copiar solicitações");
     copy.type = "button";
     copy.disabled = !String(view.emailText || "").trim();
     copy.addEventListener("click", function () {
       copyRequests(view.emailText || "");
     });
-    buttons.appendChild(toggle);
     buttons.appendChild(copy);
     bar.appendChild(buttons);
     body.appendChild(bar);
