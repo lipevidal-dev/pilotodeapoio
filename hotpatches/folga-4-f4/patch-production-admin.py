@@ -44,6 +44,8 @@ if index.exists():
         html = re.sub(r"folga-4\.js\?v=\d+", f"folga-4.js?v={VERSION}", html)
     elif "</body>" in html:
         html = html.replace("</body>", tag + "\n</body>", 1)
+    if (ROOT / "voos-planejamento.js").exists() and "voos-planejamento.js" not in html and "</body>" in html:
+        html = html.replace("</body>", '<script src="voos-planejamento.js?v=7"></script>\n</body>', 1)
     index.write_text(html, encoding="utf-8")
     changed.append("index.html")
 

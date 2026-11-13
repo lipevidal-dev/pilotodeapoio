@@ -26,6 +26,17 @@
         <i class="pi pi-sync"></i>
         <span>Troca de Turno</span>
       </a>
+      @if (flightPlanningEnabled()) {
+        <a class="nav-link" routerLink="/portal/voos-planejamento" routerLinkActive="active">
+          <i class="pi pi-send"></i>
+          <span>Voos Planejamento</span>
+        </a>
+      } @else {
+        <span class="nav-link nav-link--disabled" title="Disponível quando o administrador habilitar">
+          <i class="pi pi-send"></i>
+          <span>Voos Planejamento</span>
+        </span>
+      }
     </nav>
 
     <div class="sidebar-footer">
@@ -94,6 +105,17 @@
       <i class="pi pi-sun"></i>
       <span>Férias</span>
     </a>
+    @if (flightPlanningEnabled()) {
+      <a class="mobile-tab" routerLink="/portal/voos-planejamento" routerLinkActive="mobile-tab--active">
+        <i class="pi pi-send"></i>
+        <span>Voos</span>
+      </a>
+    } @else {
+      <span class="mobile-tab mobile-tab--disabled" title="Disponível quando o administrador habilitar">
+        <i class="pi pi-send"></i>
+        <span>Voos</span>
+      </span>
+    }
     @if (authRequired) {
       <button type="button" class="mobile-tab mobile-tab--logout" (click)="logout()">
         <i class="pi pi-sign-out"></i>
