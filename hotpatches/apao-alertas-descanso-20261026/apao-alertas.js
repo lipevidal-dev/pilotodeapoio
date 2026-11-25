@@ -4,10 +4,11 @@
  * v9: troca de verdade — grava/pinta os dois orig; orig vazio limpa o outro lado.
  * v10: VOO/Curso/Simulador usam o mês da toolbar, não o lead-in/executada do mês anterior.
  * v12: VOO/Curso/Simulador viram cartões de pré-alocação (igual PAO); ADM nos turnos APAO.
+ * v13: FF (Folga Feriado) conta como folga no alerta de descanso.
  */
 (function () {
-  if (window.__apaoAlertasV12) return;
-  window.__apaoAlertasV12 = true;
+  if (window.__apaoAlertasV13) return;
+  window.__apaoAlertasV13 = true;
 
   var HOUR_MS = 60 * 60 * 1000;
   var DAY_MS = 24 * HOUR_MS;
@@ -21,7 +22,7 @@
     T3: { start: "12:00", end: "18:00" },
     T4: { start: "18:00", end: "00:00" },
   };
-  var DAY_OFF = { F: 1, FS: 1, FA: 1, FANI: 1, FP: 1, FOLGA: 1 };
+  var DAY_OFF = { F: 1, FS: 1, FA: 1, FANI: 1, FP: 1, FOLGA: 1, F4: 1, FF: 1 };
   var EXTRA_CARDS = [
     { key: "VOO", code: "VOO", label: "VOO", cls: "alloc-option--voo", section: "pre" },
     { key: "CURSO", code: "CURSO", label: "Curso", cls: "alloc-option--curso", section: "pre" },
@@ -111,7 +112,7 @@
     if (!upper || upper === "·") return "";
     var shift = upper.match(/\b(TI?\d+)\b/);
     if (shift) return shift[1];
-    var off = upper.match(/\b(FANI|FOLGA|FS|FA|FP|F|ND)\b/);
+    var off = upper.match(/\b(FANI|FOLGA|FS|FA|FP|F4|FF|F|ND)\b/);
     return off ? off[1] : upper.split(" ")[0];
   }
 
@@ -168,6 +169,8 @@
     if (n === "FOLGA SOCIAL" || n === "FS") return "FS";
     if (n.indexOf("FOLGA AGRUPADA") >= 0 || n === "FA") return "FA";
     if (n.indexOf("FOLGA ANIVERS") >= 0 || n === "FANI") return "FANI";
+    if (n === "FOLGA 4" || n === "FOLGA4" || n === "F4") return "F4";
+    if (n === "FOLGA FERIADO" || n === "FOLGAFERIADO" || n === "FF") return "FF";
     if (n === "FOLGA" || n === "F") return "F";
     if (n.indexOf("SIMULADOR") >= 0) return "SIM";
     if (n.indexOf("CURSO") >= 0) return "CRS";
@@ -835,7 +838,7 @@
     if (c === "FA") return "cell-fa";
     if (c === "FANI") return "cell-fani";
     if (c === "FP") return "cell-fp";
-    if (c === "F" || c === "FOLGA") return "cell-folga";
+    if (c === "F" || c === "FOLGA" || c === "F4" || c === "FF") return "cell-folga";
     if (c === "FER") return "cell-ferias";
     if (c === "ADM") return "cell-shift";
     if (c === "VOO") return "cell-voo";

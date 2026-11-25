@@ -80,6 +80,7 @@ function shortFromLabel(label: string): string | null {
   if (n.includes("FOLGA PEDIDA") || n === "FP") return "FP";
   if (n === "FOLGA SOCIAL" || n === "FS") return "FS";
   if (n === "FOLGA 4" || n === "FOLGA4" || n === "F4") return "F4";
+  if (n === "FOLGA FERIADO" || n === "FOLGAFERIADO" || n === "FF") return "FF";
   if (n.includes("FOLGA AGRUPADA") || n === "FA") return "FA";
   if (n.includes("FOLGA ANIVERS") || n === "FANI") return "FANI";
   if (n === "FOLGA" || n === "F") return "F";

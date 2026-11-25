@@ -23,6 +23,8 @@ export function displayTokenFromManualType(type: string | null | undefined): str
       return "F";
     case "F4":
       return "F4";
+    case "FF":
+      return "FF";
     case "FS":
       return "FS";
     case "FA":

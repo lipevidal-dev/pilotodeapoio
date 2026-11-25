@@ -11,6 +11,7 @@ const PAO_SHIFT_CODES = new Set(['T6', 'T7', 'T8', 'T9']);
 const PAO_OPERATIONAL_OPTIONS: AllocationSelectOption[] = [
   { key: 'FOLGA', label: 'Folga' },
   { key: 'F4', label: 'Folga 4' },
+  { key: 'FF', label: 'Folga Feriado' },
   { key: 'FS', label: 'Folga Social' },
   { key: 'FP', label: 'Folga Pedida' },
   { key: 'VOO', label: 'VOO' },
@@ -24,6 +25,7 @@ const PAO_OPERATIONAL_OPTIONS: AllocationSelectOption[] = [
 const APAO_OPERATIONAL_OPTIONS: AllocationSelectOption[] = [
   { key: 'FOLGA', label: 'Folga' },
   { key: 'F4', label: 'Folga 4' },
+  { key: 'FF', label: 'Folga Feriado' },
   { key: 'FS', label: 'Folga Social' },
   { key: 'FP', label: 'Folga Pedida' },
   { key: 'VOO', label: 'VOO' },

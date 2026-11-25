@@ -40,6 +40,8 @@ export const MANUAL_PREALLOC_LABELS = new Set([
   "FOLGA ESCOLHIDA",
   "FOLGA 4",
   "F4",
+  "FOLGA FERIADO",
+  "FF",
   CROSS_MONTH_ND_LABEL,
 ]);
 
@@ -54,6 +56,9 @@ export function normalizeOperationalLabel(label: string): string {
   }
   if (upper === "F4" || upper === "FOLGA4" || upper === "FOLGA 4") {
     return "FOLGA 4";
+  }
+  if (upper === "FF" || upper === "FOLGAFERIADO" || upper.includes("FOLGA FERIADO")) {
+    return "FOLGA FERIADO";
   }
   if (upper === "FANI" || upper.includes("FOLGA ANIVERS")) {
     return "FOLGA ANIVERSÁRIO";
@@ -80,6 +85,8 @@ export function isOperationalHardBlock(label: string): boolean {
     n === "FOLGA" ||
     n === "FOLGA 4" ||
     n === "F4" ||
+    n === "FOLGA FERIADO" ||
+    n === "FF" ||
     n === "FOLGA SOCIAL" ||
     n === "FOLGA AGRUPADA"
   ) {

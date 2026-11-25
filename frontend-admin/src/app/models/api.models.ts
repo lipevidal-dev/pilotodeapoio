@@ -414,6 +414,7 @@ export type ManualAllocationType =
   | 'ND'
   | 'FOLGA'
   | 'F4'
+  | 'FF'
   | 'FS'
   | 'FA'
   | 'FP'

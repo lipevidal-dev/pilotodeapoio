@@ -562,6 +562,8 @@ export function validateManualMove(
     if (n === "ND") moveType = "ND";
     else if (n.includes("FOLGA PEDIDA")) moveType = "FP";
     else if (n === "FOLGA SOCIAL" || n === "FS") moveType = "FS";
+    else if (n === "FOLGA 4" || n === "FOLGA4" || n === "F4") moveType = "F4";
+    else if (n === "FOLGA FERIADO" || n === "FOLGAFERIADO" || n === "FF") moveType = "FF";
     else if (n === "FOLGA") moveType = "FOLGA";
     else if (n === "SIMULADOR") moveType = "SIMULADOR";
     else if (n === "CURSO" || n === "CURSO ONLINE") moveType = "CURSO";
@@ -575,7 +577,7 @@ export function validateManualMove(
   }
 
   // APAO: folga normal não pode ser arrastada/trocada — use exclusão + realoque turno.
-  if (moveType === "FOLGA") {
+  if (moveType === "FOLGA" || moveType === "FF") {
     const did = employeeDomainId(v, source.employeeId);
     const emp = v.scheduleContext.employees.find((e) => e.id === did);
     const role = String(emp?.role ?? "").toUpperCase();

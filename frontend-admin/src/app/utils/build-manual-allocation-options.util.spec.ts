@@ -80,6 +80,7 @@ describe('buildManualAllocationOptions', () => {
 
     expect(keys).toContain('FOLGA');
     expect(keys).toContain('F4');
+    expect(keys).toContain('FF');
     expect(keys).toContain('FS');
     expect(keys).toContain('FP');
     expect(keys).toContain('VOO');
@@ -97,6 +98,7 @@ describe('buildManualAllocationOptions', () => {
 
     expect(keys).toContain('FOLGA');
     expect(keys).toContain('F4');
+    expect(keys).toContain('FF');
     expect(keys).toContain('FS');
     expect(keys).toContain('FP');
     expect(keys).toContain('ND');

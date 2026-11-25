@@ -12,6 +12,7 @@ export type ManualAllocationType =
   | "ND"
   | "FOLGA"
   | "F4"
+  | "FF"
   | "FS"
   | "FP"
   | "VOO"
@@ -79,6 +80,7 @@ export const PREALLOC_ALLOCATION_TYPES = new Set<ManualAllocationType>([
   "ND",
   "FOLGA",
   "F4",
+  "FF",
   "FS",
   "FP",
   "CURSO",
@@ -95,6 +97,8 @@ export function manualTypeToPreallocLabel(type: ManualAllocationType): string | 
       return "FOLGA";
     case "F4":
       return "FOLGA 4";
+    case "FF":
+      return "FOLGA FERIADO";
     case "FS":
       return "FOLGA SOCIAL";
     case "FP":

@@ -139,6 +139,7 @@ export function canWork(
     const folgaTypes = new Set([
       "FOLGA",
       "FOLGA 4",
+      "FOLGA FERIADO",
       "FOLGA ESCOLHIDA",
       "FOLGA SOCIAL",
       "FOLGA AGRUPADA",

@@ -305,6 +305,12 @@ describe('schedule-cell.mapper — cores por turno', () => {
     expect(summary.diasTrabalhados).toBe(0);
   });
 
+  it('Folga Feriado exibe FF na cor da folga', () => {
+    expect(mapLabelToCell('FOLGA FERIADO').display).toBe('FF');
+    expect(mapLabelToCell('FOLGA FERIADO').kind).toBe('folga');
+    expect(mapLabelToCell('FF').display).toBe('FF');
+  });
+
   it('exibe VOO do motor em preAllocation na grade visual', () => {
     const emp: Employee = {
       id: 'pao-1',

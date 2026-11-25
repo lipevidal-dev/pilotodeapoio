@@ -17,6 +17,7 @@ export const manualAllocationTypeSchema = z.enum([
   "ND",
   "FOLGA",
   "F4",
+  "FF",
   "FS",
   "FP",
   "VOO",
