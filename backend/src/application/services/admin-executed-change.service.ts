@@ -47,6 +47,8 @@ function humanLabel(token: string): string {
       return "folga";
     case "F4":
       return "folga 4";
+    case "FF":
+      return "folga feriado";
     case "FS":
       return "folga social";
     case "FA":

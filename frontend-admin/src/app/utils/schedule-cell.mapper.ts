@@ -63,6 +63,9 @@ export function mapShiftToCell(shiftCode: string): ScheduleCellData {
   if (code === 'ND') {
     return { display: 'ND', kind: 'nd', title: 'Não disponível' };
   }
+  if (code === 'ADM') {
+    return { display: 'ADM', kind: 'shift', title: 'Atividade Administrativa' };
+  }
   if (!code) {
     return emptyCell();
   }
@@ -112,6 +115,10 @@ export function mapLabelToCell(label: string, notes?: string | null): ScheduleCe
 
   if (n.includes('FERIAS')) return { display: 'FER', kind: 'ferias', title: label };
 
+  if (n === 'ADM' || n.includes('ATIVIDADE ADMINISTRATIVA')) {
+    return { display: 'ADM', kind: 'shift', title: 'Atividade Administrativa' };
+  }
+
   if (n.includes('VOO')) return { display: 'VOO', kind: 'voo', title: label };
 
   if (n.includes('SIMULADOR')) return { display: 'SIM', kind: 'simulador', title: label };
@@ -139,6 +146,10 @@ export function mapLabelToCell(label: string, notes?: string | null): ScheduleCe
 
   if (n === 'F4' || n === 'FOLGA 4' || n === 'FOLGA4') {
     return { display: 'F4', kind: 'folga', title: 'Folga 4' };
+  }
+
+  if (n === 'FF' || n === 'FOLGA FERIADO' || n === 'FOLGAFERIADO') {
+    return { display: 'FF', kind: 'folga', title: 'Folga Feriado' };
   }
 
   if (n.includes('FOLGA')) return { display: 'F', kind: 'folga', title: label };
@@ -201,6 +212,8 @@ const GENERATOR_PREALLOC_DISPLAY_LABELS = new Set([
   'FOLGA',
   'FOLGA 4',
   'F4',
+  'FOLGA FERIADO',
+  'FF',
   'FOLGA SOCIAL',
   'FOLGA AGRUPADA',
   'FOLGA ANIVERSÁRIO',

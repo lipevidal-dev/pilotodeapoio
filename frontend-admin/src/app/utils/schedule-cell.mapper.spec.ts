@@ -35,6 +35,14 @@ describe('schedule-cell.mapper — cores por turno', () => {
     expect(mapShiftToCell('ND').kind).toBe('nd');
   });
 
+  it('ADM aparece como atividade administrativa', () => {
+    const cell = mapShiftToCell('ADM');
+    expect(cell.display).toBe('ADM');
+    expect(cell.kind).toBe('shift');
+    expect(cell.title).toBe('Atividade Administrativa');
+    expect(mapLabelToCell('Atividade Administrativa').display).toBe('ADM');
+  });
+
   it('ND gerado em preAllocations aparece na escala visual', () => {
     const emp: Employee = {
       id: 'pao-1',
@@ -295,6 +303,12 @@ describe('schedule-cell.mapper — cores por turno', () => {
     expect(summary.folgas).toBe(1);
     expect(summary.turnos).toBe(0);
     expect(summary.diasTrabalhados).toBe(0);
+  });
+
+  it('Folga Feriado exibe FF na cor da folga', () => {
+    expect(mapLabelToCell('FOLGA FERIADO').display).toBe('FF');
+    expect(mapLabelToCell('FOLGA FERIADO').kind).toBe('folga');
+    expect(mapLabelToCell('FF').display).toBe('FF');
   });
 
   it('exibe VOO do motor em preAllocation na grade visual', () => {

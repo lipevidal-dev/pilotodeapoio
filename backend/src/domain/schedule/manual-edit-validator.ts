@@ -1,4 +1,3 @@
-import { wouldApaoFolgaBlockOffice } from "../rules/apao-availability.js";
 import { addDays } from "../rules/dates.js";
 import { canWork } from "../rules/eligibility.js";
 import { buildShiftMap } from "../shift/default-shifts.js";
@@ -476,7 +475,8 @@ export function validateManualSet(
     }
     const upperType = type.toUpperCase();
     const isT9 = upperType === "T9" || upperType === "T09";
-    const isLegacyParallel = v.parallelShiftCodes.has(type) && !isT9;
+    const isAdm = upperType === "ADM";
+    const isLegacyParallel = v.parallelShiftCodes.has(type) && !isT9 && !isAdm;
     if (isT9 || isLegacyParallel) {
       const pref = v.preferredShifts.get(ref.employeeId);
       if (!pref?.has(type)) {
@@ -531,20 +531,6 @@ export function validateManualSet(
         requiresConfirmation: true,
       });
     }
-    if (type === "FOLGA" || type === "FP") {
-      const did = employeeDomainId(v, ref.employeeId);
-      if (
-        did != null &&
-        emp.role === "APAO" &&
-        wouldApaoFolgaBlockOffice(v.scheduleContext, did, [ref.date])
-      ) {
-        conflicts.push({
-          code: "SEM_APAO_DISPONIVEL",
-          message:
-            "Conflito: não pode deixar o escritório sem APAO disponível em dia com PAO em T6.",
-        });
-      }
-    }
     return conflicts;
   }
 
@@ -576,6 +562,8 @@ export function validateManualMove(
     if (n === "ND") moveType = "ND";
     else if (n.includes("FOLGA PEDIDA")) moveType = "FP";
     else if (n === "FOLGA SOCIAL" || n === "FS") moveType = "FS";
+    else if (n === "FOLGA 4" || n === "FOLGA4" || n === "F4") moveType = "F4";
+    else if (n === "FOLGA FERIADO" || n === "FOLGAFERIADO" || n === "FF") moveType = "FF";
     else if (n === "FOLGA") moveType = "FOLGA";
     else if (n === "SIMULADOR") moveType = "SIMULADOR";
     else if (n === "CURSO" || n === "CURSO ONLINE") moveType = "CURSO";
@@ -589,7 +577,7 @@ export function validateManualMove(
   }
 
   // APAO: folga normal não pode ser arrastada/trocada — use exclusão + realoque turno.
-  if (moveType === "FOLGA") {
+  if (moveType === "FOLGA" || moveType === "FF") {
     const did = employeeDomainId(v, source.employeeId);
     const emp = v.scheduleContext.employees.find((e) => e.id === did);
     const role = String(emp?.role ?? "").toUpperCase();

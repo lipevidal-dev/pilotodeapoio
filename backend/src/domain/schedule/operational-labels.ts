@@ -31,6 +31,7 @@ export const MANUAL_PREALLOC_LABELS = new Set([
   "CURSO ONLINE",
   "CMA",
   "OUTRO",
+  "REUNIÃO DE ASSUNTOS",
   "FOLGA PEDIDA",
   "FP",
   "FÉRIAS",
@@ -40,6 +41,8 @@ export const MANUAL_PREALLOC_LABELS = new Set([
   "FOLGA ESCOLHIDA",
   "FOLGA 4",
   "F4",
+  "FOLGA FERIADO",
+  "FF",
   CROSS_MONTH_ND_LABEL,
 ]);
 
@@ -54,6 +57,9 @@ export function normalizeOperationalLabel(label: string): string {
   }
   if (upper === "F4" || upper === "FOLGA4" || upper === "FOLGA 4") {
     return "FOLGA 4";
+  }
+  if (upper === "FF" || upper === "FOLGAFERIADO" || upper.includes("FOLGA FERIADO")) {
+    return "FOLGA FERIADO";
   }
   if (upper === "FANI" || upper.includes("FOLGA ANIVERS")) {
     return "FOLGA ANIVERSÁRIO";
@@ -80,10 +86,46 @@ export function isOperationalHardBlock(label: string): boolean {
     n === "FOLGA" ||
     n === "FOLGA 4" ||
     n === "F4" ||
+    n === "FOLGA FERIADO" ||
+    n === "FF" ||
     n === "FOLGA SOCIAL" ||
     n === "FOLGA AGRUPADA"
   ) {
     return true;
   }
   return PROTECTED_PREALLOC_TYPES.has(n);
+}
+
+/**
+ * Na realizada, APAO espelha tudo. PAO não recebe VOO, folgas ou FP.
+ */
+export function isExcludedFromExecutedMirror(
+  label: string,
+  employeeType?: string | null,
+): boolean {
+  if ((employeeType ?? "").toUpperCase() === "APAO") return false;
+  const normalized = normalizeOperationalLabel(label).toUpperCase();
+  return (
+    normalized === "VOO" ||
+    normalized === "FOLGA" ||
+    normalized === "FOLGA 4" ||
+    normalized === "F4" ||
+    normalized === "FOLGA FERIADO" ||
+    normalized === "FF" ||
+    normalized === "FOLGA SOCIAL" ||
+    normalized === "FS" ||
+    normalized === "FOLGA AGRUPADA" ||
+    normalized === "FA" ||
+    normalized === "FOLGA PEDIDA" ||
+    normalized === "FP"
+  );
+}
+
+/** Dia ocupado por cadastro/pré-alocação que permanece na realizada (bloqueia turno no espelho). */
+export function blocksExecutedShiftMirror(
+  label: string,
+  employeeType?: string | null,
+): boolean {
+  if (isExcludedFromExecutedMirror(label, employeeType)) return false;
+  return isOperationalHardBlock(label);
 }

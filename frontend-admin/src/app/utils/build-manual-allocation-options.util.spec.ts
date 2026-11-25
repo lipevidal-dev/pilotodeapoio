@@ -33,6 +33,14 @@ describe('buildManualAllocationOptions', () => {
     }),
     shift({ code: 'T1', name: 'Turno 1 APAO', displayOrder: 0, roleType: 'APAO' }),
     shift({ code: 'T2', name: 'Turno 2 APAO', displayOrder: 1, roleType: 'APAO' }),
+    shift({
+      code: 'ADM',
+      name: 'Atividade Administrativa',
+      displayOrder: 5,
+      roleType: 'BOTH',
+      startTime: '08:00',
+      endTime: '17:00',
+    }),
     shift({ code: 'T99', displayOrder: 99, active: false }),
   ];
 
@@ -45,6 +53,7 @@ describe('buildManualAllocationOptions', () => {
     expect(keys).toContain('T8');
     expect(keys).toContain('T8_BLOCK');
     expect(keys).toContain('T9');
+    expect(keys).toContain('ADM');
     expect(keys.includes('T1' as ManualAllocationType)).toBe(false);
     expect(keys.includes('T2' as ManualAllocationType)).toBe(false);
     expect(keys.includes('T99' as ManualAllocationType)).toBe(false);
@@ -59,6 +68,7 @@ describe('buildManualAllocationOptions', () => {
 
     expect(keys).toContain('T1');
     expect(keys).toContain('T2');
+    expect(keys).toContain('ADM');
     expect(keys.includes('T6' as ManualAllocationType)).toBe(false);
     expect(keys.includes('T7' as ManualAllocationType)).toBe(false);
     expect(keys.includes('T9' as ManualAllocationType)).toBe(false);
@@ -70,6 +80,7 @@ describe('buildManualAllocationOptions', () => {
 
     expect(keys).toContain('FOLGA');
     expect(keys).toContain('F4');
+    expect(keys).toContain('FF');
     expect(keys).toContain('FS');
     expect(keys).toContain('FP');
     expect(keys).toContain('VOO');
@@ -87,6 +98,7 @@ describe('buildManualAllocationOptions', () => {
 
     expect(keys).toContain('FOLGA');
     expect(keys).toContain('F4');
+    expect(keys).toContain('FF');
     expect(keys).toContain('FS');
     expect(keys).toContain('FP');
     expect(keys).toContain('ND');
@@ -104,6 +116,7 @@ describe('buildManualAllocationOptions', () => {
     const options = buildManualAllocationOptions([], 'APAO');
     expect(options.some((o) => o.key === 'T1')).toBe(true);
     expect(options.some((o) => o.key === 'T4')).toBe(true);
+    expect(options.some((o) => o.key === 'ADM')).toBe(true);
   });
 
   it('filtra por employeeTypeAllowed quando roleType não vem na API', () => {

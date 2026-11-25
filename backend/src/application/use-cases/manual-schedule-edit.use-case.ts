@@ -36,7 +36,11 @@ import type {
   ManualEditMovePayload,
   ManualEditRangePayload,
 } from "../../domain/schedule/manual-edit-types.js";
-import { iterDateRange, SHIFT_ALLOCATION_TYPES } from "../../domain/schedule/manual-edit-types.js";
+import {
+  iterDateRange,
+  PUBLISHED_OPERATIONAL_TYPES,
+  SHIFT_ALLOCATION_TYPES,
+} from "../../domain/schedule/manual-edit-types.js";
 import {
   applyInstructionShiftIfNeeded,
   baseShiftCode,
@@ -102,6 +106,7 @@ export class ManualScheduleEditUseCase {
       else if (n.includes("FOLGA PEDIDA")) moveType = "FP";
       else if (n === "FOLGA SOCIAL" || n === "FS") moveType = "FS";
       else if (n === "FOLGA 4" || n === "FOLGA4" || n === "F4") moveType = "F4";
+      else if (n === "FOLGA FERIADO" || n === "FOLGAFERIADO" || n === "FF") moveType = "FF";
       else if (n === "FOLGA") moveType = "FOLGA";
       else if (n === "SIMULADOR") moveType = "SIMULADOR";
       else if (n === "CURSO" || n === "CURSO ONLINE") moveType = "CURSO";
@@ -170,7 +175,7 @@ export class ManualScheduleEditUseCase {
       force?: boolean;
     },
   ): Promise<ManualEditResult> {
-    const month = await this.loadEditableMonth(scheduleMonthId);
+    const month = await this.loadEditableMonth(scheduleMonthId, payload.type, payload.mode);
     const vctx = await this.buildValidation(month);
     const employees = await this.scheduleRepo.listActiveEmployees();
     const allConflicts: ManualEditConflict[] = [];
@@ -278,10 +283,21 @@ export class ManualScheduleEditUseCase {
     }
   }
 
-  private async loadEditableMonth(scheduleMonthId: string) {
+  private async loadEditableMonth(
+    scheduleMonthId: string,
+    type?: ManualAllocationType,
+    mode?: "set" | "clear",
+  ) {
     const month = await this.editRepo.findMonthById(scheduleMonthId);
     if (!month) throw new ScheduleMonthNotFoundError(scheduleMonthId);
-    if (month.status === "PUBLISHED") throw new SchedulePublishedCannotEditError();
+    const operationalOnPublished =
+      month.status === "PUBLISHED" &&
+      mode === "set" &&
+      !!type &&
+      PUBLISHED_OPERATIONAL_TYPES.has(type);
+    if (month.status === "PUBLISHED" && !operationalOnPublished) {
+      throw new SchedulePublishedCannotEditError();
+    }
     return month;
   }
 

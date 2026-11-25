@@ -1,10 +1,14 @@
 /**
- * Alertas de descanso APAO + VOO/CURSO/SIMULADOR no popup.
+ * Alertas de descanso APAO + VOO/CURSO/SIMULADOR/ADM no popup.
  * Só leitura/informativo: não bloqueia alocação e não mexe no PAO.
+ * v9: troca de verdade — grava/pinta os dois orig; orig vazio limpa o outro lado.
+ * v10: VOO/Curso/Simulador usam o mês da toolbar, não o lead-in/executada do mês anterior.
+ * v12: VOO/Curso/Simulador viram cartões de pré-alocação (igual PAO); ADM nos turnos APAO.
+ * v13: FF (Folga Feriado) conta como folga no alerta de descanso.
  */
 (function () {
-  if (window.__apaoAlertasV4) return;
-  window.__apaoAlertasV4 = true;
+  if (window.__apaoAlertasV13) return;
+  window.__apaoAlertasV13 = true;
 
   var HOUR_MS = 60 * 60 * 1000;
   var DAY_MS = 24 * HOUR_MS;
@@ -18,17 +22,19 @@
     T3: { start: "12:00", end: "18:00" },
     T4: { start: "18:00", end: "00:00" },
   };
-  var DAY_OFF = { F: 1, F4: 1, FS: 1, FA: 1, FANI: 1, FP: 1, FOLGA: 1 };
-  var EXTRA_OPTIONS = [
-    { key: "VOO", label: "VOO" },
-    { key: "CURSO", label: "Curso" },
-    { key: "SIMULADOR", label: "Simulador" },
+  var DAY_OFF = { F: 1, FS: 1, FA: 1, FANI: 1, FP: 1, FOLGA: 1, F4: 1, FF: 1 };
+  var EXTRA_CARDS = [
+    { key: "VOO", code: "VOO", label: "VOO", cls: "alloc-option--voo", section: "pre" },
+    { key: "CURSO", code: "CURSO", label: "Curso", cls: "alloc-option--curso", section: "pre" },
+    { key: "SIMULADOR", code: "SIMULADOR", label: "Simulador", cls: "alloc-option--simulador", section: "pre" },
+    { key: "ADM", code: "ADM", label: "Atividade Administrativa", cls: "alloc-option--shift", section: "turnos" },
   ];
 
   var lastSchedule = null;
+  var lastSwaps = [];
   var lastPaintKey = "";
 
-  var style = document.createElement("style");
+  var style = document.getElementById("apao-alertas-style") || document.createElement("style");
   style.id = "apao-alertas-style";
   style.textContent = [
     ".group-row .group-filler.col-day{text-align:center;vertical-align:middle}",
@@ -38,12 +44,19 @@
     ".apao-rest-alert{display:inline-flex;align-items:center;gap:.15rem;min-height:1.25rem;padding:.08rem .3rem;border:1px solid #fdba74;border-radius:999px;background:#fff7ed;color:#9a3412;font-size:.65rem;font-weight:800;line-height:1;letter-spacing:normal;text-transform:none;cursor:help}",
     ".apao-rest-alert img{width:.9rem;height:.9rem;object-fit:contain}",
     ".apao-rest-alerts--cell .apao-rest-alert{min-height:auto;padding:.05rem}",
-    ".apao-extra-options{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.7rem}",
-    ".apao-extra-options button{min-height:2.1rem;border:1px solid #d7dce2;border-radius:8px;background:#fff;color:#2d2d2d;font:inherit;font-size:.8rem;font-weight:700;padding:.35rem .7rem;cursor:pointer}",
-    ".apao-extra-options button:hover{border-color:#f15a22;color:#f15a22;background:#fff4ed}",
+    ".alloc-option[data-apao-extra-card]{min-height:3.25rem;padding:.4rem .25rem;border:1px solid currentColor;border-radius:9px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.12rem;font:inherit}",
+    ".alloc-option[data-apao-extra-card] .alloc-option-code{font-size:.9rem;font-weight:800;line-height:1}",
+    ".alloc-option[data-apao-extra-card] .alloc-option-label{font-size:.62rem;line-height:1.1;text-align:center}",
+    ".alloc-option[data-apao-extra-card].selected{border:2px solid #f15a22;box-shadow:0 0 0 2px #f15a2224}",
+    ".alloc-option[data-apao-extra-card].alloc-option--voo{background:#fff7ed;color:#c2410c;border-color:#fdba74}",
+    ".alloc-option[data-apao-extra-card].alloc-option--curso{background:#fef3c7;color:#92400e;border-color:#fcd34d}",
+    ".alloc-option[data-apao-extra-card].alloc-option--simulador{background:#f3f4f6;color:#374151;border-color:#d1d5db}",
+    ".alloc-option[data-apao-extra-card].alloc-option--shift{background:#eff6ff;color:#1d4ed8;border-color:#93c5fd}",
     ".apao-extra-status{margin:.45rem 0 0;font-size:.75rem;color:#6b7280}",
     ".apao-extra-status.err{color:#b91c1c}",
     ".schedule-cell.cell-fa,.legend-chip.cell-fa{background:#bbf7d0!important;color:#166534!important;border-color:#86efac!important}",
+    ".schedule-cell.cell-swap-applied{position:relative}",
+    ".schedule-cell.cell-swap-applied::after{content:'';position:absolute;top:0;right:0;width:0;height:0;border-style:solid;border-width:0 .55rem .55rem 0;border-color:transparent #dc2626 transparent transparent;pointer-events:none}",
   ].join("");
   (document.head || document.documentElement).appendChild(style);
 
@@ -99,7 +112,7 @@
     if (!upper || upper === "·") return "";
     var shift = upper.match(/\b(TI?\d+)\b/);
     if (shift) return shift[1];
-    var off = upper.match(/\b(FANI|FOLGA|FS|FA|FP|F|ND)\b/);
+    var off = upper.match(/\b(FANI|FOLGA|FS|FA|FP|F4|FF|F|ND)\b/);
     return off ? off[1] : upper.split(" ")[0];
   }
 
@@ -132,12 +145,207 @@
     return !!DAY_OFF[String(text || "").trim().toUpperCase()];
   }
 
+  function isoDay(value) {
+    var s = String(value || "");
+    var m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : s.slice(0, 10);
+  }
+
+  function expandIso(start, length) {
+    var n = Math.max(1, Number(length) || 1);
+    var out = [];
+    var base = isoDay(start);
+    if (!base) return out;
+    for (var i = 0; i < n; i++) out.push(addDays(base, i));
+    return out;
+  }
+
+  function shortToken(label) {
+    var n = compact(label).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (!n) return "";
+    if (n.indexOf("VOO") >= 0) return "VOO";
+    if (n === "ND" || n.indexOf("NAO DISPONIVEL") >= 0) return "ND";
+    if (n.indexOf("FOLGA PEDIDA") >= 0 || n === "FP") return "FP";
+    if (n === "FOLGA SOCIAL" || n === "FS") return "FS";
+    if (n.indexOf("FOLGA AGRUPADA") >= 0 || n === "FA") return "FA";
+    if (n.indexOf("FOLGA ANIVERS") >= 0 || n === "FANI") return "FANI";
+    if (n === "FOLGA 4" || n === "FOLGA4" || n === "F4") return "F4";
+    if (n === "FOLGA FERIADO" || n === "FOLGAFERIADO" || n === "FF") return "FF";
+    if (n === "FOLGA" || n === "F") return "F";
+    if (n.indexOf("SIMULADOR") >= 0) return "SIM";
+    if (n.indexOf("CURSO") >= 0) return "CRS";
+    if (n === "CMA") return "CMA";
+    if (n.indexOf("FERIAS") >= 0) return "FER";
+    return n;
+  }
+
+  function isBlankTok(value) {
+    var raw = compact(value).toLowerCase();
+    if (!raw) return true;
+    return raw === "·" || raw === "-" || raw === "—" || raw === "–" || raw === "−" || raw === "em branco";
+  }
+
+  function normTok(value) {
+    var raw = compact(value).toUpperCase();
+    if (isBlankTok(raw)) return "";
+    if (raw.indexOf("TI") === 0 && raw.length > 2) return "T" + raw.slice(2);
+    return raw;
+  }
+
+  function tokensMatch(display, stored) {
+    var a = normTok(baseShift(display) || display);
+    var b = normTok(baseShift(stored) || stored);
+    if (!a || !b) return !a && !b;
+    return a === b || a.indexOf(b) === 0 || b.indexOf(a) === 0;
+  }
+
+  function findDayIndex(list, empId, iso) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].employeeId === empId && isoDay(list[i].date) === iso) return i;
+    }
+    return -1;
+  }
+
+  function retargetDate(prev, iso) {
+    if (!prev) return iso + "T12:00:00.000Z";
+    var s = String(prev);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return iso;
+    if (s.indexOf("T") > 0) return iso + s.slice(10);
+    return iso + "T12:00:00.000Z";
+  }
+
+  function tokenAt(assignments, pres, empId, iso) {
+    var aIdx = findDayIndex(assignments, empId, iso);
+    if (aIdx >= 0) {
+      var shift = baseShift(assignments[aIdx].shiftCode);
+      if (shift) return shift;
+      var fromAssign = shortToken(assignments[aIdx].label);
+      if (fromAssign) return fromAssign;
+    }
+    var pIdx = findDayIndex(pres, empId, iso);
+    if (pIdx >= 0) {
+      var fromPre = shortToken(pres[pIdx].label);
+      if (fromPre) return fromPre;
+    }
+    return "";
+  }
+
+  function upsertAssignment(list, empId, iso, token) {
+    var desired = normTok(baseShift(token) || shortToken(token) || token);
+    if (!desired) return false;
+    var idx = findDayIndex(list, empId, iso);
+    if (idx >= 0) {
+      var cur = normTok(baseShift(list[idx].shiftCode) || shortToken(list[idx].label));
+      if (tokensMatch(cur, desired)) return false;
+      list[idx] = Object.assign({}, list[idx], {
+        shiftCode: desired,
+        date: retargetDate(list[idx].date, iso),
+      });
+      return true;
+    }
+    list.push({
+      employeeId: empId,
+      date: iso + "T12:00:00.000Z",
+      shiftCode: desired,
+      label: null,
+      source: "MANUAL",
+    });
+    return true;
+  }
+
+  function removeAt(list, empId, iso) {
+    var idx = findDayIndex(list, empId, iso);
+    if (idx < 0) return false;
+    list.splice(idx, 1);
+    return true;
+  }
+
+  function setDayToken(assignments, pres, empId, iso, token) {
+    var desired = normTok(baseShift(token) || shortToken(token) || token);
+    if (!desired) {
+      var removedA = removeAt(assignments, empId, iso);
+      var removedP = removeAt(pres, empId, iso);
+      return removedA || removedP;
+    }
+    return upsertAssignment(assignments, empId, iso, desired);
+  }
+
+  function partAt(joined, index) {
+    var parts = String(joined || "").split("+").map(function (p) { return p.trim(); }).filter(Boolean);
+    if (!parts.length) return "";
+    return parts[Math.min(index, parts.length - 1)] || "";
+  }
+
+  function applyApprovedSwapsToPayload(data) {
+    if (!data || !Array.isArray(data.shiftSwaps) || !Array.isArray(data.assignments)) return false;
+    var assignments = data.assignments;
+    var pres = Array.isArray(data.preAllocations) ? data.preAllocations : [];
+    var changed = false;
+    for (var s = 0; s < data.shiftSwaps.length; s++) {
+      var swap = data.shiftSwaps[s];
+      if (!swap || swap.status !== "APPROVED") continue;
+      if (String(swap.notes || "").indexOf("__ADMIN_EXECUTED_AUDIT__") >= 0) continue;
+      var srcDates = swap.requesterDates && swap.requesterDates.length
+        ? swap.requesterDates.map(isoDay)
+        : expandIso(swap.date, swap.pairLength || 1);
+      var tgtDates = swap.targetDates && swap.targetDates.length
+        ? swap.targetDates.map(isoDay)
+        : expandIso(swap.targetDate || swap.date, swap.pairLength || 1);
+      var n = Math.min(srcDates.length, tgtDates.length);
+      var self = swap.kind === "SELF";
+      var reqEmp = swap.requesterEmployeeId;
+      var tgtEmp = self ? reqEmp : swap.targetEmployeeId;
+      if (!reqEmp || !tgtEmp) continue;
+      for (var i = 0; i < n; i++) {
+        var srcIso = srcDates[i];
+        var tgtIso = tgtDates[i];
+        var origReq = normTok(baseShift(partAt(swap.requesterShiftCode, i)) || shortToken(partAt(swap.requesterShiftCode, i)) || partAt(swap.requesterShiftCode, i));
+        var origTgt = normTok(baseShift(partAt(swap.targetShiftCode, i)) || shortToken(partAt(swap.targetShiftCode, i)) || partAt(swap.targetShiftCode, i));
+        if (!origReq && !origTgt) continue;
+        if (origReq && origTgt && origReq === origTgt) continue;
+        var nowReq = normTok(tokenAt(assignments, pres, reqEmp, srcIso));
+        var nowTgt = normTok(tokenAt(assignments, pres, tgtEmp, tgtIso));
+        if (tokensMatch(nowReq, origTgt) && tokensMatch(nowTgt, origReq)) continue;
+        changed = setDayToken(assignments, pres, reqEmp, srcIso, origTgt) || changed;
+        changed = setDayToken(assignments, pres, tgtEmp, tgtIso, origReq) || changed;
+      }
+    }
+    if (changed) {
+      data.assignments = assignments;
+      data.preAllocations = pres;
+    }
+    return changed;
+  }
+
+  function isExecutedScheduleUrl(url) {
+    return /\/(?:portal\/)?schedules\/\d+\/\d+(?:\/executed)?(?:\?|$)/.test(url || "");
+  }
+
+  function patchExecutedBody(url, text) {
+    if (!isExecutedScheduleUrl(url) || !text) return text;
+    try {
+      var data = JSON.parse(text);
+      if (applyApprovedSwapsToPayload(data)) return JSON.stringify(data);
+    } catch (err) {}
+    return text;
+  }
+
   function captureSchedule(url, body) {
     if (!/\/schedules\//.test(url || "")) return;
     try {
-      var data = JSON.parse(body);
+      var data = typeof body === "string" ? JSON.parse(body) : body;
       if (!data || !Array.isArray(data.employees) || !Array.isArray(data.assignments)) return;
+      if (/\/executed(?:\?|$)/.test(url || "")) {
+        if (Array.isArray(data.shiftSwaps)) lastSwaps = data.shiftSwaps;
+        return;
+      }
+      var rec = data.scheduleMonth;
+      var shown = currentPeriodFromToolbar();
+      if (rec && shown && (Number(rec.year) !== shown.year || Number(rec.month) !== shown.month)) {
+        return;
+      }
       lastSchedule = data;
+      if (Array.isArray(data.shiftSwaps)) lastSwaps = data.shiftSwaps;
       var shifts = data.shifts || [];
       for (var i = 0; i < shifts.length; i++) {
         var code = String(shifts[i].code || "").toUpperCase();
@@ -154,28 +362,57 @@
       var input = arguments[0];
       var url = typeof input === "string" ? input : (input && input.url) || "";
       return origFetch.apply(this, arguments).then(function (res) {
-        try {
-          var clone = res.clone();
-          clone.text().then(function (text) { captureSchedule(url, text); }).catch(function () {});
-        } catch (err) {}
-        return res;
+        if (!isExecutedScheduleUrl(url)) {
+          try {
+            var clone = res.clone();
+            clone.text().then(function (text) { captureSchedule(url, text); }).catch(function () {});
+          } catch (err) {}
+          return res;
+        }
+        return res.text().then(function (text) {
+          var patched = patchExecutedBody(url, text);
+          captureSchedule(url, patched);
+          return new Response(patched, {
+            status: res.status,
+            statusText: res.statusText,
+            headers: res.headers,
+          });
+        });
       });
     };
   }
 
   var xhrOpen = XMLHttpRequest.prototype.open;
-  var xhrSend = XMLHttpRequest.prototype.send;
+  var textDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, "responseText");
+  var respDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, "response");
   XMLHttpRequest.prototype.open = function (method, url) {
-    this.__apaoUrl = url;
+    this.__apaoUrl = String(url || "");
+    var xhr = this;
+    xhr.addEventListener("readystatechange", function () {
+      if (xhr.readyState !== 4) return;
+      try {
+        var value = null;
+        if (respDesc && respDesc.get) {
+          try { value = respDesc.get.call(xhr); } catch (err) { value = null; }
+        }
+        if (value && typeof value === "object") {
+          applyApprovedSwapsToPayload(value);
+          captureSchedule(xhr.__apaoUrl, value);
+          return;
+        }
+        var raw = "";
+        if (textDesc && textDesc.get) {
+          try { raw = textDesc.get.call(xhr); } catch (err) { raw = ""; }
+        }
+        if (!raw) {
+          try { raw = xhr.responseText; } catch (err) { raw = ""; }
+        }
+        var patched = patchExecutedBody(xhr.__apaoUrl, raw);
+        captureSchedule(xhr.__apaoUrl, patched);
+      } catch (err) {}
+    });
     return xhrOpen.apply(this, arguments);
   };
-  XMLHttpRequest.prototype.send = function () {
-    this.addEventListener("load", function () {
-      captureSchedule(this.__apaoUrl, this.responseText);
-    });
-    return xhrSend.apply(this, arguments);
-  };
-
   function groupTitle(group) {
     var textEl = group.querySelector(".group-label-text");
     var raw = compact((textEl || group).textContent || "");
@@ -217,16 +454,22 @@
     return isoFromParts(year, month, dayOnly);
   }
 
-  function currentPeriod() {
-    var monthRec = lastSchedule && lastSchedule.scheduleMonth;
-    if (monthRec && monthRec.year && monthRec.month) {
-      return { year: Number(monthRec.year), month: Number(monthRec.month) };
-    }
+  function currentPeriodFromToolbar() {
     var text = compact((document.querySelector(".escala-toolbar__period") || {}).textContent || "").toLowerCase();
     var named = text.match(/\b(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\b[^\d]*(\d{4})/);
     if (named) return { year: Number(named[2]), month: MONTHS[named[1]] };
     var numeric = text.match(/(\d{1,2})\s*[\/\-]\s*(\d{4})/);
     if (numeric) return { year: Number(numeric[2]), month: Number(numeric[1]) };
+    return null;
+  }
+
+  function currentPeriod() {
+    var shown = currentPeriodFromToolbar();
+    if (shown) return shown;
+    var monthRec = lastSchedule && lastSchedule.scheduleMonth;
+    if (monthRec && monthRec.year && monthRec.month) {
+      return { year: Number(monthRec.year), month: Number(monthRec.month) };
+    }
     var now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
   }
@@ -584,37 +827,278 @@
     });
   }
 
+  function classForCode(code) {
+    var c = baseShift(code);
+    if (c === "T6") return "cell-t6";
+    if (c === "T7") return "cell-t7";
+    if (c === "T8") return "cell-t8";
+    if (c === "T9") return "cell-t9";
+    if (c === "ND") return "cell-nd";
+    if (c === "FS") return "cell-fs";
+    if (c === "FA") return "cell-fa";
+    if (c === "FANI") return "cell-fani";
+    if (c === "FP") return "cell-fp";
+    if (c === "F" || c === "FOLGA" || c === "F4" || c === "FF") return "cell-folga";
+    if (c === "FER") return "cell-ferias";
+    if (c === "ADM") return "cell-shift";
+    if (c === "VOO") return "cell-voo";
+    if (c === "SIM") return "cell-simulador";
+    if (c === "CRS") return "cell-curso";
+    if (c === "CMA") return "cell-cma";
+    if (/^TI/.test(normTok(code))) return "cell-instruction";
+    if (/^T/.test(c)) return "cell-shift";
+    return "cell-other";
+  }
+
+  function findDataRow(table, name) {
+    var want = compact(name).toUpperCase();
+    if (!want) return null;
+    var rows = table.querySelectorAll("tbody tr");
+    for (var i = 0; i < rows.length; i++) {
+      var el = rows[i].querySelector(".emp-name");
+      if (!el) continue;
+      if (compact(el.textContent).toUpperCase() === want) return rows[i];
+    }
+    for (var j = 0; j < rows.length; j++) {
+      var el2 = rows[j].querySelector(".emp-name");
+      if (!el2) continue;
+      var got = compact(el2.textContent).toUpperCase();
+      if (got.indexOf(want) >= 0 || want.indexOf(got) >= 0) return rows[j];
+    }
+    return null;
+  }
+
+  function tdForIso(table, row, iso, year, month) {
+    if (!row || !iso) return null;
+    var cols = columnMeta(table);
+    var tds = row.querySelectorAll("td.col-day");
+    for (var i = 0; i < tds.length; i++) {
+      var meta = cols[i] || {};
+      if (meta.lead || tds[i].classList.contains("col-lead")) continue;
+      if (isoForColumn(meta, year, month) === iso) return tds[i];
+    }
+    return null;
+  }
+
+  function setCellDisplay(td, code) {
+    if (!td) return;
+    var desired = normTok(baseShift(code) || shortToken(code) || code);
+    var cell = td.querySelector(".schedule-cell") || td;
+    var classList = ["cell-t6","cell-t7","cell-t8","cell-t9","cell-shift","cell-nd","cell-folga","cell-fs","cell-fa","cell-empty"];
+    if (!desired) {
+      cell.textContent = "";
+      cell.classList.add("schedule-cell", "cell-empty", "cell-swap-applied");
+      classList.forEach(function (cls) {
+        if (cls !== "cell-empty") cell.classList.remove(cls);
+      });
+      return;
+    }
+    var cur = cellCode(cell.textContent);
+    if (!tokensMatch(cur, desired)) cell.textContent = desired;
+    cell.classList.add("schedule-cell", classForCode(desired), "cell-swap-applied");
+    classList.forEach(function (cls) {
+      if (cls !== classForCode(desired)) cell.classList.remove(cls);
+    });
+  }
+
+  function applySwapsToDom() {
+    var swaps = lastSwaps.length ? lastSwaps : (lastSchedule && lastSchedule.shiftSwaps) || [];
+    if (!swaps.length) return;
+    var table = document.querySelector(".schedule-table, table.schedule-grid, .schedule-grid table");
+    if (!table) return;
+    var period = currentPeriod();
+    for (var s = 0; s < swaps.length; s++) {
+      var swap = swaps[s];
+      if (!swap || swap.status !== "APPROVED") continue;
+      if (String(swap.notes || "").indexOf("__ADMIN_EXECUTED_AUDIT__") >= 0) continue;
+      var srcDates = swap.requesterDates && swap.requesterDates.length
+        ? swap.requesterDates.map(isoDay)
+        : expandIso(swap.date, swap.pairLength || 1);
+      var tgtDates = swap.targetDates && swap.targetDates.length
+        ? swap.targetDates.map(isoDay)
+        : expandIso(swap.targetDate || swap.date, swap.pairLength || 1);
+      var n = Math.min(srcDates.length, tgtDates.length);
+      var self = swap.kind === "SELF";
+      var reqRow = findDataRow(table, swap.requesterName);
+      var tgtRow = findDataRow(table, self ? swap.requesterName : swap.targetName);
+      if (!reqRow || !tgtRow) continue;
+      for (var i = 0; i < n; i++) {
+        var reqTd = tdForIso(table, reqRow, srcDates[i], period.year, period.month);
+        var tgtTd = tdForIso(table, tgtRow, tgtDates[i], period.year, period.month);
+        var origReq = normTok(baseShift(partAt(swap.requesterShiftCode, i)) || shortToken(partAt(swap.requesterShiftCode, i)) || partAt(swap.requesterShiftCode, i));
+        var origTgt = normTok(baseShift(partAt(swap.targetShiftCode, i)) || shortToken(partAt(swap.targetShiftCode, i)) || partAt(swap.targetShiftCode, i));
+        if (!origReq && !origTgt) continue;
+        if (origReq && origTgt && origReq === origTgt) continue;
+        setCellDisplay(reqTd, origTgt);
+        setCellDisplay(tgtTd, origReq);
+      }
+    }
+  }
+
+  function extraStatusEl(card) {
+    var el = card.querySelector(".apao-extra-status");
+    if (el) return el;
+    el = document.createElement("p");
+    el.className = "apao-extra-status";
+    var body = card.querySelector(".alloc-body") || card;
+    body.appendChild(el);
+    return el;
+  }
+
+  function headingGrid(card, pattern, fallbackIndex) {
+    var headings = card.querySelectorAll("h3, .alloc-section-title");
+    for (var i = 0; i < headings.length; i++) {
+      if (pattern.test(compact(headings[i].textContent))) {
+        return headings[i].parentElement.querySelector(".alloc-options-grid") || headings[i].nextElementSibling;
+      }
+    }
+    var grids = card.querySelectorAll(".alloc-options-grid");
+    return grids.length > fallbackIndex ? grids[fallbackIndex] : grids[0];
+  }
+
+  function gridHasCode(grid, code) {
+    if (!grid) return false;
+    var wanted = String(code || "").toUpperCase();
+    var nodes = grid.querySelectorAll(".alloc-option, .alloc-option-code");
+    for (var i = 0; i < nodes.length; i++) {
+      var txt = compact(nodes[i].textContent).toUpperCase();
+      if (!txt) continue;
+      if (txt === wanted || txt.indexOf(wanted + " ") === 0) return true;
+      var codeEl = nodes[i].querySelector && nodes[i].querySelector(".alloc-option-code");
+      if (codeEl && compact(codeEl.textContent).toUpperCase() === wanted) return true;
+    }
+    return false;
+  }
+
+  function makeExtraCard(grid, opt) {
+    var template = grid.querySelector(".alloc-option--" + (opt.section === "turnos" ? "shift" : "folga")) ||
+      grid.querySelector(".alloc-option");
+    var btn;
+    if (template) {
+      btn = template.cloneNode(true);
+      btn.classList.remove("selected");
+      btn.className = "alloc-option " + opt.cls;
+      var code = btn.querySelector(".alloc-option-code");
+      var label = btn.querySelector(".alloc-option-label");
+      if (code) code.textContent = opt.code;
+      if (label) label.textContent = opt.label;
+      if (!code && !label) {
+        btn.innerHTML = '<span class="alloc-option-code">' + opt.code + '</span><span class="alloc-option-label">' + opt.label + "</span>";
+      }
+    } else {
+      btn = document.createElement("button");
+      btn.className = "alloc-option " + opt.cls;
+      btn.innerHTML = '<span class="alloc-option-code">' + opt.code + '</span><span class="alloc-option-label">' + opt.label + "</span>";
+    }
+    btn.type = "button";
+    btn.setAttribute("data-apao-extra-card", opt.key);
+    btn.title = opt.label;
+    return btn;
+  }
+
+  function selectExtraCard(card, btn) {
+    card.querySelectorAll(".alloc-option.selected, .alloc-clear.selected").forEach(function (el) {
+      el.classList.remove("selected");
+    });
+    btn.classList.add("selected");
+  }
+
+  function injectExtraCards(card) {
+    EXTRA_CARDS.forEach(function (opt) {
+      if (card.querySelector('[data-apao-extra-card="' + opt.key + '"]')) return;
+      var grid = opt.section === "turnos"
+        ? headingGrid(card, /^turnos$/i, 0)
+        : headingGrid(card, /pr[eé]-aloca/i, 1);
+      if (!grid) return;
+      if (gridHasCode(grid, opt.code) || (opt.key === "ADM" && gridHasCode(grid, "ATIVIDADE ADMINISTRATIVA"))) return;
+      var btn = makeExtraCard(grid, opt);
+      btn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        selectExtraCard(card, btn);
+      });
+      grid.appendChild(btn);
+    });
+  }
+
+  function wireApplyIntercept(card) {
+    if (card.getAttribute("data-apao-apply-wired")) return;
+    card.setAttribute("data-apao-apply-wired", "1");
+    card.addEventListener("click", function (ev) {
+      var native = ev.target && ev.target.closest ? ev.target.closest(".alloc-option:not([data-apao-extra-card]), .alloc-clear") : null;
+      if (native) {
+        card.querySelectorAll("[data-apao-extra-card].selected").forEach(function (el) {
+          el.classList.remove("selected");
+        });
+        return;
+      }
+      var applyBtn = ev.target && ev.target.closest ? ev.target.closest("button, .p-button") : null;
+      if (!applyBtn) return;
+      var txt = compact(applyBtn.textContent).toUpperCase();
+      if (txt.indexOf("APLICAR") < 0) return;
+      var selected = card.querySelector("[data-apao-extra-card].selected");
+      if (!selected) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      applyExtra(selected.getAttribute("data-apao-extra-card"), extraStatusEl(card));
+    }, true);
+  }
+
   function enhanceDialog() {
     var card = document.querySelector(".alloc-card");
-    if (!card || card.querySelector(".apao-extra-options")) return;
+    if (!card) return;
+    var leftover = card.querySelector(".apao-extra-options");
+    if (leftover && leftover.parentNode) leftover.parentNode.removeChild(leftover);
     var subtitle = (card.querySelector(".alloc-subtitle") || {}).textContent || "";
     var name = compact(subtitle.split("•")[0]);
     if (!name || !isApaoName(name)) return;
-    var body = card.querySelector(".alloc-body") || card;
-    var wrap = document.createElement("div");
-    wrap.className = "apao-extra-options";
-    var status = document.createElement("p");
-    status.className = "apao-extra-status";
-    status.textContent = "Opções extras do APAO: não bloqueiam o restante da escala.";
-    EXTRA_OPTIONS.forEach(function (opt) {
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = opt.label;
-      btn.addEventListener("click", function () {
-        applyExtra(opt.key, status);
-      });
-      wrap.appendChild(btn);
-    });
-    body.appendChild(wrap);
-    body.appendChild(status);
+    injectExtraCards(card);
+    wireApplyIntercept(card);
+  }
+
+  var lastFetchKey = "";
+  var lastFetchAt = 0;
+  function refreshSwapsFromApi() {
+    var period = currentPeriod();
+    var key = period.year + "-" + period.month;
+    var now = Date.now();
+    if (key === lastFetchKey && lastSwaps.length) return;
+    if (key === lastFetchKey && now - lastFetchAt < 8000) return;
+    var tok = token();
+    if (!tok) return;
+    lastFetchKey = key;
+    lastFetchAt = now;
+    var url = "/api/schedules/" + period.year + "/" + period.month + "/executed?_ts=" + now;
+    var run = origFetch || window.fetch;
+    if (!run) return;
+    run.call(window, url, { headers: { Authorization: "Bearer " + tok } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (!data) {
+          lastFetchKey = "";
+          return;
+        }
+        if (Array.isArray(data.shiftSwaps)) lastSwaps = data.shiftSwaps;
+        if (!lastSchedule && Array.isArray(data.employees)) lastSchedule = data;
+        applySwapsToDom();
+      })
+      .catch(function () { lastFetchKey = ""; });
   }
 
   function sync() {
     var path = (location.pathname || "").replace(/\/+$/, "");
     if (path === "/escala" || path.indexOf("/escala") === 0) paintAlerts();
+    refreshSwapsFromApi();
+    applySwapsToDom();
     enhanceDialog();
   }
 
-  setInterval(sync, 500);
+  setInterval(sync, 400);
   window.addEventListener("popstate", function () { setTimeout(sync, 0); });
+  var obs = new MutationObserver(function () {
+    var path = (location.pathname || "").replace(/\/+$/, "");
+    applySwapsToDom();
+  });
+  obs.observe(document.documentElement, { childList: true, subtree: true });
 })();

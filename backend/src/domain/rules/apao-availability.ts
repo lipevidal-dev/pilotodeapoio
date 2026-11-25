@@ -82,23 +82,3 @@ export function folgaAgrupadaDatesInMonth(ctx: ScheduleContext): Set<string> {
 export function hasFolgaAgrupadaOnDate(ctx: ScheduleContext, date: string): boolean {
   return folgaAgrupadaDatesInMonth(ctx).has(date);
 }
-
-export function wouldApaoFolgaBlockOffice(
-  ctx: ScheduleContext,
-  employeeId: number,
-  dates: string[],
-): boolean {
-  const roleMap = buildRoleMap(ctx);
-  if (roleMap.get(employeeId) !== "APAO") return false;
-
-  for (const day of iterDays(ctx.year, ctx.month)) {
-    if (!dayRequiresApaoCoverage(ctx, day)) continue;
-
-    let available = countAvailableApaosOnDay(ctx, day);
-    if (dates.includes(day) && isApaoEmployeeAvailableOnDay(ctx, employeeId, day)) {
-      available -= 1;
-    }
-    if (available < 1) return true;
-  }
-  return false;
-}

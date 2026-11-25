@@ -7,10 +7,12 @@ export type ManualAllocationType =
   | "T7"
   | "T8"
   | "T9"
+  | "ADM"
   | "T8_BLOCK"
   | "ND"
   | "FOLGA"
   | "F4"
+  | "FF"
   | "FS"
   | "FP"
   | "VOO"
@@ -64,12 +66,21 @@ export const SHIFT_ALLOCATION_TYPES = new Set<ManualAllocationType>([
   "T7",
   "T8",
   "T9",
+  "ADM",
+]);
+
+/** Cadastros operacionais que podem ser lançados mesmo com a escala planejada publicada. */
+export const PUBLISHED_OPERATIONAL_TYPES = new Set<ManualAllocationType>([
+  "VOO",
+  "CURSO",
+  "SIMULADOR",
 ]);
 
 export const PREALLOC_ALLOCATION_TYPES = new Set<ManualAllocationType>([
   "ND",
   "FOLGA",
   "F4",
+  "FF",
   "FS",
   "FP",
   "CURSO",
@@ -86,6 +97,8 @@ export function manualTypeToPreallocLabel(type: ManualAllocationType): string | 
       return "FOLGA";
     case "F4":
       return "FOLGA 4";
+    case "FF":
+      return "FOLGA FERIADO";
     case "FS":
       return "FOLGA SOCIAL";
     case "FP":

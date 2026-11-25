@@ -11,6 +11,7 @@ const PAO_SHIFT_CODES = new Set(['T6', 'T7', 'T8', 'T9']);
 const PAO_OPERATIONAL_OPTIONS: AllocationSelectOption[] = [
   { key: 'FOLGA', label: 'Folga' },
   { key: 'F4', label: 'Folga 4' },
+  { key: 'FF', label: 'Folga Feriado' },
   { key: 'FS', label: 'Folga Social' },
   { key: 'FP', label: 'Folga Pedida' },
   { key: 'VOO', label: 'VOO' },
@@ -24,6 +25,7 @@ const PAO_OPERATIONAL_OPTIONS: AllocationSelectOption[] = [
 const APAO_OPERATIONAL_OPTIONS: AllocationSelectOption[] = [
   { key: 'FOLGA', label: 'Folga' },
   { key: 'F4', label: 'Folga 4' },
+  { key: 'FF', label: 'Folga Feriado' },
   { key: 'FS', label: 'Folga Social' },
   { key: 'FP', label: 'Folga Pedida' },
   { key: 'VOO', label: 'VOO' },
@@ -45,6 +47,7 @@ const FALLBACK_APAO_SHIFT_OPTIONS: AllocationSelectOption[] = [
   { key: 'T2', label: 'Turno 2 APAO' },
   { key: 'T3', label: 'Turno 3 APAO' },
   { key: 'T4', label: 'Turno 4 APAO' },
+  { key: 'ADM', label: 'Atividade Administrativa' },
 ];
 
 function sortShifts(a: Shift, b: Shift): number {

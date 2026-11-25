@@ -26,4 +26,10 @@ describe("limpar geração — VOO gerado", () => {
     expect(CLEAR_GENERATED_LABELS).not.toContain("FOLGA 4");
     expect(CLEAR_GENERATED_LABELS).not.toContain("F4");
   });
+
+  it("FF (Folga Feriado) grava pré-alocação FOLGA FERIADO e não entra na limpeza do motor", () => {
+    expect(manualTypeToPreallocLabel("FF")).toBe("FOLGA FERIADO");
+    expect(CLEAR_GENERATED_LABELS).not.toContain("FOLGA FERIADO");
+    expect(CLEAR_GENERATED_LABELS).not.toContain("FF");
+  });
 });

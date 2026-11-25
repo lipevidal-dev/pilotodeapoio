@@ -100,6 +100,7 @@ import {
 export const GENERATOR_REST_LABELS = new Set([
   "FOLGA",
   "FOLGA 4",
+  "FOLGA FERIADO",
   "FOLGA SOCIAL",
   "FOLGA PEDIDA",
   "FOLGA ESCOLHIDA",

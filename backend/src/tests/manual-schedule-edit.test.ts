@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { ManualScheduleEditUseCase } from "../application/use-cases/manual-schedule-edit.use-case.js";
-import { ManualEditBlockedError } from "../application/errors/manual-edit.errors.js";
+import {
+  ManualEditBlockedError,
+  SchedulePublishedCannotEditError,
+} from "../application/errors/manual-edit.errors.js";
 import {
   buildManualEditValidationContext,
   validateManualSet,
@@ -470,6 +473,105 @@ describe("manual-edit-validator", () => {
     expect(conflicts.some((c) => c.message.toLowerCase().includes("folga normal"))).toBe(true);
   });
 
+  it("não bloqueia FOLGA de APAO por falta de APAO no escritório", () => {
+    const EMP_APAO = "11111111-1111-1111-1111-111111111197";
+    const shifts = DEFAULT_SHIFTS.map((s, i) => ({
+      id: `s-${i}`,
+      code: s.code,
+      name: s.name,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      durationHours: 8,
+      employeeTypeAllowed: s.role === "APAO" ? "APAO" : "PAO",
+      active: true,
+      displayOrder: i,
+      mandatoryCoverage: true,
+      requiresT8PairNd: s.code === "T8",
+      coverageType: "REQUIRED" as const,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+
+    const { context: ctx, uuidToDomainId } = buildContextFromDbParts({
+      year: 2026,
+      month: 12,
+      employees: [
+        {
+          id: EMP_A,
+          name: "PAO Alpha",
+          type: "PAO",
+          roleId: "role-pao",
+          seniorityNumber: 1,
+          active: true,
+          birthDate: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as never,
+        {
+          id: EMP_APAO,
+          name: "APAO Cesar",
+          type: "APAO",
+          roleId: "role-apao",
+          seniorityNumber: 1,
+          active: true,
+          birthDate: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          role: {
+            id: "role-apao",
+            name: "APAO",
+            code: "APAO",
+            description: null,
+            active: true,
+            displayOrder: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        } as never,
+      ],
+      shifts: shifts as never,
+      assignments: [
+        {
+          id: "a-t6",
+          scheduleMonthId: MONTH_ID,
+          employeeId: EMP_A,
+          date: new Date("2026-12-31T12:00:00.000Z"),
+          shiftCode: "T6",
+          label: null,
+          source: "GENERATOR",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          employee: { id: EMP_A, name: "PAO Alpha", type: "PAO" } as never,
+        },
+      ],
+      preAllocations: [],
+    });
+
+    const v = buildManualEditValidationContext({
+      ctx,
+      uuidToDomainId,
+      employees: [
+        { id: EMP_A, name: "PAO Alpha", role: "PAO", seniorityNumber: 1 },
+        { id: EMP_APAO, name: "APAO Cesar", role: "APAO", seniorityNumber: 1 },
+      ],
+      shiftRestrictionRows: [],
+      preferredShiftRows: [],
+      noFlightDates: [],
+      vacationDays: [],
+      approvedDayOff: [],
+      assignments: [{ employeeId: EMP_A, date: "2026-12-31", shiftCode: "T6" }],
+      preAllocations: [],
+      flightDays: [],
+    });
+
+    const conflicts = validateManualSet(
+      v,
+      { employeeId: EMP_APAO, date: "2026-12-31" },
+      "FOLGA",
+    );
+    expect(conflicts.some((c) => c.code === "SEM_APAO_DISPONIVEL")).toBe(false);
+  });
+
   it("6b. permite alocar dia antes do bloco T8/T8/ND", () => {
     const v = baseValidationCtx();
     v.occupancy.set(`${EMP_A}|2026-07-10`, {
@@ -646,15 +748,18 @@ describe("ManualScheduleEditUseCase", () => {
     applyAllocationType?: ReturnType<typeof vi.fn>;
     clearDay?: ReturnType<typeof vi.fn>;
     upsertShiftAssignment?: ReturnType<typeof vi.fn>;
+    status?: string;
   }) {
     const applyAllocationType = overrides?.applyAllocationType ?? vi.fn(async () => ({}));
     const clearDay = overrides?.clearDay ?? vi.fn(async () => undefined);
     const upsertShiftAssignment = overrides?.upsertShiftAssignment ?? vi.fn(async () => ({}));
+    const status = overrides?.status ?? monthRecord.status;
 
     return new ManualScheduleEditUseCase(
       {
         findMonthById: async () => ({
           ...monthRecord,
+          status,
           assignments: [],
           preAllocations: [],
         }),
@@ -703,6 +808,22 @@ describe("ManualScheduleEditUseCase", () => {
             createdAt: new Date(),
             updatedAt: new Date(),
           },
+          {
+            id: "s-adm",
+            code: "ADM",
+            name: "Atividade Administrativa",
+            startTime: "08:00",
+            endTime: "17:00",
+            durationHours: 9,
+            employeeTypeAllowed: "BOTH",
+            active: true,
+            displayOrder: 10,
+            mandatoryCoverage: false,
+            requiresT8PairNd: false,
+            coverageType: "PARALLEL" as const,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
         ],
         listShiftRestrictionsForMonth: async () => [{ employeeUuid: EMP_B, shiftCode: "T8" }],
         listPreferredShiftsForMonth: async () => [{ employeeUuid: EMP_A, shiftCode: "T9" }],
@@ -714,6 +835,7 @@ describe("ManualScheduleEditUseCase", () => {
         saveViolations: async () => undefined,
         findMonthById: async () => ({
           ...monthRecord,
+          status,
           assignments: [],
           preAllocations: [],
           ruleViolations: [],
@@ -743,6 +865,71 @@ describe("ManualScheduleEditUseCase", () => {
       } as never,
     );
   }
+
+  it("permite VOO, Curso e Simulador com a escala publicada", async () => {
+    for (const type of ["VOO", "CURSO", "SIMULADOR"] as const) {
+      const apply = vi.fn(async () => ({}));
+      const uc = buildUseCase({ applyAllocationType: apply, status: "PUBLISHED" });
+      const result = await uc.editRange(MONTH_ID, {
+        employeeId: EMP_A,
+        startDate: "2026-07-15",
+        endDate: "2026-07-16",
+        type,
+        mode: "set",
+      });
+      expect(result.applied).toBe(2);
+      expect(apply).toHaveBeenCalledTimes(2);
+    }
+  });
+
+  it("bloqueia turno e folga com a escala publicada", async () => {
+    const uc = buildUseCase({ status: "PUBLISHED" });
+    await expect(
+      uc.editRange(MONTH_ID, {
+        employeeId: EMP_A,
+        startDate: "2026-07-15",
+        endDate: "2026-07-15",
+        type: "T1",
+        mode: "set",
+      }),
+    ).rejects.toBeInstanceOf(SchedulePublishedCannotEditError);
+    await expect(
+      uc.editRange(MONTH_ID, {
+        employeeId: EMP_A,
+        startDate: "2026-07-15",
+        endDate: "2026-07-15",
+        type: "FOLGA",
+        mode: "set",
+      }),
+    ).rejects.toBeInstanceOf(SchedulePublishedCannotEditError);
+  });
+
+  it("aplica ADM como turno compartilhado", async () => {
+    const apply = vi.fn(async () => ({}));
+    const uc = buildUseCase({ applyAllocationType: apply });
+    const result = await uc.editRange(MONTH_ID, {
+      employeeId: EMP_A,
+      startDate: "2026-07-15",
+      endDate: "2026-07-15",
+      type: "ADM",
+      mode: "set",
+    });
+    expect(result.applied).toBe(1);
+    expect(apply).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-15", "ADM");
+  });
+
+  it("bloqueia ADM com a escala publicada", async () => {
+    const uc = buildUseCase({ status: "PUBLISHED" });
+    await expect(
+      uc.editRange(MONTH_ID, {
+        employeeId: EMP_A,
+        startDate: "2026-07-15",
+        endDate: "2026-07-15",
+        type: "ADM",
+        mode: "set",
+      }),
+    ).rejects.toBeInstanceOf(SchedulePublishedCannotEditError);
+  });
 
   it("3. aplica FOLGA em período", async () => {
     const apply = vi.fn(async () => ({}));
