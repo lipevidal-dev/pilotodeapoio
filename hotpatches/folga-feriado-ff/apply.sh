@@ -9,7 +9,7 @@ RAW="https://raw.githubusercontent.com/lipevidal-dev/pilotodeapoio/${BRANCH}"
 PATCH_DIR="$ROOT/hotpatches/folga-feriado-ff"
 ADMIN_CID="${ADMIN_CONTAINER:-piloto_apoio_admin}"
 BACKEND_CID="${BACKEND_CONTAINER:-piloto_apoio_backend}"
-VERSION=2
+VERSION=4
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 

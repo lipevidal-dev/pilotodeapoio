@@ -3,8 +3,8 @@
  * Mesma cor vermelha da Folga (alloc-option--folga / cell-folga).
  */
 (function () {
-  if (window.__folgaFeriadoV2) return;
-  window.__folgaFeriadoV2 = true;
+  if (window.__folgaFeriadoV3) return;
+  window.__folgaFeriadoV3 = true;
 
   var MONTHS = {
     jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6,
@@ -65,11 +65,28 @@
     } catch (err) {}
   }
 
+  function rewriteManualType(raw) {
+    try {
+      var data = JSON.parse(raw);
+      var n = String(data.type || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      if (n === "FF" || n.indexOf("FERIADO") >= 0) {
+        data.type = "FF";
+        return JSON.stringify(data);
+      }
+    } catch (err) {}
+    return raw;
+  }
+
   var origFetch = window.fetch;
   if (origFetch) {
     window.fetch = function () {
       var input = arguments[0];
+      var init = arguments[1];
       var url = typeof input === "string" ? input : (input && input.url) || "";
+      if (/manual-range/.test(url) && init && typeof init.body === "string") {
+        init = Object.assign({}, init, { body: rewriteManualType(init.body) });
+        arguments[1] = init;
+      }
       return origFetch.apply(this, arguments).then(function (res) {
         try {
           var clone = res.clone();
@@ -79,6 +96,19 @@
       });
     };
   }
+
+  var xhrOpen = XMLHttpRequest.prototype.open;
+  var xhrSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (method, url) {
+    this.__ffUrl = String(url || "");
+    return xhrOpen.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function (body) {
+    if (this.__ffUrl && /manual-range/.test(this.__ffUrl) && typeof body === "string") {
+      body = rewriteManualType(body);
+    }
+    return xhrSend.call(this, body);
+  };
 
   function currentPeriod() {
     var monthRec = lastSchedule && lastSchedule.scheduleMonth;
@@ -277,11 +307,11 @@
     btn.addEventListener("click", function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
+      if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
       card.querySelectorAll(".alloc-option.selected, .alloc-clear.selected").forEach(function (el) {
         el.classList.remove("selected");
       });
       btn.classList.add("selected");
-      applyFf();
     });
 
     var after = null;
@@ -399,10 +429,41 @@
     }
   }
 
+  function isFfSelected(card) {
+    var selected = card.querySelector(".alloc-option.selected");
+    if (!selected) return false;
+    if (selected.getAttribute("data-ff-card")) return true;
+    var txt = compact(selected.textContent).toUpperCase();
+    return txt === "FF" || txt.indexOf("FOLGA FERIADO") === 0 || /^FF\b/.test(txt);
+  }
+
+  function wireApplyIntercept(card) {
+    if (!card || card.getAttribute("data-ff-apply-wired")) return;
+    card.setAttribute("data-ff-apply-wired", "1");
+    card.addEventListener("click", function (ev) {
+      var applyBtn = ev.target && ev.target.closest ? ev.target.closest("button, .p-button") : null;
+      if (!applyBtn) return;
+      var txt = compact(applyBtn.textContent).toUpperCase();
+      if (txt.indexOf("APLICAR") < 0) return;
+      if (!isFfSelected(card)) return;
+      var subtitle = card.querySelector(".alloc-subtitle");
+      var parsed = parseDialogDates(subtitle ? subtitle.textContent : "");
+      var emp = employeeByName(parsed.name);
+      var monthId = lastSchedule && lastSchedule.scheduleMonth && lastSchedule.scheduleMonth.id;
+      if (!emp || !monthId || !parsed.dates.length) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      applyFf();
+    }, true);
+  }
+
   function sync() {
     var path = (location.pathname || "").replace(/\/+$/, "");
     if (path !== "/escala" && path.indexOf("/escala") !== 0) return;
     injectFfCard();
+    var card = document.querySelector(".alloc-card");
+    if (card) wireApplyIntercept(card);
     injectLegend();
     paintFfCells();
   }
