@@ -31,6 +31,7 @@ export const MANUAL_PREALLOC_LABELS = new Set([
   "CURSO ONLINE",
   "CMA",
   "OUTRO",
+  "REUNIÃO DE ASSUNTOS",
   "FOLGA PEDIDA",
   "FP",
   "FÉRIAS",
@@ -93,4 +94,38 @@ export function isOperationalHardBlock(label: string): boolean {
     return true;
   }
   return PROTECTED_PREALLOC_TYPES.has(n);
+}
+
+/**
+ * Na realizada, APAO espelha tudo. PAO não recebe VOO, folgas ou FP.
+ */
+export function isExcludedFromExecutedMirror(
+  label: string,
+  employeeType?: string | null,
+): boolean {
+  if ((employeeType ?? "").toUpperCase() === "APAO") return false;
+  const normalized = normalizeOperationalLabel(label).toUpperCase();
+  return (
+    normalized === "VOO" ||
+    normalized === "FOLGA" ||
+    normalized === "FOLGA 4" ||
+    normalized === "F4" ||
+    normalized === "FOLGA FERIADO" ||
+    normalized === "FF" ||
+    normalized === "FOLGA SOCIAL" ||
+    normalized === "FS" ||
+    normalized === "FOLGA AGRUPADA" ||
+    normalized === "FA" ||
+    normalized === "FOLGA PEDIDA" ||
+    normalized === "FP"
+  );
+}
+
+/** Dia ocupado por cadastro/pré-alocação que permanece na realizada (bloqueia turno no espelho). */
+export function blocksExecutedShiftMirror(
+  label: string,
+  employeeType?: string | null,
+): boolean {
+  if (isExcludedFromExecutedMirror(label, employeeType)) return false;
+  return isOperationalHardBlock(label);
 }
