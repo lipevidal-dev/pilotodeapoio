@@ -91,11 +91,12 @@ export function wouldApaoFolgaBlockOffice(
   const roleMap = buildRoleMap(ctx);
   if (roleMap.get(employeeId) !== "APAO") return false;
 
-  for (const day of iterDays(ctx.year, ctx.month)) {
+  for (const day of dates) {
+    if (!isInMonth(day, ctx.year, ctx.month)) continue;
     if (!dayRequiresApaoCoverage(ctx, day)) continue;
 
     let available = countAvailableApaosOnDay(ctx, day);
-    if (dates.includes(day) && isApaoEmployeeAvailableOnDay(ctx, employeeId, day)) {
+    if (isApaoEmployeeAvailableOnDay(ctx, employeeId, day)) {
       available -= 1;
     }
     if (available < 1) return true;
