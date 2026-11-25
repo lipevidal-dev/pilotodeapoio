@@ -3,8 +3,8 @@
  * Mesma cor vermelha da Folga (alloc-option--folga / cell-folga).
  */
 (function () {
-  if (window.__folgaFeriadoV3) return;
-  window.__folgaFeriadoV3 = true;
+  if (window.__folgaFeriadoV5) return;
+  window.__folgaFeriadoV5 = true;
 
   var MONTHS = {
     jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6,
@@ -20,6 +20,8 @@
     ".alloc-option[data-ff-card] .alloc-option-label{font-size:.62rem;line-height:1.1;text-align:center}",
     ".alloc-option[data-ff-card].selected{border:2px solid #f15a22;box-shadow:0 0 0 2px #f15a2224}",
     ".schedule-cell.cell-folga[data-ff-painted],.legend-chip.cell-folga{background:#fecaca;color:#991b1b}",
+    "td.col-day[data-ff=\"1\"] .schedule-cell{font-size:0!important;line-height:0!important}",
+    "td.col-day[data-ff=\"1\"] .schedule-cell::after{content:\"FF\";font-size:.68rem;font-weight:800;line-height:1.25;letter-spacing:.02em;display:inline-block}",
     ".ff-extra-status{margin:.45rem .2rem 0;font-size:.75rem;color:#6b7280}",
     ".ff-extra-status.err{color:#b91c1c}",
   ].join("");
@@ -47,9 +49,20 @@
     return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate());
   }
 
+  function foldName(value) {
+    return compact(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  }
+
+  function namesMatch(a, b) {
+    var fa = foldName(a);
+    var fb = foldName(b);
+    if (!fa || !fb) return false;
+    return fa === fb || fa.indexOf(fb) >= 0 || fb.indexOf(fa) >= 0;
+  }
+
   function isFfLabel(label) {
-    var n = String(label || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-    return n === "FF" || n === "FOLGA FERIADO" || n === "FOLGAFERIADO";
+    var n = String(label || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+    return n === "FF" || n.indexOf("FERIADO") >= 0;
   }
 
   function captureSchedule(url, body) {
@@ -101,6 +114,13 @@
   var xhrSend = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.open = function (method, url) {
     this.__ffUrl = String(url || "");
+    if (!this.__ffCapture) {
+      this.__ffCapture = true;
+      var xhr = this;
+      this.addEventListener("load", function () {
+        try { captureSchedule(xhr.__ffUrl || "", xhr.responseText); } catch (err) {}
+      });
+    }
     return xhrOpen.apply(this, arguments);
   };
   XMLHttpRequest.prototype.send = function (body) {
@@ -109,6 +129,24 @@
     }
     return xhrSend.call(this, body);
   };
+
+  var lastPullAt = 0;
+  function pullSchedule() {
+    var now = Date.now();
+    if (now - lastPullAt < 5000) return;
+    var tok = token();
+    if (!tok) return;
+    var period = currentPeriod();
+    if (!period.year || !period.month) return;
+    lastPullAt = now;
+    var url = "/api/schedules/" + period.year + "/" + period.month + "?_ts=" + now;
+    var run = origFetch || window.fetch;
+    if (!run) return;
+    run.call(window, url, { headers: { Authorization: "Bearer " + tok } })
+      .then(function (res) { return res.ok ? res.text() : null; })
+      .then(function (text) { if (text) captureSchedule(url, text); })
+      .catch(function () {});
+  }
 
   function currentPeriod() {
     var monthRec = lastSchedule && lastSchedule.scheduleMonth;
@@ -386,34 +424,46 @@
   }
 
   function setCellFf(cell) {
-    var token = cell.querySelector(".schedule-cell span, .schedule-cell, .cell-display, .cell-code") || cell;
-    var leaf = token;
-    var spans = token.querySelectorAll("span");
-    if (spans.length) leaf = spans[spans.length - 1];
-    if (compact(leaf.textContent) !== "FF") leaf.textContent = "FF";
-    var painted = cell.querySelector(".schedule-cell") || cell;
+    var td = cell.closest ? (cell.closest("td") || cell) : cell;
+    td.setAttribute("data-ff", "1");
+    var painted = td.querySelector(".schedule-cell") || td;
     painted.classList.add("cell-folga");
     painted.setAttribute("data-ff-painted", "1");
     painted.title = "Folga Feriado";
   }
 
-  function paintFfCells() {
-    if (!lastSchedule) return;
+  function collectFfMarks(data) {
     var names = {};
-    (lastSchedule.employees || []).forEach(function (e) {
+    (data.employees || []).forEach(function (e) {
       names[e.id] = compact(e.name);
     });
-    var wanted = {};
-    (lastSchedule.preAllocations || []).forEach(function (p) {
-      if (!isFfLabel(p.label)) return;
-      var iso = String(p.date || "").slice(0, 10);
-      var name = names[p.employeeId];
-      if (name && iso) wanted[name + "|" + iso] = 1;
-    });
-    if (!Object.keys(wanted).length) return;
-    var period = currentPeriod();
-    var table = document.querySelector(".schedule-grid");
+    var wanted = [];
+    function add(empId, date, label) {
+      if (!isFfLabel(label)) return;
+      var iso = String(date || "").slice(0, 10);
+      var name = names[empId];
+      if (name && iso) wanted.push({ name: name, iso: iso });
+    }
+    (data.preAllocations || []).forEach(function (p) { add(p.employeeId, p.date, p.label); });
+    (data.assignments || []).forEach(function (a) { add(a.employeeId, a.date, a.label); });
+    return wanted;
+  }
+
+  function paintFfCells() {
+    var table = document.querySelector(".schedule-grid, table.schedule-grid, .schedule-table");
     if (!table) return;
+    if (!lastSchedule) {
+      pullSchedule();
+      return;
+    }
+    var wanted = collectFfMarks(lastSchedule);
+    var marked = table.querySelectorAll("td.col-day[data-ff]");
+    for (var i = 0; i < marked.length; i++) marked[i].removeAttribute("data-ff");
+    if (!wanted.length) {
+      pullSchedule();
+      return;
+    }
+    var period = currentPeriod();
     var cols = columnMeta(table);
     var rows = table.querySelectorAll("tbody tr");
     for (var r = 0; r < rows.length; r++) {
@@ -423,8 +473,13 @@
       var cells = rows[r].querySelectorAll("td.col-day");
       for (var c = 0; c < cells.length; c++) {
         var iso = isoForColumn(cols[c] || {}, period.year, period.month);
-        if (!iso || !wanted[name + "|" + iso]) continue;
-        setCellFf(cells[c]);
+        if (!iso) continue;
+        for (var w = 0; w < wanted.length; w++) {
+          if (wanted[w].iso === iso && namesMatch(name, wanted[w].name)) {
+            setCellFf(cells[c]);
+            break;
+          }
+        }
       }
     }
   }
@@ -470,4 +525,6 @@
 
   setInterval(sync, 300);
   window.addEventListener("popstate", function () { setTimeout(sync, 0); });
+  setTimeout(pullSchedule, 400);
+  setTimeout(sync, 800);
 })();

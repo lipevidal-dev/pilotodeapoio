@@ -66,6 +66,10 @@ REPLACEMENTS = [
         'FOLGA:"Folga",FS:"Folga Social"',
         'FOLGA:"Folga",FF:"Folga Feriado",FS:"Folga Social"',
     ),
+    (
+        'new Set(["ND","ND CONTINUIDADE","T8","FOLGA","FOLGA SOCIAL"',
+        'new Set(["ND","ND CONTINUIDADE","T8","FOLGA","FOLGA 4","F4","FOLGA FERIADO","FF","FOLGA SOCIAL"',
+    ),
 ]
 
 changed = []

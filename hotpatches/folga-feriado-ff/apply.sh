@@ -9,7 +9,7 @@ RAW="https://raw.githubusercontent.com/lipevidal-dev/pilotodeapoio/${BRANCH}"
 PATCH_DIR="$ROOT/hotpatches/folga-feriado-ff"
 ADMIN_CID="${ADMIN_CONTAINER:-piloto_apoio_admin}"
 BACKEND_CID="${BACKEND_CONTAINER:-piloto_apoio_backend}"
-VERSION=4
+VERSION=5
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
@@ -30,13 +30,15 @@ cp -a "$WORKDIR/index.html" "$ROOT/hotpatch-backup/folga-feriado-ff/index.html"
 
 python3 "$PATCH_DIR/patch-index.py" "$WORKDIR/index.html" "$VERSION"
 
-docker cp "$PATCH_DIR/folga-feriado.js" "$ADMIN_CID:/usr/share/nginx/html/folga-feriado.js"
+docker cp "$PATCH_DIR/folga-feriado.js" "$ADMIN_CID:/usr/share/nginx/html/ff-display-v${VERSION}.js"
 docker cp "$WORKDIR/index.html" "$ADMIN_CID:/usr/share/nginx/html/index.html"
 
-docker cp "$PATCH_DIR/patch-admin-chunks.py" "$ADMIN_CID:/tmp/patch-admin-chunks.py"
-docker exec "$ADMIN_CID" python3 /tmp/patch-admin-chunks.py /usr/share/nginx/html
+# python3 não existe no container admin: patch no host e devolve o mapper.
+docker cp "$ADMIN_CID:/usr/share/nginx/html" "$WORKDIR/html"
+python3 "$PATCH_DIR/patch-admin-chunks.py" "$WORKDIR/html"
+docker cp "$WORKDIR/html/chunk-RE3SKUGO.js" "$ADMIN_CID:/usr/share/nginx/html/chunk-RE3SKUGO.js" || true
 
-docker exec "$ADMIN_CID" grep -q "folga-feriado.js?v=${VERSION}" /usr/share/nginx/html/index.html
-curl -fsS "http://127.0.0.1:8080/folga-feriado.js?v=${VERSION}" >/dev/null
+docker exec "$ADMIN_CID" grep -q "ff-display-v${VERSION}.js" /usr/share/nginx/html/index.html
+curl -fsS "http://127.0.0.1:8080/ff-display-v${VERSION}.js" >/dev/null
 
 echo "Deploy Folga Feriado concluído (sem rebuild do admin)."
