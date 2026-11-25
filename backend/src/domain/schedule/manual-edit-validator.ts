@@ -476,7 +476,8 @@ export function validateManualSet(
     }
     const upperType = type.toUpperCase();
     const isT9 = upperType === "T9" || upperType === "T09";
-    const isLegacyParallel = v.parallelShiftCodes.has(type) && !isT9;
+    const isAdm = upperType === "ADM";
+    const isLegacyParallel = v.parallelShiftCodes.has(type) && !isT9 && !isAdm;
     if (isT9 || isLegacyParallel) {
       const pref = v.preferredShifts.get(ref.employeeId);
       if (!pref?.has(type)) {

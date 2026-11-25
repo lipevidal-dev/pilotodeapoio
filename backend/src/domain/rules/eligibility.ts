@@ -93,12 +93,13 @@ export function canWork(
     const normalizedCode = effectiveCode;
     const isPrimaryPaoShift = ["T6", "T7", "T8"].includes(normalizedCode);
     const isT9 = normalizedCode === "T9" || normalizedCode === "T09";
+    const isSharedShift = roleForShift(normalizedCode, shiftMap) === "BOTH";
     const isLegacyParallelShift =
-      (parallelShiftCodes?.has(normalizedCode) ?? false) && !isT9;
-    if (!isPrimaryPaoShift && !isT9 && !isLegacyParallelShift) {
+      (parallelShiftCodes?.has(normalizedCode) ?? false) && !isT9 && !isSharedShift;
+    if (!isPrimaryPaoShift && !isT9 && !isLegacyParallelShift && !isSharedShift) {
       return {
         ok: false,
-        reason: `PAO só pode assumir T6, T7, T8 ou T9 (proposto: ${shiftCode})`,
+        reason: `PAO só pode assumir T6, T7, T8, T9 ou turno compartilhado (proposto: ${shiftCode})`,
       };
     }
     if (isT9 || isLegacyParallelShift) {

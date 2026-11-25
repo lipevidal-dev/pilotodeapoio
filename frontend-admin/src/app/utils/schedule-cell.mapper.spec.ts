@@ -35,6 +35,14 @@ describe('schedule-cell.mapper — cores por turno', () => {
     expect(mapShiftToCell('ND').kind).toBe('nd');
   });
 
+  it('ADM aparece como atividade administrativa', () => {
+    const cell = mapShiftToCell('ADM');
+    expect(cell.display).toBe('ADM');
+    expect(cell.kind).toBe('shift');
+    expect(cell.title).toBe('Atividade Administrativa');
+    expect(mapLabelToCell('Atividade Administrativa').display).toBe('ADM');
+  });
+
   it('ND gerado em preAllocations aparece na escala visual', () => {
     const emp: Employee = {
       id: 'pao-1',

@@ -709,6 +709,22 @@ describe("ManualScheduleEditUseCase", () => {
             createdAt: new Date(),
             updatedAt: new Date(),
           },
+          {
+            id: "s-adm",
+            code: "ADM",
+            name: "Atividade Administrativa",
+            startTime: "08:00",
+            endTime: "17:00",
+            durationHours: 9,
+            employeeTypeAllowed: "BOTH",
+            active: true,
+            displayOrder: 10,
+            mandatoryCoverage: false,
+            requiresT8PairNd: false,
+            coverageType: "PARALLEL" as const,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
         ],
         listShiftRestrictionsForMonth: async () => [{ employeeUuid: EMP_B, shiftCode: "T8" }],
         listPreferredShiftsForMonth: async () => [{ employeeUuid: EMP_A, shiftCode: "T9" }],
@@ -784,6 +800,33 @@ describe("ManualScheduleEditUseCase", () => {
         startDate: "2026-07-15",
         endDate: "2026-07-15",
         type: "FOLGA",
+        mode: "set",
+      }),
+    ).rejects.toBeInstanceOf(SchedulePublishedCannotEditError);
+  });
+
+  it("aplica ADM como turno compartilhado", async () => {
+    const apply = vi.fn(async () => ({}));
+    const uc = buildUseCase({ applyAllocationType: apply });
+    const result = await uc.editRange(MONTH_ID, {
+      employeeId: EMP_A,
+      startDate: "2026-07-15",
+      endDate: "2026-07-15",
+      type: "ADM",
+      mode: "set",
+    });
+    expect(result.applied).toBe(1);
+    expect(apply).toHaveBeenCalledWith(MONTH_ID, EMP_A, "2026-07-15", "ADM");
+  });
+
+  it("bloqueia ADM com a escala publicada", async () => {
+    const uc = buildUseCase({ status: "PUBLISHED" });
+    await expect(
+      uc.editRange(MONTH_ID, {
+        employeeId: EMP_A,
+        startDate: "2026-07-15",
+        endDate: "2026-07-15",
+        type: "ADM",
         mode: "set",
       }),
     ).rejects.toBeInstanceOf(SchedulePublishedCannotEditError);

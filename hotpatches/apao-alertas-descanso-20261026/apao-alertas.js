@@ -1,12 +1,13 @@
 /**
- * Alertas de descanso APAO + VOO/CURSO/SIMULADOR no popup.
+ * Alertas de descanso APAO + VOO/CURSO/SIMULADOR/ADM no popup.
  * Só leitura/informativo: não bloqueia alocação e não mexe no PAO.
  * v9: troca de verdade — grava/pinta os dois orig; orig vazio limpa o outro lado.
  * v10: VOO/Curso/Simulador usam o mês da toolbar, não o lead-in/executada do mês anterior.
+ * v12: VOO/Curso/Simulador viram cartões de pré-alocação (igual PAO); ADM nos turnos APAO.
  */
 (function () {
-  if (window.__apaoAlertasV10) return;
-  window.__apaoAlertasV10 = true;
+  if (window.__apaoAlertasV12) return;
+  window.__apaoAlertasV12 = true;
 
   var HOUR_MS = 60 * 60 * 1000;
   var DAY_MS = 24 * HOUR_MS;
@@ -21,10 +22,11 @@
     T4: { start: "18:00", end: "00:00" },
   };
   var DAY_OFF = { F: 1, FS: 1, FA: 1, FANI: 1, FP: 1, FOLGA: 1 };
-  var EXTRA_OPTIONS = [
-    { key: "VOO", label: "VOO" },
-    { key: "CURSO", label: "Curso" },
-    { key: "SIMULADOR", label: "Simulador" },
+  var EXTRA_CARDS = [
+    { key: "VOO", code: "VOO", label: "VOO", cls: "alloc-option--voo", section: "pre" },
+    { key: "CURSO", code: "CURSO", label: "Curso", cls: "alloc-option--curso", section: "pre" },
+    { key: "SIMULADOR", code: "SIMULADOR", label: "Simulador", cls: "alloc-option--simulador", section: "pre" },
+    { key: "ADM", code: "ADM", label: "Atividade Administrativa", cls: "alloc-option--shift", section: "turnos" },
   ];
 
   var lastSchedule = null;
@@ -41,9 +43,14 @@
     ".apao-rest-alert{display:inline-flex;align-items:center;gap:.15rem;min-height:1.25rem;padding:.08rem .3rem;border:1px solid #fdba74;border-radius:999px;background:#fff7ed;color:#9a3412;font-size:.65rem;font-weight:800;line-height:1;letter-spacing:normal;text-transform:none;cursor:help}",
     ".apao-rest-alert img{width:.9rem;height:.9rem;object-fit:contain}",
     ".apao-rest-alerts--cell .apao-rest-alert{min-height:auto;padding:.05rem}",
-    ".apao-extra-options{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.7rem}",
-    ".apao-extra-options button{min-height:2.1rem;border:1px solid #d7dce2;border-radius:8px;background:#fff;color:#2d2d2d;font:inherit;font-size:.8rem;font-weight:700;padding:.35rem .7rem;cursor:pointer}",
-    ".apao-extra-options button:hover{border-color:#f15a22;color:#f15a22;background:#fff4ed}",
+    ".alloc-option[data-apao-extra-card]{min-height:3.25rem;padding:.4rem .25rem;border:1px solid currentColor;border-radius:9px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.12rem;font:inherit}",
+    ".alloc-option[data-apao-extra-card] .alloc-option-code{font-size:.9rem;font-weight:800;line-height:1}",
+    ".alloc-option[data-apao-extra-card] .alloc-option-label{font-size:.62rem;line-height:1.1;text-align:center}",
+    ".alloc-option[data-apao-extra-card].selected{border:2px solid #f15a22;box-shadow:0 0 0 2px #f15a2224}",
+    ".alloc-option[data-apao-extra-card].alloc-option--voo{background:#fff7ed;color:#c2410c;border-color:#fdba74}",
+    ".alloc-option[data-apao-extra-card].alloc-option--curso{background:#fef3c7;color:#92400e;border-color:#fcd34d}",
+    ".alloc-option[data-apao-extra-card].alloc-option--simulador{background:#f3f4f6;color:#374151;border-color:#d1d5db}",
+    ".alloc-option[data-apao-extra-card].alloc-option--shift{background:#eff6ff;color:#1d4ed8;border-color:#93c5fd}",
     ".apao-extra-status{margin:.45rem 0 0;font-size:.75rem;color:#6b7280}",
     ".apao-extra-status.err{color:#b91c1c}",
     ".schedule-cell.cell-fa,.legend-chip.cell-fa{background:#bbf7d0!important;color:#166534!important;border-color:#86efac!important}",
@@ -830,6 +837,7 @@
     if (c === "FP") return "cell-fp";
     if (c === "F" || c === "FOLGA") return "cell-folga";
     if (c === "FER") return "cell-ferias";
+    if (c === "ADM") return "cell-shift";
     if (c === "VOO") return "cell-voo";
     if (c === "SIM") return "cell-simulador";
     if (c === "CRS") return "cell-curso";
@@ -924,29 +932,126 @@
     }
   }
 
+  function extraStatusEl(card) {
+    var el = card.querySelector(".apao-extra-status");
+    if (el) return el;
+    el = document.createElement("p");
+    el.className = "apao-extra-status";
+    var body = card.querySelector(".alloc-body") || card;
+    body.appendChild(el);
+    return el;
+  }
+
+  function headingGrid(card, pattern, fallbackIndex) {
+    var headings = card.querySelectorAll("h3, .alloc-section-title");
+    for (var i = 0; i < headings.length; i++) {
+      if (pattern.test(compact(headings[i].textContent))) {
+        return headings[i].parentElement.querySelector(".alloc-options-grid") || headings[i].nextElementSibling;
+      }
+    }
+    var grids = card.querySelectorAll(".alloc-options-grid");
+    return grids.length > fallbackIndex ? grids[fallbackIndex] : grids[0];
+  }
+
+  function gridHasCode(grid, code) {
+    if (!grid) return false;
+    var wanted = String(code || "").toUpperCase();
+    var nodes = grid.querySelectorAll(".alloc-option, .alloc-option-code");
+    for (var i = 0; i < nodes.length; i++) {
+      var txt = compact(nodes[i].textContent).toUpperCase();
+      if (!txt) continue;
+      if (txt === wanted || txt.indexOf(wanted + " ") === 0) return true;
+      var codeEl = nodes[i].querySelector && nodes[i].querySelector(".alloc-option-code");
+      if (codeEl && compact(codeEl.textContent).toUpperCase() === wanted) return true;
+    }
+    return false;
+  }
+
+  function makeExtraCard(grid, opt) {
+    var template = grid.querySelector(".alloc-option--" + (opt.section === "turnos" ? "shift" : "folga")) ||
+      grid.querySelector(".alloc-option");
+    var btn;
+    if (template) {
+      btn = template.cloneNode(true);
+      btn.classList.remove("selected");
+      btn.className = "alloc-option " + opt.cls;
+      var code = btn.querySelector(".alloc-option-code");
+      var label = btn.querySelector(".alloc-option-label");
+      if (code) code.textContent = opt.code;
+      if (label) label.textContent = opt.label;
+      if (!code && !label) {
+        btn.innerHTML = '<span class="alloc-option-code">' + opt.code + '</span><span class="alloc-option-label">' + opt.label + "</span>";
+      }
+    } else {
+      btn = document.createElement("button");
+      btn.className = "alloc-option " + opt.cls;
+      btn.innerHTML = '<span class="alloc-option-code">' + opt.code + '</span><span class="alloc-option-label">' + opt.label + "</span>";
+    }
+    btn.type = "button";
+    btn.setAttribute("data-apao-extra-card", opt.key);
+    btn.title = opt.label;
+    return btn;
+  }
+
+  function selectExtraCard(card, btn) {
+    card.querySelectorAll(".alloc-option.selected, .alloc-clear.selected").forEach(function (el) {
+      el.classList.remove("selected");
+    });
+    btn.classList.add("selected");
+  }
+
+  function injectExtraCards(card) {
+    EXTRA_CARDS.forEach(function (opt) {
+      if (card.querySelector('[data-apao-extra-card="' + opt.key + '"]')) return;
+      var grid = opt.section === "turnos"
+        ? headingGrid(card, /^turnos$/i, 0)
+        : headingGrid(card, /pr[eé]-aloca/i, 1);
+      if (!grid) return;
+      if (gridHasCode(grid, opt.code) || (opt.key === "ADM" && gridHasCode(grid, "ATIVIDADE ADMINISTRATIVA"))) return;
+      var btn = makeExtraCard(grid, opt);
+      btn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        selectExtraCard(card, btn);
+      });
+      grid.appendChild(btn);
+    });
+  }
+
+  function wireApplyIntercept(card) {
+    if (card.getAttribute("data-apao-apply-wired")) return;
+    card.setAttribute("data-apao-apply-wired", "1");
+    card.addEventListener("click", function (ev) {
+      var native = ev.target && ev.target.closest ? ev.target.closest(".alloc-option:not([data-apao-extra-card]), .alloc-clear") : null;
+      if (native) {
+        card.querySelectorAll("[data-apao-extra-card].selected").forEach(function (el) {
+          el.classList.remove("selected");
+        });
+        return;
+      }
+      var applyBtn = ev.target && ev.target.closest ? ev.target.closest("button, .p-button") : null;
+      if (!applyBtn) return;
+      var txt = compact(applyBtn.textContent).toUpperCase();
+      if (txt.indexOf("APLICAR") < 0) return;
+      var selected = card.querySelector("[data-apao-extra-card].selected");
+      if (!selected) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      applyExtra(selected.getAttribute("data-apao-extra-card"), extraStatusEl(card));
+    }, true);
+  }
+
   function enhanceDialog() {
     var card = document.querySelector(".alloc-card");
-    if (!card || card.querySelector(".apao-extra-options")) return;
+    if (!card) return;
+    var leftover = card.querySelector(".apao-extra-options");
+    if (leftover && leftover.parentNode) leftover.parentNode.removeChild(leftover);
     var subtitle = (card.querySelector(".alloc-subtitle") || {}).textContent || "";
     var name = compact(subtitle.split("•")[0]);
     if (!name || !isApaoName(name)) return;
-    var body = card.querySelector(".alloc-body") || card;
-    var wrap = document.createElement("div");
-    wrap.className = "apao-extra-options";
-    var status = document.createElement("p");
-    status.className = "apao-extra-status";
-    status.textContent = "Opções extras do APAO: não bloqueiam o restante da escala.";
-    EXTRA_OPTIONS.forEach(function (opt) {
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = opt.label;
-      btn.addEventListener("click", function () {
-        applyExtra(opt.key, status);
-      });
-      wrap.appendChild(btn);
-    });
-    body.appendChild(wrap);
-    body.appendChild(status);
+    injectExtraCards(card);
+    wireApplyIntercept(card);
   }
 
   var lastFetchKey = "";

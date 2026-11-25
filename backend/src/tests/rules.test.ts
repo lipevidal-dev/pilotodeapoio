@@ -47,6 +47,27 @@ describe("PAO turnos T6, T7, T8", () => {
     expect(bad.ok).toBe(false);
   });
 
+  it("aceita ADM compartilhado para PAO e APAO", () => {
+    const map = {
+      ...shiftMap,
+      ADM: { startTime: "08:00", endTime: "17:00", role: "BOTH" as const, noWeekends: false },
+    };
+    const pao = MOCK_EMPLOYEES[0];
+    const apao = MOCK_EMPLOYEES[3];
+    const paoOk = canWork(pao, "2026-06-10", "ADM", blocked([]), planned([]), {
+      shiftMap: map,
+      roleByEmployeeId: roleMap,
+    });
+    expect(paoOk.ok).toBe(true);
+    const apaoOk = canWork(apao, "2026-06-10", "ADM", blocked([]), planned([]), {
+      shiftMap: map,
+      roleByEmployeeId: roleMap,
+      skipApaoPaoCoverageCheck: true,
+      skipApaoOverlapCheck: true,
+    });
+    expect(apaoOk.ok).toBe(true);
+  });
+
   it("validação detecta PAO em turno APAO", () => {
     const ctx = emptyContext();
     ctx.assignments.push({

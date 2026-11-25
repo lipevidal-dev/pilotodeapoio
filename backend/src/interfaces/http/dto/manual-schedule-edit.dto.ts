@@ -12,6 +12,7 @@ export const manualAllocationTypeSchema = z.enum([
   "T7",
   "T8",
   "T9",
+  "ADM",
   "T8_BLOCK",
   "ND",
   "FOLGA",

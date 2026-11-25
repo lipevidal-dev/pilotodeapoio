@@ -63,6 +63,9 @@ export function mapShiftToCell(shiftCode: string): ScheduleCellData {
   if (code === 'ND') {
     return { display: 'ND', kind: 'nd', title: 'Não disponível' };
   }
+  if (code === 'ADM') {
+    return { display: 'ADM', kind: 'shift', title: 'Atividade Administrativa' };
+  }
   if (!code) {
     return emptyCell();
   }
@@ -111,6 +114,10 @@ export function mapLabelToCell(label: string, notes?: string | null): ScheduleCe
   }
 
   if (n.includes('FERIAS')) return { display: 'FER', kind: 'ferias', title: label };
+
+  if (n === 'ADM' || n.includes('ATIVIDADE ADMINISTRATIVA')) {
+    return { display: 'ADM', kind: 'shift', title: 'Atividade Administrativa' };
+  }
 
   if (n.includes('VOO')) return { display: 'VOO', kind: 'voo', title: label };
 

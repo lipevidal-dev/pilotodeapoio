@@ -45,6 +45,7 @@ const FALLBACK_APAO_SHIFT_OPTIONS: AllocationSelectOption[] = [
   { key: 'T2', label: 'Turno 2 APAO' },
   { key: 'T3', label: 'Turno 3 APAO' },
   { key: 'T4', label: 'Turno 4 APAO' },
+  { key: 'ADM', label: 'Atividade Administrativa' },
 ];
 
 function sortShifts(a: Shift, b: Shift): number {
