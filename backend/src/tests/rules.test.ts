@@ -12,7 +12,6 @@ import {
 } from "../domain/rules/index.js";
 import { assignmentKey, type BlockedMap, type PlannedMap } from "../domain/schedule/types.js";
 import { PaoOffLimitRule, ApaoRequiresPaoRule, RequestedOffLimitRule } from "../domain/rules/validators.js";
-import { wouldApaoFolgaBlockOffice } from "../domain/rules/apao-availability.js";
 
 const shiftMap = buildShiftMap();
 const roleMap = new Map(MOCK_EMPLOYEES.map((e) => [e.id, e.role]));
@@ -488,28 +487,6 @@ describe("folga pedida FP", () => {
     const block = blocked([[1, "2026-06-10", "FOLGA PEDIDA"]]);
     const r = canWorkInContext(ctx, MOCK_EMPLOYEES[0], "2026-06-10", "T6", block);
     expect(r.ok).toBe(false);
-  });
-});
-
-describe("APAO disponível no escritório (T6)", () => {
-  it("não bloqueia folga no dia 31 se ainda sobra APAO vago nesse dia", () => {
-    const ctx = emptyContext(2026, 12);
-    ctx.assignments.push(
-      { employeeId: 1, employeeName: "PAO SILVA", workDate: "2026-12-01", shiftCode: "T6" },
-      { employeeId: 1, employeeName: "PAO SILVA", workDate: "2026-12-31", shiftCode: "T6" },
-      { employeeId: 4, employeeName: "APAO LIMA", workDate: "2026-12-01", shiftCode: "T4" },
-      { employeeId: 5, employeeName: "APAO COSTA", workDate: "2026-12-01", shiftCode: "T2" },
-    );
-    expect(wouldApaoFolgaBlockOffice(ctx, 4, ["2026-12-31"])).toBe(false);
-  });
-
-  it("bloqueia folga só no dia em que o APAO é o último vago com PAO em T6", () => {
-    const ctx = emptyContext(2026, 12);
-    ctx.assignments.push(
-      { employeeId: 1, employeeName: "PAO SILVA", workDate: "2026-12-31", shiftCode: "T6" },
-      { employeeId: 5, employeeName: "APAO COSTA", workDate: "2026-12-31", shiftCode: "T2" },
-    );
-    expect(wouldApaoFolgaBlockOffice(ctx, 4, ["2026-12-31"])).toBe(true);
   });
 });
 

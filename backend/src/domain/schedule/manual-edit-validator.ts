@@ -1,4 +1,3 @@
-import { wouldApaoFolgaBlockOffice } from "../rules/apao-availability.js";
 import { addDays } from "../rules/dates.js";
 import { canWork } from "../rules/eligibility.js";
 import { buildShiftMap } from "../shift/default-shifts.js";
@@ -531,20 +530,6 @@ export function validateManualSet(
         message: "Conflito: funcionário já possui turno neste dia.",
         requiresConfirmation: true,
       });
-    }
-    if (type === "FOLGA" || type === "FP") {
-      const did = employeeDomainId(v, ref.employeeId);
-      if (
-        did != null &&
-        emp.role === "APAO" &&
-        wouldApaoFolgaBlockOffice(v.scheduleContext, did, [ref.date])
-      ) {
-        conflicts.push({
-          code: "SEM_APAO_DISPONIVEL",
-          message:
-            "Conflito: não pode deixar o escritório sem APAO disponível em dia com PAO em T6.",
-        });
-      }
     }
     return conflicts;
   }

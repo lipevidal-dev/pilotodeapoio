@@ -1414,7 +1414,6 @@ def validate_rules(year=None, month=None):
         T8PairingRule(),
         ConsecutiveDaysRule(),
         WeekendShiftRule(),
-        ApaoAvailabilityRule(),
         WorkBlockLengthRule(),
         Apao6x1Rule(),
         PaoFcfMetaRule(),
