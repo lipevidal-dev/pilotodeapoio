@@ -7,6 +7,18 @@ ROOT = Path(sys.argv[1] if len(sys.argv) > 1 else "/usr/share/nginx/html")
 
 REPLACEMENTS = [
     (
+        'r==="F4"||r==="FOLGA 4"||r==="FOLGA4"?{display:"F4",kind:"folga",title:"Folga 4"}:r.includes("FOLGA")?{display:"F",kind:"folga",title:t}',
+        'r==="F4"||r==="FOLGA 4"||r==="FOLGA4"?{display:"F4",kind:"folga",title:"Folga 4"}:r==="FF"||r==="FOLGA FERIADO"||r==="FOLGAFERIADO"?{display:"FF",kind:"folga",title:"Folga Feriado"}:r.includes("FOLGA")?{display:"F",kind:"folga",title:t}',
+    ),
+    (
+        'e==="F4"?\'Folga 4\':\'Folga\'',
+        'e==="F4"?"Folga 4":e==="FF"?"Folga Feriado":"Folga"',
+    ),
+    (
+        'display==="F4"?"Folga 4":"Folga"',
+        'display==="F4"?"Folga 4":display==="FF"?"Folga Feriado":"Folga"',
+    ),
+    (
         'n==="F4"||n==="FOLGA 4"||n==="FOLGA4"?{display:"F4",kind:"folga",title:"Folga 4"}:n.includes("FOLGA")?{display:"F"',
         'n==="F4"||n==="FOLGA 4"||n==="FOLGA4"?{display:"F4",kind:"folga",title:"Folga 4"}:n==="FF"||n==="FOLGA FERIADO"||n==="FOLGAFERIADO"?{display:"FF",kind:"folga",title:"Folga Feriado"}:n.includes("FOLGA")?{display:"F"',
     ),

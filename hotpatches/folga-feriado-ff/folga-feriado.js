@@ -3,8 +3,8 @@
  * Mesma cor vermelha da Folga (alloc-option--folga / cell-folga).
  */
 (function () {
-  if (window.__folgaFeriadoV1) return;
-  window.__folgaFeriadoV1 = true;
+  if (window.__folgaFeriadoV2) return;
+  window.__folgaFeriadoV2 = true;
 
   var MONTHS = {
     jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6,
