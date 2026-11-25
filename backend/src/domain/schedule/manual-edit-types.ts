@@ -66,6 +66,13 @@ export const SHIFT_ALLOCATION_TYPES = new Set<ManualAllocationType>([
   "T9",
 ]);
 
+/** Cadastros operacionais que podem ser lançados mesmo com a escala planejada publicada. */
+export const PUBLISHED_OPERATIONAL_TYPES = new Set<ManualAllocationType>([
+  "VOO",
+  "CURSO",
+  "SIMULADOR",
+]);
+
 export const PREALLOC_ALLOCATION_TYPES = new Set<ManualAllocationType>([
   "ND",
   "FOLGA",

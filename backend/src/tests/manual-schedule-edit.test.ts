@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { ManualScheduleEditUseCase } from "../application/use-cases/manual-schedule-edit.use-case.js";
-import { ManualEditBlockedError } from "../application/errors/manual-edit.errors.js";
+import {
+  ManualEditBlockedError,
+  SchedulePublishedCannotEditError,
+} from "../application/errors/manual-edit.errors.js";
 import {
   buildManualEditValidationContext,
   validateManualSet,
@@ -646,15 +649,18 @@ describe("ManualScheduleEditUseCase", () => {
     applyAllocationType?: ReturnType<typeof vi.fn>;
     clearDay?: ReturnType<typeof vi.fn>;
     upsertShiftAssignment?: ReturnType<typeof vi.fn>;
+    status?: string;
   }) {
     const applyAllocationType = overrides?.applyAllocationType ?? vi.fn(async () => ({}));
     const clearDay = overrides?.clearDay ?? vi.fn(async () => undefined);
     const upsertShiftAssignment = overrides?.upsertShiftAssignment ?? vi.fn(async () => ({}));
+    const status = overrides?.status ?? monthRecord.status;
 
     return new ManualScheduleEditUseCase(
       {
         findMonthById: async () => ({
           ...monthRecord,
+          status,
           assignments: [],
           preAllocations: [],
         }),
@@ -714,6 +720,7 @@ describe("ManualScheduleEditUseCase", () => {
         saveViolations: async () => undefined,
         findMonthById: async () => ({
           ...monthRecord,
+          status,
           assignments: [],
           preAllocations: [],
           ruleViolations: [],
@@ -743,6 +750,44 @@ describe("ManualScheduleEditUseCase", () => {
       } as never,
     );
   }
+
+  it("permite VOO, Curso e Simulador com a escala publicada", async () => {
+    for (const type of ["VOO", "CURSO", "SIMULADOR"] as const) {
+      const apply = vi.fn(async () => ({}));
+      const uc = buildUseCase({ applyAllocationType: apply, status: "PUBLISHED" });
+      const result = await uc.editRange(MONTH_ID, {
+        employeeId: EMP_A,
+        startDate: "2026-07-15",
+        endDate: "2026-07-16",
+        type,
+        mode: "set",
+      });
+      expect(result.applied).toBe(2);
+      expect(apply).toHaveBeenCalledTimes(2);
+    }
+  });
+
+  it("bloqueia turno e folga com a escala publicada", async () => {
+    const uc = buildUseCase({ status: "PUBLISHED" });
+    await expect(
+      uc.editRange(MONTH_ID, {
+        employeeId: EMP_A,
+        startDate: "2026-07-15",
+        endDate: "2026-07-15",
+        type: "T1",
+        mode: "set",
+      }),
+    ).rejects.toBeInstanceOf(SchedulePublishedCannotEditError);
+    await expect(
+      uc.editRange(MONTH_ID, {
+        employeeId: EMP_A,
+        startDate: "2026-07-15",
+        endDate: "2026-07-15",
+        type: "FOLGA",
+        mode: "set",
+      }),
+    ).rejects.toBeInstanceOf(SchedulePublishedCannotEditError);
+  });
 
   it("3. aplica FOLGA em período", async () => {
     const apply = vi.fn(async () => ({}));

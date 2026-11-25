@@ -53,6 +53,7 @@
 
   function captureSchedule(url, body) {
     if (!/\/schedules\//.test(url || "")) return;
+    if (/\/executed(?:\?|$)/.test(url || "")) return;
     try {
       var data = JSON.parse(body);
       if (!data) return;
